@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DIRECT_URL ?? process.env.DATABASE_URL }),
@@ -101,12 +102,16 @@ async function main() {
     else await prisma.product.create({ data: p });
   }
 
-  // --- Demo user (design _5 profile: Elena Rostova) ---
+  // --- Demo user ---
+  const seedUsername = process.env.SEED_USERNAME || "elena";
+  const seedPassword = process.env.SEED_PASSWORD || "123456";
+  const passwordHash = await bcrypt.hash(seedPassword, 10);
   const user = await prisma.user.upsert({
-    where: { username: "elena" },
-    update: {},
+    where: { username: seedUsername },
+    update: { passwordHash },
     create: {
-      username: "elena",
+      username: seedUsername,
+      passwordHash,
       name: "Elena Rostova",
       gender: "female",
       birthday: new Date("1990-10-12"),
