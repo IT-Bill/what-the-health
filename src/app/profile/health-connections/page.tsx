@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 
 interface HealthDevice {
@@ -10,6 +10,21 @@ interface HealthDevice {
   description: string;
   connected: boolean;
   type: "toggle" | "button";
+  importable: boolean;
+}
+
+interface ImportRecord {
+  id: string;
+  source: string;
+  fileName: string;
+  fileSize: number;
+  status: string;
+  recordCount: number;
+  dataFrom: string | null;
+  dataTo: string | null;
+  summary: Record<string, number> | null;
+  error: string | null;
+  createdAt: string;
 }
 
 const initialDevices: HealthDevice[] = [
@@ -20,27 +35,60 @@ const initialDevices: HealthDevice[] = [
     description: "同步步数、心率、睡眠数据",
     connected: true,
     type: "toggle",
+    importable: true,
   },
   {
-    id: "garmin",
+    id: "huawei",
     icon: "watch",
-    name: "Garmin Connect",
-    description: "同步运动、GPS、训练数据",
+    name: "华为运动健康",
+    description: "同步运动、睡眠、心率数据",
     connected: false,
     type: "button",
+    importable: true,
   },
   {
-    id: "oura",
-    icon: "radio_button_unchecked",
-    name: "Oura Ring",
-    description: "同步睡眠评分、 readiness",
-    connected: true,
-    type: "toggle",
+    id: "samsung",
+    icon: "phone_android",
+    name: "Samsung Health",
+    description: "同步步数、心率、睡眠数据",
+    connected: false,
+    type: "button",
+    importable: true,
+  },
+  {
+    id: "xiaomi",
+    icon: "fitness_center",
+    name: "小米健康 / Zepp Life",
+    description: "同步运动、睡眠数据",
+    connected: false,
+    type: "button",
+    importable: true,
+  },
+  {
+    id: "google",
+    icon: "cloud",
+    name: "Google Fit",
+    description: "同步活动、心率数据",
+    connected: false,
+    type: "button",
+    importable: true,
   },
 ];
 
 export default function HealthConnectionsPage() {
   const [devices, setDevices] = useState(initialDevices);
+  const [showUpload, setShowUpload] = useState(false);
+  const [imports, setImports] = useState<ImportRecord[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<{ success: boolean; message: string } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetch("/api/health/import")
+      .then((r) => r.ok ? r.json() : [])
+      .then((data) => setImports(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, []);
 
   function toggleDevice(id: string) {
     setDevices((prev) =>
@@ -48,61 +96,212 @@ export default function HealthConnectionsPage() {
     );
   }
 
+  async function handleUpload(file: File) {
+    setUploading(true);
+    setUploadResult(null);
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch("/api/health/import", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        setUploadResult({
+          success: true,
+          message: `导入成功！共 ${data.recordCount.toLocaleString()} 条记录`,
+        });
+        // Refresh import history
+        const historyRes = await fetch("/api/health/import");
+        if (historyRes.ok) setImports(await historyRes.json());
+      } else {
+        setUploadResult({ success: false, message: data.error || "导入失败" });
+      }
+    } catch {
+      setUploadResult({ success: false, message: "网络错误，请稍后重试" });
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) handleUpload(file);
+  }
+
+  async function handleDeleteImport(id: string) {
+    if (!confirm("确定删除这次导入的所有数据吗？")) return;
+    const res = await fetch(`/api/health/import/${id}`, { method: "DELETE" });
+    if (res.ok) {
+      setImports((prev) => prev.filter((i) => i.id !== id));
+    }
+  }
+
   return (
     <div className="min-h-screen bg-surface flex flex-col">
       <Header title="健康连接" />
 
-      <main className="flex-1 px-6 py-6 max-w-screen-md mx-auto w-full">
+      <main className="flex-1 px-6 py-6 max-w-screen-md mx-auto w-full flex flex-col gap-6">
+        {/* Devices */}
         <div className="bg-primary-container rounded-[2rem] p-6 ambient-shadow flex flex-col gap-1">
           {devices.map((device, index) => (
             <div
               key={device.id}
               className={`flex items-center justify-between py-5 ${
-                index < devices.length - 1
-                  ? "border-b border-on-surface-variant/10"
-                  : ""
+                index < devices.length - 1 ? "border-b border-on-surface-variant/10" : ""
               }`}
             >
               <div className="flex items-center gap-4">
                 <div className="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface">
-                  <span className="material-symbols-outlined">
-                    {device.icon}
-                  </span>
+                  <span className="material-symbols-outlined">{device.icon}</span>
                 </div>
                 <div>
-                  <p className="text-base text-on-surface font-medium">
-                    {device.name}
-                  </p>
-                  <p className="text-sm text-on-surface-variant">
-                    {device.description}
-                  </p>
+                  <p className="text-base text-on-surface font-medium">{device.name}</p>
+                  <p className="text-sm text-on-surface-variant">{device.description}</p>
                 </div>
               </div>
-              {device.type === "toggle" ? (
-                <button
-                  onClick={() => toggleDevice(device.id)}
-                  className={`relative w-12 h-6 rounded-full transition-colors duration-300 ${
-                    device.connected ? "bg-secondary" : "bg-surface-variant"
-                  }`}
-                  aria-label={`Toggle ${device.name}`}
-                >
-                  <div
-                    className={`absolute top-0.5 w-5 h-5 rounded-full bg-white border-2 transition-all duration-300 ${
-                      device.connected
-                        ? "right-0.5 border-secondary"
-                        : "left-0.5 border-outline-variant"
+              <div className="flex items-center gap-2">
+                {device.importable && (
+                  <button
+                    onClick={() => setShowUpload(true)}
+                    className="text-xs font-medium text-secondary border border-secondary/30 rounded-full px-3 py-1 hover:bg-secondary/5 transition-colors"
+                  >
+                    导入
+                  </button>
+                )}
+                {device.type === "toggle" ? (
+                  <button
+                    onClick={() => toggleDevice(device.id)}
+                    className={`relative w-12 h-6 rounded-full transition-colors duration-300 ${
+                      device.connected ? "bg-secondary" : "bg-surface-variant"
                     }`}
-                  />
-                </button>
-              ) : (
-                <button className="text-sm font-medium text-secondary border border-secondary/30 rounded-full px-4 py-1.5 hover:bg-secondary/5 transition-colors">
-                  连接
-                </button>
-              )}
+                    aria-label={`Toggle ${device.name}`}
+                  >
+                    <div
+                      className={`absolute top-0.5 w-5 h-5 rounded-full bg-white border-2 transition-all duration-300 ${
+                        device.connected ? "right-0.5 border-secondary" : "left-0.5 border-outline-variant"
+                      }`}
+                    />
+                  </button>
+                ) : (
+                  <button className="text-sm font-medium text-secondary border border-secondary/30 rounded-full px-4 py-1.5 hover:bg-secondary/5 transition-colors">
+                    连接
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>
+
+        {/* Import History */}
+        {imports.length > 0 && (
+          <section>
+            <h3 className="text-sm font-medium text-on-surface-variant uppercase tracking-widest mb-3 px-2">
+              导入记录
+            </h3>
+            <div className="flex flex-col gap-3">
+              {imports.map((imp) => (
+                <div key={imp.id} className="bg-primary-container rounded-2xl p-4 ambient-shadow flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-surface-container-highest flex items-center justify-center">
+                    <span className={`material-symbols-outlined text-lg ${imp.status === "completed" ? "text-secondary" : imp.status === "failed" ? "text-error" : "text-on-surface-variant"}`}>
+                      {imp.status === "completed" ? "check_circle" : imp.status === "failed" ? "error" : "hourglass_top"}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-on-surface truncate">{imp.fileName}</p>
+                    <p className="text-xs text-on-surface-variant">
+                      {imp.status === "completed"
+                        ? `${imp.recordCount.toLocaleString()} 条记录`
+                        : imp.status === "failed"
+                        ? imp.error || "导入失败"
+                        : "处理中..."}
+                      {imp.dataFrom && imp.dataTo && (
+                        <> · {new Date(imp.dataFrom).toLocaleDateString("zh-CN")} - {new Date(imp.dataTo).toLocaleDateString("zh-CN")}</>
+                      )}
+                    </p>
+                  </div>
+                  {imp.status === "completed" && (
+                    <button
+                      onClick={() => handleDeleteImport(imp.id)}
+                      className="text-on-surface-variant hover:text-error transition-colors p-1"
+                      title="删除"
+                    >
+                      <span className="material-symbols-outlined text-lg">delete</span>
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
       </main>
+
+      {/* Upload Dialog */}
+      {showUpload && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-inverse-surface/30 backdrop-blur-sm" onClick={() => !uploading && setShowUpload(false)}>
+          <div className="bg-surface w-[90%] max-w-md rounded-2xl p-6 flex flex-col gap-5 animate-[fadeIn_0.2s_ease]" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-medium text-on-surface">导入健康数据</h2>
+              <button onClick={() => !uploading && setShowUpload(false)} className="text-on-surface-variant">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <div className="text-sm text-on-surface-variant space-y-2">
+              <p>请上传从健康应用导出的 ZIP 文件：</p>
+              <ul className="list-disc list-inside text-xs space-y-1 text-outline">
+                <li>Apple Health：健康 → 头像 → 导出所有健康数据</li>
+                <li>华为：设置 → 隐私中心 → 请求个人数据</li>
+                <li>Samsung：设置 → 下载个人数据</li>
+                <li>小米/Zepp：设置 → 账号 → 导出数据</li>
+              </ul>
+            </div>
+
+            {/* Drop zone */}
+            <button
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+              className="border-2 border-dashed border-outline-variant/50 rounded-2xl p-8 flex flex-col items-center gap-3 hover:border-secondary/50 hover:bg-surface-variant/10 transition-colors disabled:opacity-50"
+            >
+              {uploading ? (
+                <>
+                  <div className="w-8 h-8 border-2 border-secondary border-t-transparent rounded-full animate-spin" />
+                  <p className="text-sm text-on-surface-variant">正在解析...</p>
+                </>
+              ) : (
+                <>
+                  <span className="material-symbols-outlined text-3xl text-on-surface-variant">upload_file</span>
+                  <p className="text-sm text-on-surface-variant">点击选择 ZIP 文件</p>
+                  <p className="text-xs text-outline">最大 500MB</p>
+                </>
+              )}
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".zip"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+
+            {/* Result */}
+            {uploadResult && (
+              <div className={`rounded-xl p-4 text-sm ${uploadResult.success ? "bg-secondary-container/50 text-on-secondary-container" : "bg-error-container/50 text-on-error-container"}`}>
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-lg">
+                    {uploadResult.success ? "check_circle" : "error"}
+                  </span>
+                  {uploadResult.message}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -116,7 +315,7 @@ function Header({ title }: { title: string }) {
       >
         <span className="material-symbols-outlined">arrow_back</span>
       </Link>
-      <h1 className="font-[var(--font-display)] text-xl font-medium text-on-surface ml-2">
+      <h1 className="[font-family:var(--font-display)] text-xl font-medium text-on-surface ml-2">
         {title}
       </h1>
     </header>
