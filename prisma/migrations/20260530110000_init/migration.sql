@@ -1,4 +1,3 @@
-
 -- CreateSchema
 CREATE SCHEMA IF NOT EXISTS "public";
 
@@ -39,6 +38,12 @@ CREATE TYPE "CreditAction" AS ENUM ('dailyCheckin', 'habitComplete', 'allHabitsC
 CREATE TYPE "CreditDirection" AS ENUM ('earn', 'spend');
 
 -- CreateEnum
+CREATE TYPE "FriendshipStatus" AS ENUM ('pending', 'accepted', 'blocked');
+
+-- CreateEnum
+CREATE TYPE "ShareableContent" AS ENUM ('weeklyReport', 'monthlyReport', 'insights', 'goals', 'moodHistory', 'posts');
+
+-- CreateEnum
 CREATE TYPE "PeriodType" AS ENUM ('weekly', 'monthly');
 
 -- CreateEnum
@@ -63,6 +68,29 @@ CREATE TABLE "users" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "users_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "friendships" (
+    "id" TEXT NOT NULL,
+    "requesterId" TEXT NOT NULL,
+    "addresseeId" TEXT NOT NULL,
+    "status" "FriendshipStatus" NOT NULL DEFAULT 'pending',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "friendships_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "friend_permissions" (
+    "id" TEXT NOT NULL,
+    "ownerId" TEXT NOT NULL,
+    "friendId" TEXT NOT NULL,
+    "content" "ShareableContent" NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "friend_permissions_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -298,6 +326,18 @@ CREATE TABLE "insights" (
 CREATE UNIQUE INDEX "users_username_key" ON "users"("username");
 
 -- CreateIndex
+CREATE INDEX "friendships_addresseeId_status_idx" ON "friendships"("addresseeId", "status");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "friendships_requesterId_addresseeId_key" ON "friendships"("requesterId", "addresseeId");
+
+-- CreateIndex
+CREATE INDEX "friend_permissions_ownerId_friendId_idx" ON "friend_permissions"("ownerId", "friendId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "friend_permissions_ownerId_friendId_content_key" ON "friend_permissions"("ownerId", "friendId", "content");
+
+-- CreateIndex
 CREATE INDEX "mood_checkins_userId_createdAt_idx" ON "mood_checkins"("userId", "createdAt");
 
 -- CreateIndex
@@ -365,6 +405,18 @@ CREATE INDEX "insights_userId_createdAt_idx" ON "insights"("userId", "createdAt"
 
 -- CreateIndex
 CREATE INDEX "insights_reportId_idx" ON "insights"("reportId");
+
+-- AddForeignKey
+ALTER TABLE "friendships" ADD CONSTRAINT "friendships_requesterId_fkey" FOREIGN KEY ("requesterId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "friendships" ADD CONSTRAINT "friendships_addresseeId_fkey" FOREIGN KEY ("addresseeId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "friend_permissions" ADD CONSTRAINT "friend_permissions_ownerId_fkey" FOREIGN KEY ("ownerId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "friend_permissions" ADD CONSTRAINT "friend_permissions_friendId_fkey" FOREIGN KEY ("friendId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "mood_checkins" ADD CONSTRAINT "mood_checkins_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;

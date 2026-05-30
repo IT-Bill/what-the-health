@@ -25,6 +25,7 @@ interface MenuItem {
 
 const menuItems: MenuItem[] = [
   { id: "personal", icon: "person", label: "个人信息", href: "/profile/personal-info" },
+  { id: "friends", icon: "group", label: "好友", href: "/profile/friends" },
   { id: "health", icon: "watch", label: "健康连接", href: "/profile/health-connections" },
   { id: "prefs", icon: "settings", label: "偏好设置", href: "/profile/preferences" },
 ];
@@ -98,13 +99,20 @@ export default function ProfilePage() {
                 alt="Profile Avatar"
                 className="w-16 h-16 rounded-full glass-panel ambient-shadow bg-primary-container object-cover shrink-0"
               />
-              <div className="flex flex-col">
-                <h2 className="font-[var(--font-display)] text-xl font-medium text-on-surface">
+              <div className="flex flex-col gap-1">
+                <h2 className="[font-family:var(--font-display)] text-xl font-medium text-on-surface">
                   {user.name || "未设置昵称"}
                 </h2>
-                <p className="text-sm text-on-surface-variant">
-                  {user.username}
-                </p>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(user.username);
+                    alert("已复制用户名: @" + user.username);
+                  }}
+                  className="flex items-center gap-1.5 text-sm text-on-surface-variant hover:text-secondary transition-colors self-start"
+                >
+                  <span>@{user.username}</span>
+                  <span className="material-symbols-outlined text-sm">content_copy</span>
+                </button>
               </div>
             </div>
           )}
