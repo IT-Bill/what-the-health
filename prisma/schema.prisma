@@ -101,6 +101,23 @@ enum CreditDirection {
   spend
 }
 
+/// Status of a friendship.
+enum FriendshipStatus {
+  pending   // 已发送，等待对方确认
+  accepted  // 双方已是好友
+  blocked   // 被屏蔽
+}
+
+/// Shareable content types for friend permissions.
+enum ShareableContent {
+  weeklyReport   // 周报
+  monthlyReport  // 月报
+  insights       // AI 洞察
+  goals          // 习惯目标进度
+  moodHistory    // 情绪记录
+  posts          // 发布的文章
+}
+
 /// Period type for pre-computed reports.
 enum PeriodType {
   weekly
@@ -155,7 +172,56 @@ model User {
   likes             Like[]
   creditTransactions CreditTransaction[]
 
+  // Friend system
+  sentFriendRequests     Friendship[] @relation("FriendshipRequester")
+  receivedFriendRequests Friendship[] @relation("FriendshipAddressee")
+  friendPermissions      FriendPermission[] @relation("PermissionOwner")
+  permissionsGrantedToMe FriendPermission[] @relation("PermissionFriend")
+
   @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// Friend system
+// ---------------------------------------------------------------------------
+
+/// A friendship between two users. Always stored once per pair (requester → addressee).
+/// Status transitions: pending → accepted/blocked. Deleting = unfriend.
+model Friendship {
+  id          String           @id @default(cuid())
+  requesterId String
+  addresseeId String
+  status      FriendshipStatus @default(pending)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  requester User @relation("FriendshipRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee User @relation("FriendshipAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  /// One friendship record per pair.
+  @@unique([requesterId, addresseeId])
+  /// Quick lookup: "all friendships involving user X"
+  @@index([addresseeId, status])
+  @@map("friendships")
+}
+
+/// Per-friend permission: what content the owner allows a specific friend to view.
+/// Default: no permissions. Each row explicitly grants one content type.
+model FriendPermission {
+  id        String           @id @default(cuid())
+  ownerId   String           // 被查看方（内容拥有者）
+  friendId  String           // 查看方（好友）
+  content   ShareableContent // 被允许查看的内容类型
+
+  createdAt DateTime @default(now())
+
+  owner  User @relation("PermissionOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  friend User @relation("PermissionFriend", fields: [friendId], references: [id], onDelete: Cascade)
+
+  /// Each content type only granted once per friend pair.
+  @@unique([ownerId, friendId, content])
+  @@index([ownerId, friendId])
+  @@map("friend_permissions")
 }
 
 /// A daily emotional check-in (design _1 mood selection).
