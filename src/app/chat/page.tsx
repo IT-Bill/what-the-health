@@ -139,17 +139,11 @@ export default function ChatPage() {
     "idle" | "thinking" | "tools"
   >("idle");
   const [error, setError] = useState<string | null>(null);
-  const [isClient, setIsClient] = useState(false);
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const assistantAccRef = useRef("");
-
-  // Mark client-side
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
 
   // Auth check — redirect to login if not authenticated
   useEffect(() => {
@@ -217,9 +211,9 @@ export default function ChatPage() {
       try {
         const res = await fetch(`/api/chat/sessions/${sid}/messages`);
         const data = await res.json();
-        if (data.messages) {
+        if (data.session?.messages) {
           setMessages(
-            data.messages.map((m: { id: string; role: string; content: string }) => ({
+            data.session.messages.map((m: { id: string; role: string; content: string }) => ({
               id: m.id,
               role: m.role === "user" ? "user" : "agent",
               content: m.content,
@@ -459,15 +453,13 @@ export default function ChatPage() {
         <div className="font-[var(--font-display)] text-2xl font-medium text-primary">
           Mindful
         </div>
-        <div className="w-8 h-8 rounded-full overflow-hidden">
-          <Image
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuBmyCHplBlEA2-ZY6mgFEDrgRJ4Xv330ovvOFWyDVcQyw3t1Y-q7dnDUWTnCAj9LHcJSwNa8dQmf2SCyG_cjDH672FSCeKg220a9VKBaPcJUn87sn-Z-d0SRordKn5rEFHXkhvftCc4P_EWPw0cmQ0mrPRfCdmMXavLoBXmZBHd3CVXXbxsk39pC_AvELDbmgWnzTGmkoOxBhYhyUJQiOkPJ7944vuEsZpbwpAysFRiF3gtrYLYQOI_5LEOLU4T_MPBV4PjTf_-9dQ"
-            alt="User avatar"
-            width={32}
-            height={32}
-            className="w-full h-full object-cover"
-          />
-        </div>
+        <button
+          onClick={startNewSession}
+          className="flex items-center justify-center w-9 h-9 rounded-full bg-primary-container text-primary hover:bg-primary-container/80 transition-colors"
+          title="新建对话"
+        >
+          <span className="material-symbols-outlined text-xl">add</span>
+        </button>
       </header>
 
       {/* Desktop TopAppBar */}
@@ -507,55 +499,61 @@ export default function ChatPage() {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar - Sessions */}
-        {(showSidebar || isClient) && (
-          <aside
-            className={`${
-              showSidebar
-                ? "fixed inset-0 z-40 bg-surface/95 backdrop-blur-xl md:relative md:inset-auto md:bg-transparent md:backdrop-blur-none"
-                : "hidden"
-            } md:flex md:w-72 md:flex-col md:border-r md:border-outline-variant/20 md:bg-surface-container-low/50`}
-          >
-            <div className="flex items-center justify-between p-4 md:p-4 border-b border-outline-variant/20 md:border-none">
-              <h2 className="font-[var(--font-display)] text-lg font-medium text-on-surface">
-                对话历史
-              </h2>
-              <button
-                onClick={() => setShowSidebar(false)}
-                className="md:hidden text-on-surface-variant"
-              >
-                <span className="material-symbols-outlined">close</span>
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-2 space-y-1">
-              <button
-                onClick={startNewSession}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-primary bg-primary-container/40 hover:bg-primary-container/60 transition-colors"
-              >
-                <span className="material-symbols-outlined">add</span>
-                <span className="text-sm font-medium">新建对话</span>
-              </button>
-              {sessions.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => loadSession(s.id)}
-                  className={`w-full text-left px-4 py-3 rounded-2xl transition-colors ${
-                    sessionId === s.id
-                      ? "bg-secondary-container/60 text-on-secondary-container"
-                      : "hover:bg-surface-container-high/60 text-on-surface-variant"
-                  }`}
-                >
-                  <div className="text-sm font-medium truncate">
-                    {s.title}
-                  </div>
-                  <div className="text-xs mt-0.5 opacity-60 truncate">
-                    {s.lastMessage ?? `${s.messageCount} 条消息`}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </aside>
+        {/* Mobile sidebar overlay */}
+        {showSidebar && (
+          <div
+            className="fixed inset-0 z-30 bg-black/20 backdrop-blur-sm md:hidden"
+            onClick={() => setShowSidebar(false)}
+          />
         )}
+
+        {/* Sidebar - Sessions */}
+        <aside
+          className={`${
+            showSidebar
+              ? "fixed top-0 left-0 h-full w-5/6 z-40 bg-surface/95 backdrop-blur-xl flex flex-col md:relative md:inset-auto md:w-72 md:bg-transparent md:backdrop-blur-none"
+              : "hidden md:flex md:w-72 md:flex-col"
+          } md:border-r md:border-outline-variant/20 md:bg-surface-container-low/50`}
+        >
+          <div className="flex items-center justify-between p-4 md:p-4 border-b border-outline-variant/20 md:border-none">
+            <h2 className="font-[var(--font-display)] text-lg font-medium text-on-surface">
+              对话历史
+            </h2>
+            <button
+              onClick={() => setShowSidebar(false)}
+              className="md:hidden text-on-surface-variant"
+            >
+              <span className="material-symbols-outlined">close</span>
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+            <button
+              onClick={startNewSession}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-primary bg-primary-container/40 hover:bg-primary-container/60 transition-colors"
+            >
+              <span className="material-symbols-outlined">add</span>
+              <span className="text-sm font-medium">新建对话</span>
+            </button>
+            {sessions.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => loadSession(s.id)}
+                className={`w-full text-left px-4 py-3 rounded-2xl transition-colors ${
+                  sessionId === s.id
+                    ? "bg-secondary-container/60 text-on-secondary-container"
+                    : "hover:bg-surface-container-high/60 text-on-surface-variant"
+                }`}
+              >
+                <div className="text-sm font-medium truncate">
+                  {s.title}
+                </div>
+                <div className="text-xs mt-0.5 opacity-60 truncate">
+                  {s.lastMessage ?? `${s.messageCount} 条消息`}
+                </div>
+              </button>
+            ))}
+          </div>
+        </aside>
 
         {/* Main Chat Area */}
         <main className="flex-1 flex flex-col max-w-[800px] mx-auto w-full overflow-hidden relative z-10 pb-24 md:pb-8 pt-6">
