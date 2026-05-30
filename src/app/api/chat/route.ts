@@ -1,12 +1,17 @@
-import { stream, type Context, type Message, type Model } from "@earendil-works/pi-ai";
+import { Agent, estimateContextTokens, shouldCompact } from "@earendil-works/pi-agent-core";
+import type {
+  AgentEvent,
+  AgentMessage,
+  AgentToolResult,
+} from "@earendil-works/pi-agent-core";
+import type { Model, Message } from "@earendil-works/pi-ai";
+import { prisma } from "@/lib/prisma";
+import { getAuthCookie, verifyToken } from "@/lib/auth";
+import { createTools } from "./tools";
 
-// pi-ai uses Node-only APIs (SDK clients, http agents) — force the Node runtime.
 export const runtime = "nodejs";
-// Always run at request time; never cache chat completions.
 export const dynamic = "force-dynamic";
 
-// AI Ping — OpenAI-compatible endpoint serving GLM-5.1.
-// Defined as a custom model since it is not a built-in pi-ai provider.
 const MODEL: Model<"openai-completions"> = {
   id: "GLM-5.1",
   name: "GLM-5.1 (AI Ping)",
@@ -20,8 +25,6 @@ const MODEL: Model<"openai-completions"> = {
   maxTokens: 32000,
 };
 
-// Extra request-body fields the AI Ping API accepts (mirrors the documented
-// Python `extra_body`). Merged into the OpenAI payload via `onPayload`.
 const EXTRA_BODY = {
   enable_thinking: false,
   provider: {
@@ -37,13 +40,6 @@ const EXTRA_BODY = {
   },
 };
 
-// Wire format exchanged with the client. We keep it minimal (role + text) and
-// rebuild the richer pi-ai Context on the server.
-export interface ChatWireMessage {
-  role: "user" | "assistant";
-  text: string;
-}
-
 const SYSTEM_PROMPT = `你是 Mindful，一位温柔、沉静的疗愈陪伴者。
 
 你的语气平和、不急促，像一位懂得倾听的朋友。你关注用户当下的情绪与身体感受，鼓励他们关注呼吸、放慢节奏、善待自己。
@@ -53,105 +49,422 @@ const SYSTEM_PROMPT = `你是 Mindful，一位温柔、沉静的疗愈陪伴者�
 - 语言简洁、克制，避免说教和冗长的列表。
 - 在合适时，邀请用户做一次深呼吸或简短的正念练习。
 - 使用与用户相同的语言回复（中文或英文）。
-- 你不是医生，遇到涉及医疗、心理危机的内容时，温柔地建议对方寻求专业帮助。`;
+- 你不是医生，遇到涉及医疗、心理危机的内容时，温柔地建议对方寻求专业帮助。
 
-function toPiMessages(messages: ChatWireMessage[]): Message[] {
-  return messages
-    .filter((m) => m.text.trim().length > 0)
-    .map((m) =>
-      m.role === "user"
-        ? { role: "user", content: m.text, timestamp: Date.now() }
-        : {
-            role: "assistant",
-            content: [{ type: "text", text: m.text }],
-            api: MODEL.api,
-            provider: MODEL.provider,
-            model: MODEL.id,
-            usage: {
-              input: 0,
-              output: 0,
-              cacheRead: 0,
-              cacheWrite: 0,
-              totalTokens: 0,
-              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-            },
-            stopReason: "stop",
-            timestamp: Date.now(),
-          }
-    ) as Message[];
+你可以使用工具来获取用户的 wellness 数据，以便给出更个性化的回应。在调用工具前先简单说明你在做什么。`;
+
+function agentMsgToWire(m: AgentMessage): { role: string; text: string } | null {
+  if (m.role === "user") {
+    return { role: "user", text: m.content as string };
+  }
+  if (m.role === "assistant") {
+    const text = m.content
+      .filter((c) => c.type === "text")
+      .map((c) => (c as { text: string }).text)
+      .join("");
+    return { role: "assistant", text };
+  }
+  if (m.role === "toolResult") {
+    const text = m.content
+      .filter((c) => c.type === "text")
+      .map((c) => (c as { text: string }).text)
+      .join("");
+    return { role: "toolResult", text };
+  }
+  return null;
+}
+
+function wireToAgentMsgs(
+  msgs: { role: "user" | "assistant"; text: string }[]
+): AgentMessage[] {
+  return msgs
+    .filter((m) => m.text.trim())
+    .map((m) => {
+      if (m.role === "user") {
+        return { role: "user", content: m.text, timestamp: Date.now() };
+      }
+      return {
+        role: "assistant",
+        content: [{ type: "text", text: m.text }],
+        api: MODEL.api,
+        provider: MODEL.provider,
+        model: MODEL.id,
+        usage: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 0,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: "stop",
+        timestamp: Date.now(),
+      } as AgentMessage;
+    });
+}
+
+function sse(data: unknown): string {
+  return `data: ${JSON.stringify(data)}\n\n`;
+}
+
+// ---------------------------------------------------------------------------
+// Agent Loop Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * ConvertToLlm: Strip planning text from assistant messages that contain
+ * tool calls. When the LLM says "让我查一下..." alongside a toolCall, the
+ * text is useless for downstream reasoning but wastes tokens.
+ */
+function convertToLlm(messages: AgentMessage[]): Message[] {
+  return messages.map((m) => {
+    if (m.role === "assistant") {
+      const hasToolCall = m.content.some((c) => c.type === "toolCall");
+      if (hasToolCall) {
+        // Keep only toolCall blocks, discard text/thinking blocks
+        return {
+          ...m,
+          content: m.content.filter((c) => c.type === "toolCall"),
+        } as Message;
+      }
+    }
+    return m as Message;
+  });
+}
+
+/**
+ * TransformContext: Prune old messages when the context window is near full.
+ * GLM-5.1 has a 128k context window; we keep a 28k buffer for the response.
+ */
+const COMPACTION_SETTINGS = {
+  enabled: true,
+  reserveTokens: 28000, // buffer for LLM response
+  keepRecentTokens: 40000, // approx tokens to keep after pruning
+};
+
+async function transformContext(
+  messages: AgentMessage[],
+  signal?: AbortSignal
+): Promise<AgentMessage[]> {
+  // Estimate current token usage
+  const estimate = estimateContextTokens(messages);
+  const needsCompact = shouldCompact(
+    estimate.tokens,
+    MODEL.contextWindow,
+    COMPACTION_SETTINGS
+  );
+
+  if (!needsCompact) {
+    return messages;
+  }
+
+  // Simple pruning: keep system prompt (first message if user) and recent messages.
+  // We aim to keep roughly the last N messages that fit within keepRecentTokens.
+  const systemMsg: AgentMessage[] = messages[0]?.role === "user" ? [messages[0]] : [];
+  let kept: AgentMessage[] = [...systemMsg];
+  let keptTokens = 0;
+
+  // Walk backwards from the most recent message
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    let msgTokens = 0;
+
+    if (msg.role === "user") {
+      msgTokens = Math.ceil((msg.content as string).length / 3);
+    } else if (msg.role === "assistant") {
+      msgTokens = (msg.content as Array<{ type: string; text?: string }>).reduce(
+        (sum, c) => {
+          if (c.type === "text" && c.text) return sum + Math.ceil(c.text.length / 3);
+          return sum + Math.ceil(JSON.stringify(c).length / 3);
+        },
+        0
+      );
+    } else if ("content" in msg) {
+      msgTokens = Math.ceil(JSON.stringify((msg as { content: unknown }).content).length / 3);
+    } else {
+      msgTokens = Math.ceil(JSON.stringify(msg).length / 3);
+    }
+
+    if (keptTokens + msgTokens > COMPACTION_SETTINGS.keepRecentTokens && kept.length > systemMsg.length) {
+      break;
+    }
+    kept.unshift(msg);
+    keptTokens += msgTokens;
+
+    if (signal?.aborted) {
+      return messages; // bail out
+    }
+  }
+
+  return kept;
 }
 
 export async function POST(request: Request) {
-  if (!process.env.AIPING_API_KEY) {
-    return new Response(
-      JSON.stringify({ error: "服务端未配置 AIPING_API_KEY，无法连接到模型。" }),
-      { status: 503, headers: { "Content-Type": "application/json" } }
-    );
+  const token = await getAuthCookie();
+  if (!token) {
+    return new Response(sse({ type: "error", message: "未登录" }), {
+      status: 401,
+      headers: { "Content-Type": "text/event-stream" },
+    });
+  }
+  const payload = await verifyToken(token);
+  if (!payload) {
+    return new Response(sse({ type: "error", message: "登录已过期" }), {
+      status: 401,
+      headers: { "Content-Type": "text/event-stream" },
+    });
   }
 
-  let body: { messages?: ChatWireMessage[] };
+  // Verify user still exists in DB (handles DB resets)
+  const userExists = await prisma.user.findUnique({
+    where: { id: payload.userId },
+    select: { id: true },
+  });
+  if (!userExists) {
+    return new Response(sse({ type: "error", message: "登录已过期" }), {
+      status: 401,
+      headers: { "Content-Type": "text/event-stream" },
+    });
+  }
+
+  let body: { message?: string; sessionId?: string };
   try {
     body = await request.json();
   } catch {
-    return new Response(JSON.stringify({ error: "请求体不是合法的 JSON。" }), {
+    return new Response(sse({ type: "error", message: "请求体不是合法的 JSON" }), {
       status: 400,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "text/event-stream" },
     });
   }
 
-  const messages = body.messages ?? [];
-  if (!Array.isArray(messages) || messages.length === 0) {
-    return new Response(JSON.stringify({ error: "messages 不能为空。" }), {
+  const userMessageText = body.message?.trim();
+  if (!userMessageText) {
+    return new Response(sse({ type: "error", message: "消息不能为空" }), {
       status: 400,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "text/event-stream" },
     });
   }
 
-  const context: Context = {
-    systemPrompt: SYSTEM_PROMPT,
-    messages: toPiMessages(messages),
-  };
+  // Resolve or create session
+  let sessionId = body.sessionId;
+  let existingMessages: { role: "user" | "assistant"; text: string }[] = [];
 
-  const encoder = new TextEncoder();
-  // Propagate client disconnects to the upstream request.
+  if (sessionId) {
+    const session = await prisma.chatSession.findUnique({
+      where: { id: sessionId, userId: payload.userId },
+      include: {
+        messages: { orderBy: { createdAt: "asc" } },
+      },
+    });
+    if (session) {
+      existingMessages = session.messages.map((m) => ({
+        role: m.role.toLowerCase() as "user" | "assistant",
+        text: m.content,
+      }));
+    } else {
+      sessionId = undefined;
+    }
+  }
+
+  if (!sessionId) {
+    const newSession = await prisma.chatSession.create({
+      data: { userId: payload.userId, title: userMessageText.slice(0, 30) },
+    });
+    sessionId = newSession.id;
+  }
+
+  // Persist user message
+  await prisma.chatMessage.create({
+    data: {
+      sessionId,
+      role: "user",
+      content: userMessageText,
+    },
+  });
+
+  // Update session title if first message
+  const msgCount = await prisma.chatMessage.count({ where: { sessionId } });
+  if (msgCount <= 2) {
+    await prisma.chatSession.update({
+      where: { id: sessionId },
+      data: { title: userMessageText.slice(0, 30) },
+    });
+  }
+
+  // Create an AbortController that mirrors the request signal
   const abortController = new AbortController();
   request.signal.addEventListener("abort", () => abortController.abort());
 
-  const readable = new ReadableStream<Uint8Array>({
+  const userTools = createTools(payload.userId);
+
+  const agent = new Agent({
+    initialState: {
+      systemPrompt: SYSTEM_PROMPT,
+      model: MODEL,
+      thinkingLevel: "off",
+      tools: userTools,
+      messages: wireToAgentMsgs(existingMessages),
+    },
+    onPayload: (payload) => ({
+      ...(payload as Record<string, unknown>),
+      ...EXTRA_BODY,
+    }),
+    getApiKey: () => process.env.AIPING_API_KEY,
+    convertToLlm,
+    transformContext,
+  });
+
+  // Accumulate assistant text for DB persistence
+  let assistantText = "";
+  let assistantModel = "";
+  let assistantTokens = { input: 0, output: 0 };
+
+  // Track tool executions for UI display
+  const toolExecutions: Array<{
+    id: string;
+    name: string;
+    label: string;
+    status: "running" | "done" | "error";
+    result?: string;
+  }> = [];
+
+  const MAX_TURNS = 20;
+  let turnCount = 0;
+
+  const readable = new ReadableStream<string>({
     async start(controller) {
-      try {
-        const s = stream(MODEL, context, {
-          apiKey: process.env.AIPING_API_KEY,
-          signal: abortController.signal,
-          // Merge AI Ping's extra_body fields into the OpenAI request payload.
-          onPayload: (payload) => ({
-            ...(payload as Record<string, unknown>),
-            ...EXTRA_BODY,
-          }),
-        });
-        for await (const event of s) {
-          if (event.type === "text_delta") {
-            controller.enqueue(encoder.encode(event.delta));
-          } else if (event.type === "error") {
-            const msg = event.error.errorMessage ?? "生成回复时出错。";
-            controller.enqueue(encoder.encode(`\n\n⚠️ ${msg}`));
+      // Send session ID immediately
+      controller.enqueue(sse({ type: "session", sessionId }));
+
+      // Subscribe to agent events
+      agent.subscribe(async (event: AgentEvent) => {
+        switch (event.type) {
+          case "agent_start": {
+            controller.enqueue(sse({ type: "agent_start" }));
+            break;
+          }
+          case "agent_end": {
+            // Persist assistant message
+            if (assistantText.trim()) {
+              await prisma.chatMessage.create({
+                data: {
+                  sessionId: sessionId!,
+                  role: "assistant",
+                  content: assistantText.trim(),
+                  model: assistantModel || undefined,
+                  inputTokens: assistantTokens.input || undefined,
+                  outputTokens: assistantTokens.output || undefined,
+                },
+              });
+              await prisma.chatSession.update({
+                where: { id: sessionId! },
+                data: { updatedAt: new Date() },
+              });
+            }
+            controller.enqueue(sse({ type: "agent_end" }));
+            controller.close();
+            break;
+          }
+          case "turn_start": {
+            controller.enqueue(sse({ type: "turn_start" }));
+            break;
+          }
+          case "turn_end": {
+            turnCount++;
+            controller.enqueue(sse({ type: "turn_end", turnCount }));
+            if (turnCount >= MAX_TURNS) {
+              controller.enqueue(
+                sse({
+                  type: "error",
+                  message: `已达到最大对话轮次限制（${MAX_TURNS} 轮），请稍后重试。`,
+                })
+              );
+              agent.abort();
+            }
+            break;
+          }
+          case "message_start": {
+            const wire = agentMsgToWire(event.message);
+            if (wire) {
+              controller.enqueue(sse({ type: "message_start", message: wire }));
+            }
+            break;
+          }
+          case "message_update": {
+            if (event.assistantMessageEvent.type === "text_delta") {
+              const delta = event.assistantMessageEvent.delta;
+              assistantText += delta;
+              controller.enqueue(sse({ type: "text_delta", delta }));
+            }
+            break;
+          }
+          case "message_end": {
+            const wire = agentMsgToWire(event.message);
+            if (wire?.role === "assistant") {
+              const msg = event.message as Extract<AgentMessage, { role: "assistant" }>;
+              assistantModel = msg.model ?? "";
+              assistantTokens = {
+                input: msg.usage?.input ?? 0,
+                output: msg.usage?.output ?? 0,
+              };
+            }
+            if (wire) {
+              controller.enqueue(sse({ type: "message_end", message: wire }));
+            }
+            break;
+          }
+          case "tool_execution_start": {
+            const tool = userTools.find((t) => t.name === event.toolName);
+            const exec = {
+              id: event.toolCallId,
+              name: event.toolName,
+              label: tool?.label ?? event.toolName,
+              status: "running" as const,
+            };
+            toolExecutions.push(exec);
+            controller.enqueue(sse({ type: "tool_start", tool: exec }));
+            break;
+          }
+          case "tool_execution_end": {
+            const idx = toolExecutions.findIndex((t) => t.id === event.toolCallId);
+            if (idx !== -1) {
+              toolExecutions[idx].status = event.isError ? "error" : "done";
+              const result = event.result as AgentToolResult<unknown> | undefined;
+              const text = result?.content
+                ?.filter((c) => c.type === "text")
+                .map((c) => (c as { text: string }).text)
+                .join("")
+                .slice(0, 200);
+              toolExecutions[idx].result = text ?? "";
+              controller.enqueue(
+                sse({
+                  type: "tool_end",
+                  tool: toolExecutions[idx],
+                })
+              );
+            }
+            break;
           }
         }
+      });
+
+      try {
+        await agent.prompt(userMessageText);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "未知错误";
-        controller.enqueue(encoder.encode(`\n\n⚠️ ${msg}`));
-      } finally {
+        controller.enqueue(sse({ type: "error", message: msg }));
         controller.close();
       }
     },
     cancel() {
       abortController.abort();
+      agent.abort();
     },
   });
 
   return new Response(readable, {
     headers: {
-      "Content-Type": "text/plain; charset=utf-8",
+      "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache, no-transform",
       "X-Accel-Buffering": "no",
     },
