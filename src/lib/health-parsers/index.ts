@@ -4,14 +4,15 @@ import { appleHealthParser } from "./apple-health";
 import { huaweiHealthParser } from "./huawei-health";
 import { xiaomiHealthParser } from "./xiaomi-health";
 import { samsungHealthParser } from "./samsung-health";
+import { googleFitParser } from "./google-fit";
 
 /** All registered parsers, checked in order (most specific first). */
 const parsers: HealthParser[] = [
   appleHealthParser,
-  samsungHealthParser, // Samsung before Huawei (more specific file naming)
+  samsungHealthParser,
+  googleFitParser,
   huaweiHealthParser,
   xiaomiHealthParser,
-  // Phase 3: googleFitParser
 ];
 
 /**
