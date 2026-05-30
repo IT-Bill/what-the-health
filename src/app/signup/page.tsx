@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-export default function LoginPage() {
+export default function SignUpPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -18,9 +18,16 @@ export default function LoginPage() {
     const formData = new FormData(e.currentTarget);
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
+    const confirmPassword = formData.get("confirm-password") as string;
+
+    if (password !== confirmPassword) {
+      setError("两次输入的密码不一致");
+      setLoading(false);
+      return;
+    }
 
     try {
-      const res = await fetch("/api/login", {
+      const res = await fetch("/api/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -29,12 +36,11 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "登录失败");
+        setError(data.error || "注册失败");
         return;
       }
 
-      localStorage.setItem("user", JSON.stringify(data.user));
-      router.push("/profile");
+      router.push("/login");
     } catch {
       setError("网络错误，请稍后重试");
     } finally {
@@ -65,14 +71,14 @@ export default function LoginPage() {
               静心
             </h2>
             <h1 className="font-[var(--font-display)] text-3xl md:text-5xl font-semibold text-on-background leading-tight">
-              欢迎回到您的宁静港湾
+              开启您的心灵之旅
             </h1>
             <p className="text-lg text-on-surface-variant leading-relaxed">
-              请输入您的信息，继续您的心灵之旅。
+              创建账户，追踪您的健康状态，发现内心的平静。
             </p>
           </div>
 
-          {/* Login Form */}
+          {/* Sign Up Form */}
           <form className="space-y-8" onSubmit={handleSubmit}>
             <div className="space-y-6">
               {/* Email */}
@@ -115,37 +121,61 @@ export default function LoginPage() {
                     id="password"
                     name="password"
                     type="password"
-                    autoComplete="current-password"
+                    autoComplete="new-password"
                     required
                     placeholder="请输入密码"
                     className="block w-full rounded-full border-0 py-4 pl-12 pr-6 bg-surface-container text-on-background text-base placeholder:text-outline-variant focus:ring-1 focus:ring-secondary focus:bg-surface transition-all duration-300"
                   />
                 </div>
               </div>
+
+              {/* Confirm Password */}
+              <div>
+                <label
+                  htmlFor="confirm-password"
+                  className="block text-sm font-medium text-on-surface-variant mb-2 ml-4 tracking-wide"
+                >
+                  确认密码
+                </label>
+                <div className="relative">
+                  <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline-variant pointer-events-none">
+                    lock_reset
+                  </span>
+                  <input
+                    id="confirm-password"
+                    name="confirm-password"
+                    type="password"
+                    autoComplete="new-password"
+                    required
+                    placeholder="请再次输入密码"
+                    className="block w-full rounded-full border-0 py-4 pl-12 pr-6 bg-surface-container text-on-background text-base placeholder:text-outline-variant focus:ring-1 focus:ring-secondary focus:bg-surface transition-all duration-300"
+                  />
+                </div>
+              </div>
             </div>
 
-            {/* Actions */}
-            <div className="flex items-center justify-between px-2">
-              <div className="flex items-center">
-                <input
-                  id="remember-me"
-                  name="remember-me"
-                  type="checkbox"
-                  className="h-5 w-5 rounded border-outline-variant text-secondary focus:ring-secondary bg-surface-container cursor-pointer transition-colors"
-                />
-                <label
-                  htmlFor="remember-me"
-                  className="ml-3 block text-base text-on-surface-variant cursor-pointer"
-                >
-                  记住我
-                </label>
-              </div>
-              <a
-                href="#"
-                className="text-sm font-medium text-primary hover:text-secondary transition-colors duration-300"
+            {/* Terms */}
+            <div className="flex items-center px-2">
+              <input
+                id="terms"
+                name="terms"
+                type="checkbox"
+                required
+                className="h-5 w-5 rounded border-outline-variant text-secondary focus:ring-secondary bg-surface-container cursor-pointer transition-colors"
+              />
+              <label
+                htmlFor="terms"
+                className="ml-3 block text-sm text-on-surface-variant cursor-pointer"
               >
-                忘记密码？
-              </a>
+                我同意
+                <a href="#" className="text-primary hover:text-secondary transition-colors">
+                  服务条款
+                </a>
+                和
+                <a href="#" className="text-primary hover:text-secondary transition-colors">
+                  隐私政策
+                </a>
+              </label>
             </div>
 
             {error && (
@@ -158,20 +188,22 @@ export default function LoginPage() {
               disabled={loading}
               className="w-full flex justify-center py-4 px-8 border border-transparent rounded-full shadow-sm text-sm font-medium tracking-wide text-on-primary bg-inverse-surface hover:bg-on-background focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary transition-all duration-500 ease-out transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? "登录中..." : "登录"}
+              {loading ? "注册中..." : "注册"}
             </button>
+          </form>
 
-            {/* Sign Up Link */}
-            <p className="text-center text-sm text-on-surface-variant">
-              还没有账号？
+          {/* Footer */}
+          <div className="pt-8 text-center border-t border-surface-variant/50">
+            <p className="text-base text-on-surface-variant">
+              已有账户？
               <Link
-                href="/signup"
-                className="font-medium text-primary hover:text-secondary underline decoration-1 underline-offset-4 transition-colors duration-300 ml-1"
+                href="/login"
+                className="text-sm font-medium text-primary hover:text-secondary underline decoration-1 underline-offset-4 transition-colors duration-300 ml-1"
               >
-                立即注册
+                立即登录
               </Link>
             </p>
-          </form>
+          </div>
         </div>
       </div>
     </div>
