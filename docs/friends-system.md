@@ -200,6 +200,69 @@ async function canFriendView(ownerId: string, friendId: string, content: Shareab
 
 ---
 
+## 查看好友分享内容
+
+### GET /api/friends/[id]/shared
+
+获取好友分享给我的所有内容。`[id]` 为好友的 userId。
+
+后端逻辑：
+1. 验证登录态
+2. 确认双方是好友（status=accepted）
+3. 查询对方授予我的所有 FriendPermission
+4. 仅返回有权限的内容类型对应的数据
+
+**Response:**
+```json
+{
+  "friend": { "id": "...", "username": "bill", "name": "Bill", "avatarUrl": null },
+  "permissions": ["weeklyReport", "monthlyReport", "goals", "posts"],
+  "weeklyReport": { "id": "...", "periodStart": "...", "summary": "...", "data": {...} },
+  "monthlyReport": { "id": "...", "periodStart": "...", "summary": "...", "data": {...} },
+  "goals": [
+    { "id": "...", "title": "Mindful Breath", "icon": "air", "completionsThisWeek": 5 }
+  ],
+  "posts": [
+    { "id": "...", "title": "...", "excerpt": "...", "publishedAt": "..." }
+  ]
+}
+```
+
+未授权的字段不会出现在响应中（如 `insights`、`moodHistory` 未被 `permissions` 包含则不返回）。
+
+---
+
+## UI 页面
+
+### /profile/friends
+
+好友管理页面，包含三个 tab：
+
+| Tab | 功能 |
+|-----|------|
+| 好友 | 已添加的好友列表，每个好友有"查看分享"和"权限设置"两个操作 |
+| 添加 | 搜索用户（username/name），显示关系状态，一键发送请求 |
+| 请求 | 收到的请求（接受/拒绝）+ 已发送的请求（等待中）|
+
+**查看分享**（点击👁图标）：
+- 弹出面板展示好友授权给你的内容
+- 周报/月报：综合评分 + emoji 情绪行 + 概括
+- AI 洞察：标题 + 内容摘要
+- 目标进度：图标 + 标题 + 本周完成次数
+- 情绪记录：emoji + 日期
+- 文章：可点击跳转到 /discover/[id]
+
+**权限设置**（点击⚙图标）：
+- 6个 toggle 开关控制你分享给对方的内容
+- 只读展示对方分享给你的内容标签
+- "保存权限" + "解除好友"操作
+
+### /profile 主页
+
+显示 `@username` + 复制按钮，方便分享给好友添加。
+
+---
+
 ## Seed 数据
 
 默认 seed 中，elena 和 bill 互为好友，双方互相分享：
@@ -214,17 +277,19 @@ async function canFriendView(ownerId: string, friendId: string, content: Shareab
 
 ## 实现路线图
 
-### Phase 1（当前）✅
+### Phase 1 ✅
 - [x] Schema: Friendship + FriendPermission 表
 - [x] API: 搜索、添加、接受/拒绝、删除、权限管理
 - [x] Seed: elena ↔ bill 好友 + 默认权限
 
-### Phase 2
-- [ ] 好友页面 UI（在 Profile 下或独立 tab）
-- [ ] 查看好友分享的内容（Memory 页面加 "好友" tab）
-- [ ] 好友动态 feed（好友最近的文章/成就）
+### Phase 2 ✅
+- [x] 好友页面 UI（/profile/friends，3个tab）
+- [x] 查看好友分享的内容（SharedContentView 面板）
+- [x] GET /api/friends/[id]/shared 端点
+- [x] Profile 显示 @username + 复制按钮
 
 ### Phase 3
 - [ ] 推送通知：好友请求、好友达成里程碑
+- [ ] 好友动态 feed（好友最近的文章/成就）
 - [ ] 好友排行榜（可选，积分/streak对比）
 - [ ] 批量权限模板（"分享全部" / "仅报告" / "自定义"）
