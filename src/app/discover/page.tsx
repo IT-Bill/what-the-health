@@ -135,7 +135,7 @@ function PostCardComponent({ post }: { post: PostCard }) {
           </div>
         )}
         <div className="p-3 md:p-5 flex flex-col flex-1 gap-2">
-          <h2 className="font-[var(--font-display)] text-sm md:text-lg font-medium text-on-surface leading-snug line-clamp-2 group-hover:text-primary transition-colors">
+          <h2 className="[font-family:var(--font-display)] text-sm md:text-lg font-medium text-on-surface leading-snug line-clamp-2 group-hover:text-primary transition-colors">
             {post.title}
           </h2>
           {post.excerpt && (
@@ -222,10 +222,10 @@ function ShopTab() {
           可用余额
         </span>
         <div className="flex items-baseline justify-center gap-2 mt-2">
-          <span className="font-[var(--font-display)] text-5xl font-semibold text-on-surface">
+          <span className="[font-family:var(--font-display)] text-5xl font-semibold text-on-surface">
             {data.balance.toLocaleString()}
           </span>
-          <span className="font-[var(--font-display)] text-xl font-medium text-outline">
+          <span className="[font-family:var(--font-display)] text-xl font-medium text-outline">
             Cr
           </span>
         </div>
