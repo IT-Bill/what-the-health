@@ -594,6 +594,7 @@ function ShareableCard({ report }: { report: ReportWithInsights }) {
 // --- Demo View (unauthenticated visitors) ---
 function DemoView({ demos, periodType }: { demos: DemoEntry[]; periodType: string }) {
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+  const [paused, setPaused] = useState(false);
 
   if (demos.length === 0) {
     return (
@@ -605,6 +606,16 @@ function DemoView({ demos, periodType }: { demos: DemoEntry[]; periodType: strin
   }
 
   const selected = selectedIdx !== null ? demos[selectedIdx] : null;
+
+  function handleCardClick(idx: number) {
+    if (selectedIdx === idx) {
+      setSelectedIdx(null);
+      setPaused(false);
+    } else {
+      setSelectedIdx(idx);
+      setPaused(true);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6 animate-[fadeIn_0.4s_ease]">
@@ -622,28 +633,62 @@ function DemoView({ demos, periodType }: { demos: DemoEntry[]; periodType: strin
         </Link>
       </section>
 
-      {/* User selector chips */}
-      <div className="flex gap-3 justify-center">
-        {demos.map((entry, idx) => (
-          <button
-            key={entry.user.id}
-            onClick={() => setSelectedIdx(selectedIdx === idx ? null : idx)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-300 ${
-              selectedIdx === idx
-                ? "bg-secondary-container text-on-secondary-container"
-                : "border border-outline-variant/30 text-on-surface-variant hover:bg-surface-variant/20"
-            }`}
-          >
-            <div className="w-6 h-6 rounded-full bg-surface-container-high overflow-hidden flex items-center justify-center">
-              {entry.user.avatarUrl ? (
-                <img src={entry.user.avatarUrl} alt={entry.user.name} className="w-full h-full object-cover" />
-              ) : (
-                <span className="material-symbols-outlined text-xs text-on-surface-variant">person</span>
-              )}
-            </div>
-            <span className="text-sm font-medium">{entry.user.name}</span>
-          </button>
-        ))}
+      {/* Scrolling user cards carousel */}
+      <div className="relative overflow-hidden">
+        <div
+          className={`flex gap-4 ${paused ? "" : "animate-[scrollCards_12s_linear_infinite]"}`}
+          style={{ width: "max-content" }}
+        >
+          {/* Duplicate cards for seamless loop */}
+          {[...demos, ...demos].map((entry, idx) => {
+            const realIdx = idx % demos.length;
+            const isSelected = selectedIdx === realIdx;
+            const data = entry.report?.data;
+            return (
+              <button
+                key={`${entry.user.id}-${idx}`}
+                onClick={() => handleCardClick(realIdx)}
+                className={`flex-shrink-0 w-64 bg-primary-container rounded-2xl p-4 ambient-shadow flex flex-col gap-2 text-left transition-all duration-300 ${
+                  isSelected
+                    ? "ring-2 ring-secondary scale-[0.98]"
+                    : "hover:-translate-y-0.5 hover:shadow-[0_16px_32px_rgba(45,45,45,0.06)]"
+                }`}
+              >
+                {/* User row */}
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-full bg-surface-container-high overflow-hidden flex items-center justify-center flex-shrink-0">
+                    {entry.user.avatarUrl ? (
+                      <img src={entry.user.avatarUrl} alt={entry.user.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="material-symbols-outlined text-sm text-on-surface-variant">person</span>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-on-surface truncate">{entry.user.name}</p>
+                    <p className="text-[10px] text-on-surface-variant">
+                      {periodType === "monthly" ? "月报" : "周报"}
+                    </p>
+                  </div>
+                  {data?.overallScore && (
+                    <span className="text-lg font-semibold text-secondary">{data.overallScore}</span>
+                  )}
+                </div>
+                {/* Mood preview */}
+                {data?.moodEmojis && (
+                  <div className="flex gap-0.5">
+                    {data.moodEmojis.slice(0, 7).map((emoji, i) => (
+                      <span key={i} className="text-sm">{emoji}</span>
+                    ))}
+                  </div>
+                )}
+                {/* One-line summary */}
+                {entry.report?.summary && (
+                  <p className="text-[11px] text-on-surface-variant line-clamp-1">{entry.report.summary}</p>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Render selected user's report using the same components as logged-in view */}
@@ -660,8 +705,8 @@ function DemoView({ demos, periodType }: { demos: DemoEntry[]; periodType: strin
           <EmptyState />
         )
       ) : (
-        <p className="text-sm text-on-surface-variant text-center py-8">
-          选择一位用户查看他们的{periodType === "monthly" ? "月报" : "周报"}示例
+        <p className="text-xs text-on-surface-variant text-center">
+          点击卡片查看完整报告
         </p>
       )}
     </div>
