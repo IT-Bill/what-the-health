@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import type {
@@ -145,7 +145,7 @@ export default function MemoryPage() {
         {loading ? (
           <LoadingSkeleton />
         ) : isDemo ? (
-          <DemoView demos={demoData?.demos ?? []} periodType={periodType} />
+          <DemoView demos={demoData?.demos ?? []} periodType={periodType} activeTab={activeTab} />
         ) : !data?.report && activeTab !== "洞察" ? (
           <EmptyState />
         ) : activeTab === "洞察" ? (
@@ -347,10 +347,10 @@ function ReportView({
                 {d.sleepData.map((hours, i) => {
                   const height = ((hours - 4) / 4) * 100;
                   return (
-                    <div key={i} className="flex-1 flex flex-col items-center gap-2">
-                      <span className="text-xs text-on-surface-variant">{hours}h</span>
+                    <div key={i} className="flex-1 flex flex-col items-center h-full justify-end">
+                      <span className="text-xs text-on-surface-variant mb-1">{hours}h</span>
                       <div
-                        className="w-full max-w-[32px] bg-secondary/60 rounded-t-lg mx-auto"
+                        className="w-full max-w-[32px] bg-secondary/60 rounded-t-lg"
                         style={{ height: `${Math.max(height, 10)}%` }}
                       />
                     </div>
@@ -592,9 +592,12 @@ function ShareableCard({ report }: { report: ReportWithInsights }) {
 }
 
 // --- Demo View (unauthenticated visitors) ---
-function DemoView({ demos, periodType }: { demos: DemoEntry[]; periodType: string }) {
+function DemoView({ demos, periodType, activeTab }: { demos: DemoEntry[]; periodType: string; activeTab: Tab }) {
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [paused, setPaused] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
 
   if (demos.length === 0) {
     return (
@@ -607,14 +610,31 @@ function DemoView({ demos, periodType }: { demos: DemoEntry[]; periodType: strin
 
   const selected = selectedIdx !== null ? demos[selectedIdx] : null;
 
-  function handleCardClick(idx: number) {
+  function handleCardClick(idx: number, cardEl: HTMLButtonElement) {
     if (selectedIdx === idx) {
+      // Deselect
       setSelectedIdx(null);
       setPaused(false);
-    } else {
-      setSelectedIdx(idx);
-      setPaused(true);
+      setShowReport(false);
+      return;
     }
+
+    // Pause and select
+    setPaused(true);
+    setSelectedIdx(idx);
+    setShowReport(false);
+
+    // Scroll to center the clicked card
+    const container = containerRef.current;
+    if (container) {
+      const containerRect = container.getBoundingClientRect();
+      const cardRect = cardEl.getBoundingClientRect();
+      const scrollLeft = container.scrollLeft + (cardRect.left - containerRect.left) - (containerRect.width / 2) + (cardRect.width / 2);
+      container.scrollTo({ left: scrollLeft, behavior: "smooth" });
+    }
+
+    // Show report after centering animation
+    setTimeout(() => setShowReport(true), 400);
   }
 
   return (
@@ -634,9 +654,13 @@ function DemoView({ demos, periodType }: { demos: DemoEntry[]; periodType: strin
       </section>
 
       {/* Scrolling user cards carousel */}
-      <div className="relative overflow-hidden">
+      <div
+        ref={containerRef}
+        className="overflow-x-auto no-scrollbar scroll-smooth"
+      >
         <div
-          className={`flex gap-4 ${paused ? "" : "animate-[scrollCards_12s_linear_infinite]"}`}
+          ref={trackRef}
+          className={`flex gap-4 px-4 ${paused ? "" : "animate-[scrollCards_12s_linear_infinite]"}`}
           style={{ width: "max-content" }}
         >
           {/* Duplicate cards for seamless loop */}
@@ -647,10 +671,10 @@ function DemoView({ demos, periodType }: { demos: DemoEntry[]; periodType: strin
             return (
               <button
                 key={`${entry.user.id}-${idx}`}
-                onClick={() => handleCardClick(realIdx)}
-                className={`flex-shrink-0 w-64 bg-primary-container rounded-2xl p-4 ambient-shadow flex flex-col gap-2 text-left transition-all duration-300 ${
+                onClick={(e) => handleCardClick(realIdx, e.currentTarget)}
+                className={`flex-shrink-0 w-64 bg-primary-container rounded-2xl p-4 ambient-shadow flex flex-col gap-2 text-left transition-all duration-500 ${
                   isSelected
-                    ? "ring-2 ring-secondary scale-[0.98]"
+                    ? "ring-2 ring-secondary scale-[1.02] shadow-[0_20px_40px_rgba(45,45,45,0.08)]"
                     : "hover:-translate-y-0.5 hover:shadow-[0_16px_32px_rgba(45,45,45,0.06)]"
                 }`}
               >
@@ -691,24 +715,31 @@ function DemoView({ demos, periodType }: { demos: DemoEntry[]; periodType: strin
         </div>
       </div>
 
-      {/* Render selected user's report using the same components as logged-in view */}
-      {selected ? (
-        selected.report ? (
-          <ReportView
-            report={{
-              ...selected.report,
-              insights: selected.insights,
-            } as ReportWithInsights}
-            periodType={periodType}
-          />
-        ) : (
-          <EmptyState />
-        )
-      ) : (
+      {/* Expanded report below */}
+      {selected && showReport ? (
+        <div className="animate-[fadeIn_0.4s_ease]">
+          {activeTab === "洞察" ? (
+            <InsightsView
+              reportInsights={selected.insights}
+              globalInsights={[]}
+            />
+          ) : selected.report ? (
+            <ReportView
+              report={{
+                ...selected.report,
+                insights: selected.insights,
+              } as ReportWithInsights}
+              periodType={periodType}
+            />
+          ) : (
+            <EmptyState />
+          )}
+        </div>
+      ) : !selected ? (
         <p className="text-xs text-on-surface-variant text-center">
           点击卡片查看完整报告
         </p>
-      )}
+      ) : null}
     </div>
   );
 }
