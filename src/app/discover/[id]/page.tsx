@@ -15,7 +15,7 @@ export default function PostDetailPage() {
   const [commentText, setCommentText] = useState("");
 
   useEffect(() => {
-    if (!params.id) return;
+    if (!params?.id) return;
     setLoading(true);
     fetch(`/api/posts/${params.id}`)
       .then((r) => r.json())
@@ -30,7 +30,7 @@ export default function PostDetailPage() {
       })
       .catch(() => setPost(null))
       .finally(() => setLoading(false));
-  }, [params.id]);
+  }, [params?.id]);
 
   function handleLike() {
     setLiked(!liked);

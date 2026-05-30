@@ -58,7 +58,7 @@
 
   /* Typography - Font Families */
   --font-display: "Playfair Display", serif;
-  --font-body: "Geist", sans-serif;
+  --font-body: "Noto Sans SC", sans-serif;
 
   /* Border Radius */
   --radius-DEFAULT: 1rem;
