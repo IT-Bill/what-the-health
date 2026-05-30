@@ -61,7 +61,7 @@ export default function DiscoverPage() {
 
         {/* Posts Grid — 2 columns on md+ */}
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-2 gap-4 md:gap-5">
             {[1, 2, 3, 4].map((i) => (
               <div key={i} className="bg-primary-container rounded-2xl h-80 animate-pulse" />
             ))}
@@ -72,7 +72,7 @@ export default function DiscoverPage() {
             <p>暂无内容</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-2 gap-4 md:gap-5">
             {posts.map((post) => (
               <PostCardComponent key={post.id} post={post} />
             ))}
@@ -89,7 +89,7 @@ function PostCardComponent({ post }: { post: PostCard }) {
       <article className="bg-primary-container rounded-2xl overflow-hidden ambient-shadow transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_24px_48px_rgba(45,45,45,0.06)] flex flex-col h-full">
         {/* Cover Image */}
         {post.coverImage && (
-          <div className="relative h-48 overflow-hidden bg-surface-variant">
+          <div className="relative h-32 md:h-48 overflow-hidden bg-surface-variant">
             <Image
               src={post.coverImage}
               alt={post.title}
@@ -97,13 +97,13 @@ function PostCardComponent({ post }: { post: PostCard }) {
               className="object-cover transition-transform duration-700 group-hover:scale-105"
             />
             {/* Category badge */}
-            <div className="absolute top-3 left-3 glass-panel px-3 py-1 rounded-xl flex items-center gap-1.5">
+            <div className="absolute top-2 left-2 glass-panel px-2 py-0.5 rounded-lg flex items-center gap-1">
               {post.categoryIcon && (
-                <span className="material-symbols-outlined text-sm text-tertiary">
+                <span className="material-symbols-outlined text-xs text-tertiary">
                   {post.categoryIcon}
                 </span>
               )}
-              <span className="text-xs text-tertiary font-medium uppercase tracking-wider">
+              <span className="text-[10px] text-tertiary font-medium uppercase tracking-wider">
                 {post.category}
               </span>
             </div>
@@ -111,22 +111,22 @@ function PostCardComponent({ post }: { post: PostCard }) {
         )}
 
         {/* Content */}
-        <div className="p-5 flex flex-col flex-1 gap-3">
-          <h2 className="font-[var(--font-display)] text-lg font-medium text-on-surface leading-snug line-clamp-2 group-hover:text-primary transition-colors">
+        <div className="p-3 md:p-5 flex flex-col flex-1 gap-2">
+          <h2 className="font-[var(--font-display)] text-sm md:text-lg font-medium text-on-surface leading-snug line-clamp-2 group-hover:text-primary transition-colors">
             {post.title}
           </h2>
 
           {post.excerpt && (
-            <p className="text-sm text-on-surface-variant leading-relaxed line-clamp-2">
+            <p className="text-xs md:text-sm text-on-surface-variant leading-relaxed line-clamp-2 hidden sm:block">
               {post.excerpt}
             </p>
           )}
 
           {/* Footer */}
-          <div className="mt-auto pt-3 flex items-center justify-between border-t border-outline-variant/10">
+          <div className="mt-auto pt-2 md:pt-3 flex items-center justify-between border-t border-outline-variant/10">
             {/* Author */}
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-surface-container-high overflow-hidden relative">
+            <div className="flex items-center gap-1.5">
+              <div className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-surface-container-high overflow-hidden relative">
                 {post.author.avatarUrl ? (
                   <Image
                     src={post.author.avatarUrl}
@@ -140,20 +140,21 @@ function PostCardComponent({ post }: { post: PostCard }) {
                   </span>
                 )}
               </div>
-              <span className="text-xs text-on-surface-variant">{post.author.name}</span>
+              <span className="text-[10px] md:text-xs text-on-surface-variant truncate max-w-[60px] md:max-w-none">
+                {post.author.name}
+              </span>
             </div>
 
             {/* Stats */}
-            <div className="flex items-center gap-3 text-xs text-on-surface-variant">
+            <div className="flex items-center gap-2 text-[10px] md:text-xs text-on-surface-variant">
               <span className="flex items-center gap-0.5">
-                <span className="material-symbols-outlined text-sm">favorite</span>
+                <span className="material-symbols-outlined text-xs md:text-sm">favorite</span>
                 {post._count.likes}
               </span>
               <span className="flex items-center gap-0.5">
-                <span className="material-symbols-outlined text-sm">chat_bubble</span>
+                <span className="material-symbols-outlined text-xs md:text-sm">chat_bubble</span>
                 {post._count.comments}
               </span>
-              <span>{post.readMinutes} min</span>
             </div>
           </div>
         </div>

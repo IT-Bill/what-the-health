@@ -1,3 +1,4 @@
+
 -- CreateSchema
 CREATE SCHEMA IF NOT EXISTS "public";
 
@@ -40,7 +41,7 @@ CREATE TYPE "InsightType" AS ENUM ('pattern', 'prediction', 'correlation', 'mile
 -- CreateTable
 CREATE TABLE "users" (
     "id" TEXT NOT NULL,
-    "email" TEXT NOT NULL,
+    "username" TEXT NOT NULL,
     "passwordHash" TEXT,
     "name" TEXT NOT NULL,
     "avatarUrl" TEXT,
@@ -256,7 +257,7 @@ CREATE TABLE "insights" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
+CREATE UNIQUE INDEX "users_username_key" ON "users"("username");
 
 -- CreateIndex
 CREATE INDEX "mood_checkins_userId_createdAt_idx" ON "mood_checkins"("userId", "createdAt");

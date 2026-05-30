@@ -103,10 +103,10 @@ async function main() {
 
   // --- Demo user (design _5 profile: Elena Rostova) ---
   const user = await prisma.user.upsert({
-    where: { email: "elena@mindful.app" },
+    where: { username: "elena" },
     update: {},
     create: {
-      email: "elena@mindful.app",
+      username: "elena",
       name: "Elena Rostova",
       gender: "female",
       birthday: new Date("1990-10-12"),
@@ -494,7 +494,7 @@ async function main() {
   });
 
   console.log("Seed complete:");
-  console.log(`  user: ${user.email} (${user.id})`);
+  console.log(`  user: ${user.username} (${user.id})`);
   console.log(`  posts: ${await prisma.post.count({ where: { authorId: user.id } })}`);
   console.log(`  comments: ${await prisma.comment.count({ where: { authorId: user.id } })}`);
   console.log(`  likes: ${await prisma.like.count({ where: { authorId: user.id } })}`);
