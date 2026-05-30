@@ -1,13 +1,23 @@
-import { Agent, estimateContextTokens, shouldCompact } from "@earendil-works/pi-agent-core";
+import {
+  Agent,
+  estimateContextTokens,
+  shouldCompact,
+  estimateTokens,
+} from "@earendil-works/pi-agent-core";
 import type {
   AgentEvent,
   AgentMessage,
   AgentToolResult,
 } from "@earendil-works/pi-agent-core";
 import type { Model, Message } from "@earendil-works/pi-ai";
+import { completeSimple } from "@earendil-works/pi-ai";
 import { prisma } from "@/lib/prisma";
 import { getAuthCookie, verifyToken } from "@/lib/auth";
 import { createTools } from "./tools";
+import {
+  buildSystemPrompt,
+  extractAndUpdatePersona,
+} from "@/lib/persona-service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -133,70 +143,222 @@ function convertToLlm(messages: AgentMessage[]): Message[] {
 }
 
 /**
- * TransformContext: Prune old messages when the context window is near full.
- * GLM-5.1 has a 128k context window; we keep a 28k buffer for the response.
+ * Three-Layer Context Compression (P4)
+ * Layer 1: Keep recent messages verbatim
+ * Layer 2: Summarize middle messages
+ * Layer 3: Compress oldest messages into one-liner
  */
-const COMPACTION_SETTINGS = {
+const COMPRESSION_SETTINGS = {
   enabled: true,
-  reserveTokens: 28000, // buffer for LLM response
-  keepRecentTokens: 40000, // approx tokens to keep after pruning
+  reserveTokens: 28000,
+  layer1KeepTokens: 40000,
+  layer2SummarizeTokens: 30000,
+  layer3CompressTokens: 20000,
 };
 
 async function transformContext(
   messages: AgentMessage[],
   signal?: AbortSignal
 ): Promise<AgentMessage[]> {
-  // Estimate current token usage
   const estimate = estimateContextTokens(messages);
   const needsCompact = shouldCompact(
     estimate.tokens,
     MODEL.contextWindow,
-    COMPACTION_SETTINGS
+    {
+      enabled: COMPRESSION_SETTINGS.enabled,
+      reserveTokens: COMPRESSION_SETTINGS.reserveTokens,
+      keepRecentTokens: COMPRESSION_SETTINGS.layer1KeepTokens,
+    }
   );
 
-  if (!needsCompact) {
-    return messages;
+  if (!needsCompact) return messages;
+
+  const partitions = partitionMessagesIntoLayers(messages);
+  const layer1 = partitions.layer1;
+
+  let layer2Result: AgentMessage[] = [];
+  if (partitions.layer2.length > 0) {
+    const summary = await summarizeMessages(partitions.layer2, signal);
+    if (summary) {
+      layer2Result = [
+        {
+          role: "user",
+          content: `[对话摘要] ${summary}`,
+          timestamp: Date.now(),
+        } as AgentMessage,
+      ];
+    }
   }
 
-  // Simple pruning: keep system prompt (first message if user) and recent messages.
-  // We aim to keep roughly the last N messages that fit within keepRecentTokens.
-  const systemMsg: AgentMessage[] = messages[0]?.role === "user" ? [messages[0]] : [];
-  let kept: AgentMessage[] = [...systemMsg];
-  let keptTokens = 0;
+  let layer3Result: AgentMessage[] = [];
+  if (partitions.layer3.length > 0) {
+    const compression = await compressMessages(partitions.layer3, signal);
+    if (compression) {
+      layer3Result = [
+        {
+          role: "user",
+          content: `[历史概述] ${compression}`,
+          timestamp: Date.now(),
+        } as AgentMessage,
+      ];
+    }
+  }
 
-  // Walk backwards from the most recent message
+  if (signal?.aborted) return messages;
+  return [...layer3Result, ...layer2Result, ...layer1];
+}
+
+function partitionMessagesIntoLayers(
+  messages: AgentMessage[]
+): {
+  layer1: AgentMessage[];
+  layer2: AgentMessage[];
+  layer3: AgentMessage[];
+} {
+  let layer1Tokens = 0;
+  let layer2Tokens = 0;
+  const layer1: AgentMessage[] = [];
+  const layer2: AgentMessage[] = [];
+  const layer3: AgentMessage[] = [];
+
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
-    let msgTokens = 0;
-
-    if (msg.role === "user") {
-      msgTokens = Math.ceil((msg.content as string).length / 3);
-    } else if (msg.role === "assistant") {
-      msgTokens = (msg.content as Array<{ type: string; text?: string }>).reduce(
-        (sum, c) => {
-          if (c.type === "text" && c.text) return sum + Math.ceil(c.text.length / 3);
-          return sum + Math.ceil(JSON.stringify(c).length / 3);
-        },
-        0
-      );
-    } else if ("content" in msg) {
-      msgTokens = Math.ceil(JSON.stringify((msg as { content: unknown }).content).length / 3);
+    const msgTokens = estimateTokens(msg);
+    if (
+      layer1Tokens + msgTokens <= COMPRESSION_SETTINGS.layer1KeepTokens ||
+      layer1.length === 0
+    ) {
+      layer1.unshift(msg);
+      layer1Tokens += msgTokens;
     } else {
-      msgTokens = Math.ceil(JSON.stringify(msg).length / 3);
-    }
-
-    if (keptTokens + msgTokens > COMPACTION_SETTINGS.keepRecentTokens && kept.length > systemMsg.length) {
       break;
-    }
-    kept.unshift(msg);
-    keptTokens += msgTokens;
-
-    if (signal?.aborted) {
-      return messages; // bail out
     }
   }
 
-  return kept;
+  const layer1Start = messages.length - layer1.length;
+  for (let i = layer1Start - 1; i >= 0; i--) {
+    const msg = messages[i];
+    const msgTokens = estimateTokens(msg);
+    if (
+      layer2Tokens + msgTokens <= COMPRESSION_SETTINGS.layer2SummarizeTokens ||
+      layer2.length === 0
+    ) {
+      layer2.unshift(msg);
+      layer2Tokens += msgTokens;
+    } else {
+      layer3.unshift(...messages.slice(0, i + 1));
+      break;
+    }
+  }
+
+  return { layer1, layer2, layer3 };
+}
+
+async function summarizeMessages(
+  messages: AgentMessage[],
+  signal?: AbortSignal
+): Promise<string | null> {
+  if (messages.length === 0 || signal?.aborted) return null;
+  const text = messages
+    .map((m) => {
+      if (m.role === "user") return `用户：${m.content}`;
+      if (m.role === "assistant") {
+        return `助手：${m.content
+          .filter((c) => c.type === "text")
+          .map((c) => (c as { text: string }).text)
+          .join("")}`;
+      }
+      return "";
+    })
+    .filter(Boolean)
+    .join("\n\n");
+
+  try {
+    const response = await completeSimple(
+      MODEL,
+      {
+        systemPrompt:
+          "你是对话摘要助手。保留关键决策和结果，删除闲聊。只输出摘要。",
+        messages: [
+          {
+            role: "user",
+            content: `请摘要以下对话（不超过500字）：\n\n${text}`,
+            timestamp: Date.now(),
+          },
+        ],
+      },
+      {
+        maxTokens: 800,
+        signal,
+        apiKey: process.env.AIPING_API_KEY,
+        onPayload: (p) => ({
+          ...(p as Record<string, unknown>),
+          ...EXTRA_BODY,
+        }),
+      }
+    );
+    if (response.stopReason !== "stop") return null;
+    return response.content
+      .filter((c) => c.type === "text")
+      .map((c) => c.text)
+      .join("")
+      .trim();
+  } catch {
+    return null;
+  }
+}
+
+async function compressMessages(
+  messages: AgentMessage[],
+  signal?: AbortSignal
+): Promise<string | null> {
+  if (messages.length === 0 || signal?.aborted) return null;
+  const text = messages
+    .map((m) => {
+      if (m.role === "user") return `用户：${m.content}`;
+      if (m.role === "assistant") {
+        return `助手：${m.content
+          .filter((c) => c.type === "text")
+          .map((c) => (c as { text: string }).text)
+          .join("")}`;
+      }
+      return "";
+    })
+    .filter(Boolean)
+    .join("\n\n");
+
+  try {
+    const response = await completeSimple(
+      MODEL,
+      {
+        systemPrompt: "你是极度压缩助手。只输出一句话概述。",
+        messages: [
+          {
+            role: "user",
+            content: `用一句话概括以下对话（不超过100字）：\n\n${text}`,
+            timestamp: Date.now(),
+          },
+        ],
+      },
+      {
+        maxTokens: 200,
+        signal,
+        apiKey: process.env.AIPING_API_KEY,
+        onPayload: (p) => ({
+          ...(p as Record<string, unknown>),
+          ...EXTRA_BODY,
+        }),
+      }
+    );
+    if (response.stopReason !== "stop") return null;
+    return response.content
+      .filter((c) => c.type === "text")
+      .map((c) => c.text)
+      .join("")
+      .trim();
+  } catch {
+    return null;
+  }
 }
 
 export async function POST(request: Request) {
@@ -295,11 +457,14 @@ export async function POST(request: Request) {
   const abortController = new AbortController();
   request.signal.addEventListener("abort", () => abortController.abort());
 
+  // Build persona-injected system prompt
+  const systemPrompt = await buildSystemPrompt(SYSTEM_PROMPT, payload.userId);
+
   const userTools = createTools(payload.userId);
 
   const agent = new Agent({
     initialState: {
-      systemPrompt: SYSTEM_PROMPT,
+      systemPrompt,
       model: MODEL,
       thinkingLevel: "off",
       tools: userTools,
@@ -361,6 +526,12 @@ export async function POST(request: Request) {
                 data: { updatedAt: new Date() },
               });
             }
+
+            // P2: Fire-and-forget persona memory extraction
+            const allMessages = agent.state.messages.slice();
+            extractAndUpdatePersona(payload.userId, allMessages, process.env.AIPING_API_KEY!)
+              .catch((err) => console.error("[Persona] Background extraction error:", err));
+
             controller.enqueue(sse({ type: "agent_end" }));
             controller.close();
             break;
