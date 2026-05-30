@@ -155,7 +155,7 @@ model redemptions {
 
 model users {
   id                   String               @id
-  email                String               @unique
+  username             String               @unique(map: "users_email_key")
   passwordHash         String?
   name                 String
   avatarUrl            String?
