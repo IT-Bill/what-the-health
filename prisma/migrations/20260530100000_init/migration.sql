@@ -33,6 +33,12 @@ CREATE TYPE "ConnectionStatus" AS ENUM ('connected', 'disconnected');
 CREATE TYPE "RedemptionStatus" AS ENUM ('pending', 'fulfilled', 'cancelled');
 
 -- CreateEnum
+CREATE TYPE "CreditAction" AS ENUM ('dailyCheckin', 'habitComplete', 'allHabitsComplete', 'moodCheckin', 'streakWeekly', 'mindfulness', 'postPublish', 'postLiked', 'redemption', 'adminAdjust');
+
+-- CreateEnum
+CREATE TYPE "CreditDirection" AS ENUM ('earn', 'spend');
+
+-- CreateEnum
 CREATE TYPE "PeriodType" AS ENUM ('weekly', 'monthly');
 
 -- CreateEnum
@@ -227,6 +233,38 @@ CREATE TABLE "redemptions" (
 );
 
 -- CreateTable
+CREATE TABLE "credit_rules" (
+    "id" TEXT NOT NULL,
+    "action" "CreditAction" NOT NULL,
+    "name" TEXT NOT NULL,
+    "description" TEXT NOT NULL,
+    "amount" INTEGER NOT NULL,
+    "dailyCap" INTEGER NOT NULL DEFAULT 0,
+    "icon" TEXT,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "sortOrder" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "credit_rules_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "credit_transactions" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "action" "CreditAction" NOT NULL,
+    "direction" "CreditDirection" NOT NULL,
+    "amount" INTEGER NOT NULL,
+    "balance" INTEGER NOT NULL,
+    "refId" TEXT,
+    "note" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "credit_transactions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "reports" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
@@ -308,6 +346,15 @@ CREATE UNIQUE INDEX "health_connections_userId_provider_key" ON "health_connecti
 CREATE INDEX "redemptions_userId_createdAt_idx" ON "redemptions"("userId", "createdAt");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "credit_rules_action_key" ON "credit_rules"("action");
+
+-- CreateIndex
+CREATE INDEX "credit_transactions_userId_createdAt_idx" ON "credit_transactions"("userId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "credit_transactions_userId_action_createdAt_idx" ON "credit_transactions"("userId", "action", "createdAt");
+
+-- CreateIndex
 CREATE INDEX "reports_userId_periodType_periodStart_idx" ON "reports"("userId", "periodType", "periodStart");
 
 -- CreateIndex
@@ -369,6 +416,9 @@ ALTER TABLE "redemptions" ADD CONSTRAINT "redemptions_userId_fkey" FOREIGN KEY (
 
 -- AddForeignKey
 ALTER TABLE "redemptions" ADD CONSTRAINT "redemptions_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "credit_transactions" ADD CONSTRAINT "credit_transactions_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "reports" ADD CONSTRAINT "reports_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
