@@ -72,19 +72,6 @@ export default function MemoryPage() {
   return (
     <AppShell>
       <div className="flex flex-col gap-8 max-w-3xl mx-auto w-full">
-        {/* Header */}
-        <div className="flex items-center gap-3">
-          <span
-            className="material-symbols-outlined text-primary text-3xl"
-            style={{ fontVariationSettings: "'FILL' 1" }}
-          >
-            psychology
-          </span>
-          <h1 className="font-[var(--font-display)] text-3xl font-medium text-on-surface">
-            Memory
-          </h1>
-        </div>
-
         {/* Tab Navigation */}
         <div className="flex gap-2 overflow-x-auto no-scrollbar">
           {TABS.map((tab) => (
