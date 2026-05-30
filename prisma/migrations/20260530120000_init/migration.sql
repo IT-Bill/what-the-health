@@ -1,3 +1,4 @@
+
 -- CreateSchema
 CREATE SCHEMA IF NOT EXISTS "public";
 
@@ -91,6 +92,21 @@ CREATE TABLE "friend_permissions" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "friend_permissions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "user_personas" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "identity" JSONB NOT NULL DEFAULT '{}',
+    "behavior" JSONB NOT NULL DEFAULT '{}',
+    "expression" JSONB NOT NULL DEFAULT '{}',
+    "preferences" JSONB NOT NULL DEFAULT '{}',
+    "version" INTEGER NOT NULL DEFAULT 1,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "user_personas_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -338,6 +354,9 @@ CREATE INDEX "friend_permissions_ownerId_friendId_idx" ON "friend_permissions"("
 CREATE UNIQUE INDEX "friend_permissions_ownerId_friendId_content_key" ON "friend_permissions"("ownerId", "friendId", "content");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "user_personas_userId_key" ON "user_personas"("userId");
+
+-- CreateIndex
 CREATE INDEX "mood_checkins_userId_createdAt_idx" ON "mood_checkins"("userId", "createdAt");
 
 -- CreateIndex
@@ -417,6 +436,9 @@ ALTER TABLE "friend_permissions" ADD CONSTRAINT "friend_permissions_ownerId_fkey
 
 -- AddForeignKey
 ALTER TABLE "friend_permissions" ADD CONSTRAINT "friend_permissions_friendId_fkey" FOREIGN KEY ("friendId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "user_personas" ADD CONSTRAINT "user_personas_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "mood_checkins" ADD CONSTRAINT "mood_checkins_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;

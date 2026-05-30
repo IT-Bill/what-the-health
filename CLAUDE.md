@@ -43,3 +43,12 @@ Pages fall into two categories:
 - External images are hosted on `lh3.googleusercontent.com` — configured in `next.config.ts` `images.remotePatterns`.
 - The build environment cannot fetch from Google Fonts at build time. Fonts are loaded at runtime via `<link>` tags.
 - All interactive pages must be marked `"use client"` — the App Router defaults to Server Components.
+
+### Database & Migrations
+
+- **Prisma 7** with `@prisma/adapter-pg` driver adapter. Connection URLs live in `prisma.config.ts` (not in schema.prisma).
+- **Never delete existing migration files.** Migrations are incremental — always add new ones after existing ones. Use `prisma migrate diff --from-migrations --to-schema` to generate only the delta SQL for new schema changes.
+- The current baseline migration (`20260530120000_init`) covers the full schema from empty. All future changes must be separate migration files appended after it.
+- Generated Prisma client outputs to `src/generated/prisma/` (gitignored, regenerated via `pnpm exec prisma generate`).
+- Seed: `pnpm exec prisma db seed` — reads `SEED_USERS` from `.env` (format: `"user1:pass1,user2:pass2"`).
+- Local dev DB: Docker `postgres:17-bookworm` on `localhost:5432/postgres`. Rebuild: `prisma migrate deploy` then `prisma db seed`.
