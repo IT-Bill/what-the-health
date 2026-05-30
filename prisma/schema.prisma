@@ -1,3 +1,6 @@
+// Prisma schema for "Mindful" — Quiet Luxury Wellness app.
+// Prisma 7: new `prisma-client` generator + driver adapters (see src/lib/prisma.ts).
+
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -7,78 +10,213 @@ datasource db {
   provider = "postgresql"
 }
 
-model chat_messages {
-  id            String        @id
-  sessionId     String
-  role          ChatRole
-  content       String
-  reasoning     String?
-  model         String?
-  inputTokens   Int?
-  outputTokens  Int?
-  createdAt     DateTime      @default(now())
-  chat_sessions chat_sessions @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
 
-  @@index([sessionId, createdAt])
+enum Gender {
+  female
+  male
+  nonBinary
+  undisclosed
 }
 
-model chat_sessions {
-  id            String          @id
-  userId        String
-  title         String?
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime
-  chat_messages chat_messages[]
-  users         users           @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, updatedAt])
+/// Mood selected during onboarding / daily check-in (design _1).
+enum Mood {
+  calm
+  anxious
+  fatigued
 }
 
-model goals {
-  id                String              @id
-  userId            String
-  title             String
-  description       String?
-  icon              String?
-  cadence           HabitCadence        @default(daily)
-  sortOrder         Int                 @default(0)
-  archived          Boolean             @default(false)
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime
-  users             users               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  habit_completions habit_completions[]
+/// Primary wellness goal chosen during onboarding (design _7).
+enum GoalType {
+  buildMuscle
+  loseWeight
+  healthyHabits
+}
+
+/// Cadence at which a habit should recur.
+enum HabitCadence {
+  daily
+  weekly
+  custom
+}
+
+/// Author role in a chat conversation.
+enum ChatRole {
+  user
+  assistant
+}
+
+/// Content category for discover journeys (design _8).
+enum JourneyCategory {
+  mindfulness
+  nutrition
+  reflection
+  sleep
+}
+
+/// Quick reaction on a memory/storyline (design _2).
+enum ReactionType {
+  inspired // 我有启发
+  resonate // 感同身受
+  willTry // 值得尝试
+}
+
+/// Third-party health integration (design _5).
+enum HealthProvider {
+  appleHealth
+  garmin
+  oura
+}
+
+enum ConnectionStatus {
+  connected
+  disconnected
+}
+
+enum RedemptionStatus {
+  pending
+  fulfilled
+  cancelled
+}
+
+// ---------------------------------------------------------------------------
+// Core
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String?
+  name         String
+  avatarUrl    String?
+  gender       Gender?
+  birthday     DateTime? @db.Date
+  heightCm     Int?
+  weightKg     Float?
+  memberSince  DateTime  @default(now())
+
+  // Preferences (design _5)
+  notificationsEnabled Boolean @default(true)
+  // Credit balance for the wellness shop (design _6)
+  credits              Int     @default(0)
+
+  primaryGoal GoalType?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  moodCheckins      MoodCheckin[]
+  goals             Goal[]
+  habitCompletions  HabitCompletion[]
+  chatSessions      ChatSession[]
+  memories          Memory[]
+  healthConnections HealthConnection[]
+  redemptions       Redemption[]
+
+  @@map("users")
+}
+
+/// A daily emotional check-in (design _1 mood selection).
+model MoodCheckin {
+  id        String   @id @default(cuid())
+  userId    String
+  mood      Mood
+  note      String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("mood_checkins")
+}
+
+// ---------------------------------------------------------------------------
+// Goals & habits (design _4 goal tracking)
+// ---------------------------------------------------------------------------
+
+model Goal {
+  id          String       @id @default(cuid())
+  userId      String
+  title       String
+  description String?
+  icon        String? // Material Symbols icon name
+  cadence     HabitCadence @default(daily)
+  sortOrder   Int          @default(0)
+  archived    Boolean      @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  completions HabitCompletion[]
 
   @@index([userId, archived])
+  @@map("goals")
 }
 
-model habit_completions {
-  id          String   @id
+/// One completion record for a goal/habit on a given day.
+model HabitCompletion {
+  id          String   @id @default(cuid())
   goalId      String
   userId      String
   completedAt DateTime @default(now())
+  /// Normalized day (UTC midnight) the completion counts toward; enables
+  /// one-completion-per-day uniqueness and streak queries.
   forDate     DateTime @db.Date
-  goals       goals    @relation(fields: [goalId], references: [id], onDelete: Cascade)
-  users       users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  goal Goal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([goalId, forDate])
   @@index([userId, forDate])
+  @@map("habit_completions")
 }
 
-model health_connections {
-  id          String           @id
-  userId      String
-  provider    HealthProvider
-  status      ConnectionStatus @default(disconnected)
-  connectedAt DateTime?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime
-  users       users            @relation(fields: [userId], references: [id], onDelete: Cascade)
+// ---------------------------------------------------------------------------
+// Chat (design 10 — pi-ai backed conversation)
+// ---------------------------------------------------------------------------
 
-  @@unique([userId, provider])
+model ChatSession {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+
+  @@index([userId, updatedAt])
+  @@map("chat_sessions")
 }
 
-model journeys {
-  id           String          @id
+model ChatMessage {
+  id           String   @id @default(cuid())
+  sessionId    String
+  role         ChatRole
+  content      String
+  /// Optional reasoning/thinking trace kept separate from the visible content.
+  reasoning    String?
+  /// Token usage / model metadata returned by the provider.
+  model        String?
+  inputTokens  Int?
+  outputTokens Int?
+  createdAt    DateTime @default(now())
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+  @@map("chat_messages")
+}
+
+// ---------------------------------------------------------------------------
+// Discover journeys (design _8)
+// ---------------------------------------------------------------------------
+
+model Journey {
+  id           String          @id @default(cuid())
   title        String
   quote        String?
   category     JourneyCategory
@@ -89,151 +227,97 @@ model journeys {
   readMinutes  Int             @default(5)
   published    Boolean         @default(true)
   publishedAt  DateTime        @default(now())
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([category, published])
+  @@map("journeys")
 }
 
-model memories {
-  id               String             @id
-  userId           String
-  note             String?
-  prompt           String?
-  createdAt        DateTime           @default(now())
-  users            users              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  memory_reactions memory_reactions[]
+// ---------------------------------------------------------------------------
+// Memory & reflections (design _2)
+// ---------------------------------------------------------------------------
+
+model Memory {
+  id        String   @id @default(cuid())
+  userId    String
+  /// Free-form reflection note the user records.
+  note      String?
+  /// The storyline/prompt this memory responds to, if any.
+  prompt    String?
+  createdAt DateTime @default(now())
+
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reactions MemoryReaction[]
 
   @@index([userId, createdAt])
+  @@map("memories")
 }
 
-model memory_reactions {
-  id       String       @id
+model MemoryReaction {
+  id       String       @id @default(cuid())
   memoryId String
   type     ReactionType
-  memories memories     @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+
+  memory Memory @relation(fields: [memoryId], references: [id], onDelete: Cascade)
 
   @@unique([memoryId, type])
+  @@map("memory_reactions")
 }
 
-model mood_checkins {
-  id        String   @id
-  userId    String
-  mood      Mood
-  note      String?
+// ---------------------------------------------------------------------------
+// Health connections (design _5)
+// ---------------------------------------------------------------------------
+
+model HealthConnection {
+  id          String           @id @default(cuid())
+  userId      String
+  provider    HealthProvider
+  status      ConnectionStatus @default(disconnected)
+  connectedAt DateTime?
+
   createdAt DateTime @default(now())
-  users     users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedAt DateTime @updatedAt
 
-  @@index([userId, createdAt])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+  @@map("health_connections")
 }
 
-model products {
-  id           String        @id
+// ---------------------------------------------------------------------------
+// Wellness shop (design _6)
+// ---------------------------------------------------------------------------
+
+model Product {
+  id           String  @id @default(cuid())
   name         String
   description  String
   image        String?
   priceCredits Int
-  available    Boolean       @default(true)
-  sortOrder    Int           @default(0)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime
-  redemptions  redemptions[]
+  available    Boolean @default(true)
+  sortOrder    Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  redemptions Redemption[]
+
+  @@map("products")
 }
 
-model redemptions {
-  id           String           @id
+model Redemption {
+  id           String           @id @default(cuid())
   userId       String
   productId    String
   creditsSpent Int
   status       RedemptionStatus @default(pending)
   createdAt    DateTime         @default(now())
-  products     products         @relation(fields: [productId], references: [id])
-  users        users            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
 
   @@index([userId, createdAt])
-}
-
-model users {
-  id                   String               @id
-  email                String               @unique
-  passwordHash         String?
-  name                 String
-  avatarUrl            String?
-  gender               Gender?
-  birthday             DateTime?            @db.Date
-  heightCm             Int?
-  weightKg             Float?
-  memberSince          DateTime             @default(now())
-  notificationsEnabled Boolean              @default(true)
-  credits              Int                  @default(0)
-  primaryGoal          GoalType?
-  createdAt            DateTime             @default(now())
-  updatedAt            DateTime
-  chat_sessions        chat_sessions[]
-  goals                goals[]
-  habit_completions    habit_completions[]
-  health_connections   health_connections[]
-  memories             memories[]
-  mood_checkins        mood_checkins[]
-  redemptions          redemptions[]
-}
-
-enum ChatRole {
-  user
-  assistant
-}
-
-enum ConnectionStatus {
-  connected
-  disconnected
-}
-
-enum Gender {
-  female
-  male
-  nonBinary
-  undisclosed
-}
-
-enum GoalType {
-  buildMuscle
-  loseWeight
-  healthyHabits
-}
-
-enum HabitCadence {
-  daily
-  weekly
-  custom
-}
-
-enum HealthProvider {
-  appleHealth
-  garmin
-  oura
-}
-
-enum JourneyCategory {
-  mindfulness
-  nutrition
-  reflection
-  sleep
-}
-
-enum Mood {
-  calm
-  anxious
-  fatigued
-}
-
-enum ReactionType {
-  inspired
-  resonate
-  willTry
-}
-
-enum RedemptionStatus {
-  pending
-  fulfilled
-  cancelled
+  @@map("redemptions")
 }

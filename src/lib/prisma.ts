@@ -1,20 +1,18 @@
-import { neonConfig } from "@neondatabase/serverless";
-import { PrismaNeon } from "@prisma/adapter-neon";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/generated/prisma/client";
-import ws from "ws";
 
-neonConfig.webSocketConstructor = ws;
-
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
-
-function createPrismaClient(): PrismaClient {
-  const adapter = new PrismaNeon({
-    connectionString: process.env.DATABASE_URL,
+// Prisma 7 connects through a driver adapter rather than a built-in engine.
+// We use the pg adapter against Neon's pooled connection string.
+const createPrismaClient = () =>
+  new PrismaClient({
+    adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
   });
-  return new PrismaClient({ adapter });
-}
+
+// Reuse a single client across hot reloads in development to avoid exhausting
+// database connections (Next.js re-evaluates modules on every change).
+const globalForPrisma = globalThis as unknown as {
+  prisma?: ReturnType<typeof createPrismaClient>;
+};
 
 export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 
