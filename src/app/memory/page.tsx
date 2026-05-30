@@ -690,7 +690,7 @@ function DemoView({ demos, periodType, activeTab }: { demos: DemoEntry[]; period
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-on-surface truncate">{entry.user.name}</p>
                     <p className="text-[10px] text-on-surface-variant">
-                      {periodType === "monthly" ? "月报" : "周报"}
+                      {activeTab === "洞察" ? "洞察" : periodType === "monthly" ? "月报" : "周报"}示例
                     </p>
                   </div>
                   {data?.overallScore && (
