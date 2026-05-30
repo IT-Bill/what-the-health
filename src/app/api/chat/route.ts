@@ -1,4 +1,4 @@
-import { Agent } from "@earendil-works/pi-agent-core";
+import { Agent, estimateContextTokens, shouldCompact } from "@earendil-works/pi-agent-core";
 import type {
   AgentEvent,
   AgentMessage,
@@ -105,6 +105,98 @@ function wireToAgentMsgs(
 
 function sse(data: unknown): string {
   return `data: ${JSON.stringify(data)}\n\n`;
+}
+
+// ---------------------------------------------------------------------------
+// Agent Loop Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * ConvertToLlm: Strip planning text from assistant messages that contain
+ * tool calls. When the LLM says "让我查一下..." alongside a toolCall, the
+ * text is useless for downstream reasoning but wastes tokens.
+ */
+function convertToLlm(messages: AgentMessage[]): Message[] {
+  return messages.map((m) => {
+    if (m.role === "assistant") {
+      const hasToolCall = m.content.some((c) => c.type === "toolCall");
+      if (hasToolCall) {
+        // Keep only toolCall blocks, discard text/thinking blocks
+        return {
+          ...m,
+          content: m.content.filter((c) => c.type === "toolCall"),
+        } as Message;
+      }
+    }
+    return m as Message;
+  });
+}
+
+/**
+ * TransformContext: Prune old messages when the context window is near full.
+ * GLM-5.1 has a 128k context window; we keep a 28k buffer for the response.
+ */
+const COMPACTION_SETTINGS = {
+  enabled: true,
+  reserveTokens: 28000, // buffer for LLM response
+  keepRecentTokens: 40000, // approx tokens to keep after pruning
+};
+
+async function transformContext(
+  messages: AgentMessage[],
+  signal?: AbortSignal
+): Promise<AgentMessage[]> {
+  // Estimate current token usage
+  const estimate = estimateContextTokens(messages);
+  const needsCompact = shouldCompact(
+    estimate.tokens,
+    MODEL.contextWindow,
+    COMPACTION_SETTINGS
+  );
+
+  if (!needsCompact) {
+    return messages;
+  }
+
+  // Simple pruning: keep system prompt (first message if user) and recent messages.
+  // We aim to keep roughly the last N messages that fit within keepRecentTokens.
+  const systemMsg: AgentMessage[] = messages[0]?.role === "user" ? [messages[0]] : [];
+  let kept: AgentMessage[] = [...systemMsg];
+  let keptTokens = 0;
+
+  // Walk backwards from the most recent message
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    let msgTokens = 0;
+
+    if (msg.role === "user") {
+      msgTokens = Math.ceil((msg.content as string).length / 3);
+    } else if (msg.role === "assistant") {
+      msgTokens = (msg.content as Array<{ type: string; text?: string }>).reduce(
+        (sum, c) => {
+          if (c.type === "text" && c.text) return sum + Math.ceil(c.text.length / 3);
+          return sum + Math.ceil(JSON.stringify(c).length / 3);
+        },
+        0
+      );
+    } else if ("content" in msg) {
+      msgTokens = Math.ceil(JSON.stringify((msg as { content: unknown }).content).length / 3);
+    } else {
+      msgTokens = Math.ceil(JSON.stringify(msg).length / 3);
+    }
+
+    if (keptTokens + msgTokens > COMPACTION_SETTINGS.keepRecentTokens && kept.length > systemMsg.length) {
+      break;
+    }
+    kept.unshift(msg);
+    keptTokens += msgTokens;
+
+    if (signal?.aborted) {
+      return messages; // bail out
+    }
+  }
+
+  return kept;
 }
 
 export async function POST(request: Request) {
@@ -218,6 +310,8 @@ export async function POST(request: Request) {
       ...EXTRA_BODY,
     }),
     getApiKey: () => process.env.AIPING_API_KEY,
+    convertToLlm,
+    transformContext,
   });
 
   // Accumulate assistant text for DB persistence
@@ -233,6 +327,9 @@ export async function POST(request: Request) {
     status: "running" | "done" | "error";
     result?: string;
   }> = [];
+
+  const MAX_TURNS = 20;
+  let turnCount = 0;
 
   const readable = new ReadableStream<string>({
     async start(controller) {
@@ -273,7 +370,17 @@ export async function POST(request: Request) {
             break;
           }
           case "turn_end": {
-            controller.enqueue(sse({ type: "turn_end" }));
+            turnCount++;
+            controller.enqueue(sse({ type: "turn_end", turnCount }));
+            if (turnCount >= MAX_TURNS) {
+              controller.enqueue(
+                sse({
+                  type: "error",
+                  message: `已达到最大对话轮次限制（${MAX_TURNS} 轮），请稍后重试。`,
+                })
+              );
+              agent.abort();
+            }
             break;
           }
           case "message_start": {
