@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import { BottomNavBar } from "@/components/bottom-nav-bar";
+import type { ChatWireMessage } from "../api/chat/route";
 
 interface Message {
   id: string;
@@ -16,36 +17,29 @@ const initialMessages: Message[] = [
     role: "agent",
     content: ["欢迎回来。在这个当下，你感觉如何？"],
   },
-  {
-    id: "2",
-    role: "user",
-    content: ["有点疲惫。今天工作很多，一直没有停下来深呼吸的时间。"],
-  },
-  {
-    id: "3",
-    role: "agent",
-    content: [
-      "我听到了。连轴转确实会让人感到消耗。现在，你已经在这里了。",
-      "如果你愿意，我们可以一起花一分钟时间，什么都不做，只是关注你的呼吸。闭上眼睛，深深地吸气......",
-    ],
-  },
 ];
+
+// Split streamed plain text into paragraphs on blank lines for nicer bubbles.
+function toParagraphs(text: string): string[] {
+  const parts = text.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+  return parts.length > 0 ? parts : [text];
+}
+
+// Map the local UI messages to the wire format the API route expects.
+function toWireMessages(messages: Message[]): ChatWireMessage[] {
+  return messages.map((m) => ({
+    role: m.role === "agent" ? "assistant" : "user",
+    text: m.content.join("\n\n"),
+  }));
+}
 
 export default function ChatPage() {
   const [messages, setMessages] = useState(initialMessages);
   const [input, setInput] = useState("");
-  const [isTyping, setIsTyping] = useState(true);
+  const [isStreaming, setIsStreaming] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop =
-        chatContainerRef.current.scrollHeight;
-    }
-    const timer = setTimeout(() => setIsTyping(false), 3000);
-    return () => clearTimeout(timer);
-  }, []);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (chatContainerRef.current) {
@@ -53,15 +47,75 @@ export default function ChatPage() {
         chatContainerRef.current.scrollHeight;
     }
   }, [messages]);
-  function handleSend() {
-    if (!input.trim()) return;
-    setMessages((prev) => [
-      ...prev,
-      { id: Date.now().toString(), role: "user", content: [input.trim()] },
-    ]);
+
+  // Abort any in-flight request on unmount.
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  async function handleSend() {
+    const text = input.trim();
+    if (!text || isStreaming) return;
+
+    const userMessage: Message = {
+      id: `u-${Date.now()}`,
+      role: "user",
+      content: [text],
+    };
+    const assistantId = `a-${Date.now()}`;
+
+    // Append the user message + an empty assistant placeholder we'll fill in.
+    const history = [...messages, userMessage];
+    setMessages([...history, { id: assistantId, role: "agent", content: [""] }]);
     setInput("");
     if (textareaRef.current) {
       textareaRef.current.style.height = "";
+    }
+    setIsStreaming(true);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: toWireMessages(history) }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? `请求失败 (${res.status})`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let acc = "";
+
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        acc += decoder.decode(value, { stream: true });
+        const paragraphs = toParagraphs(acc);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId ? { ...m, content: paragraphs } : m
+          )
+        );
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        // User navigated away or cancelled — leave partial content as-is.
+      } else {
+        const msg = err instanceof Error ? err.message : "连接出错，请稍后再试。";
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId ? { ...m, content: [`⚠️ ${msg}`] } : m
+          )
+        );
+      }
+    } finally {
+      setIsStreaming(false);
+      abortRef.current = null;
     }
   }
 
@@ -77,6 +131,13 @@ export default function ChatPage() {
       handleSend();
     }
   }
+
+  // While streaming, the last message is the assistant placeholder. The typing
+  // dots show until its first token arrives.
+  const lastMessage = messages[messages.length - 1];
+  const lastAssistantEmpty =
+    lastMessage?.role === "agent" &&
+    lastMessage.content.join("").trim().length === 0;
 
   return (
     <div className="min-h-screen flex flex-col relative overflow-hidden">
@@ -131,14 +192,17 @@ export default function ChatPage() {
         >
           {messages.map((msg, index) =>
             msg.role === "agent" ? (
-              <AgentBubble key={msg.id} message={msg} index={index} />
+              // Skip the empty placeholder; the typing indicator stands in for it.
+              msg.content.join("").trim().length === 0 ? null : (
+                <AgentBubble key={msg.id} message={msg} index={index} />
+              )
             ) : (
               <UserBubble key={msg.id} message={msg} index={index} />
             )
           )}
 
-          {/* Typing Indicator */}
-          {isTyping && (
+          {/* Typing Indicator — shown while waiting for the first token */}
+          {isStreaming && lastAssistantEmpty && (
             <div className="flex w-full justify-start chat-bubble-enter">
               <div className="flex gap-4 max-w-[85%] md:max-w-[70%]">
                 <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center flex-shrink-0 mt-auto border border-outline-variant/20 shadow-[0_4px_12px_rgba(45,45,45,0.02)]">
@@ -172,9 +236,12 @@ export default function ChatPage() {
             />
             <button
               onClick={handleSend}
-              className="w-12 h-12 flex-shrink-0 rounded-full flex items-center justify-center bg-secondary text-on-secondary hover:opacity-90 transition-opacity ml-2"
+              disabled={isStreaming || input.trim().length === 0}
+              className="w-12 h-12 flex-shrink-0 rounded-full flex items-center justify-center bg-secondary text-on-secondary hover:opacity-90 transition-opacity ml-2 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              <span className="material-symbols-outlined">send</span>
+              <span className="material-symbols-outlined">
+                {isStreaming ? "more_horiz" : "send"}
+              </span>
             </button>
           </div>
         </div>
