@@ -9,24 +9,19 @@ export interface SeedUserConfig {
 /**
  * Parse SEED_USERS env var.
  * Format: "username1:password1,username2:password2"
- * Falls back to individual SEED_USERNAME/SEED_PASSWORD for backward compat.
  */
 export function parseSeedUsers(): SeedUserConfig[] {
   const seedUsers = process.env.SEED_USERS;
-  if (seedUsers) {
-    return seedUsers.split(",").map((pair) => {
-      const [username, password] = pair.trim().split(":");
-      if (!username || !password) {
-        throw new Error(`Invalid SEED_USERS format. Expected "user1:pass1,user2:pass2", got: "${pair}"`);
-      }
-      return { username, password };
-    });
+  if (!seedUsers) {
+    throw new Error("SEED_USERS env var is required. Format: \"user1:pass1,user2:pass2\"");
   }
-  // Fallback to legacy single-user env vars
-  return [{
-    username: process.env.SEED_USERNAME || "elena",
-    password: process.env.SEED_PASSWORD || "123456",
-  }];
+  return seedUsers.split(",").map((pair) => {
+    const [username, password] = pair.trim().split(":");
+    if (!username || !password) {
+      throw new Error(`Invalid SEED_USERS format. Expected "user1:pass1,user2:pass2", got: "${pair}"`);
+    }
+    return { username, password };
+  });
 }
 
 export interface SeededUser {
