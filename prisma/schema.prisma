@@ -70,6 +70,43 @@ enum HealthProvider {
   oura
 }
 
+/// Source platform for imported health data.
+enum HealthDataSource {
+  appleHealth
+  huaweiHealth
+  xiaomiHealth
+  samsungHealth
+  googleFit
+  oppoHealth
+  manual
+}
+
+/// Type of health metric stored in HealthRecord.
+enum HealthMetricType {
+  steps
+  heartRate
+  restingHR
+  sleepAnalysis
+  workout
+  weight
+  bloodPressure
+  bloodOxygen
+  calories
+  distance
+  hrv
+  stress
+  mindfulSession
+  flightsClimbed
+  respiratoryRate
+}
+
+/// Status of a health data import job.
+enum ImportStatus {
+  processing
+  completed
+  failed
+}
+
 enum ConnectionStatus {
   connected
   disconnected
@@ -174,6 +211,8 @@ model User {
   likes             Like[]
   persona           UserPersona?
   creditTransactions CreditTransaction[]
+  healthImports      HealthImport[]
+  healthRecords      HealthRecord[]
 
   // Friend system
   sentFriendRequests     Friendship[] @relation("FriendshipRequester")
@@ -459,6 +498,64 @@ model HealthConnection {
 
   @@unique([userId, provider])
   @@map("health_connections")
+}
+
+// ---------------------------------------------------------------------------
+// Health data import (imported from Apple Health, Huawei, Samsung, etc.)
+// ---------------------------------------------------------------------------
+
+/// A single health data import job (one uploaded file).
+model HealthImport {
+  id          String           @id @default(cuid())
+  userId      String
+  source      HealthDataSource
+  fileName    String
+  fileSize    Int              // bytes
+  status      ImportStatus     @default(processing)
+  recordCount Int              @default(0)
+  /// Data time range
+  dataFrom    DateTime?
+  dataTo      DateTime?
+  /// Error message if failed
+  error       String?
+  /// Per-metric counts: { steps: 1200, heartRate: 5000, ... }
+  summary     Json?
+
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  records HealthRecord[]
+
+  @@index([userId, createdAt])
+  @@map("health_imports")
+}
+
+/// A single health measurement record (normalized from any source).
+model HealthRecord {
+  id         String           @id @default(cuid())
+  userId     String
+  source     HealthDataSource
+  metric     HealthMetricType
+  value      Float
+  unit       String           // count, bpm, kg, kcal, min, km, %, ms...
+  startDate  DateTime
+  endDate    DateTime
+  /// Extra data (sleep stage, workout type, systolic/diastolic, etc.)
+  metadata   Json?
+  /// Original source device/app name
+  sourceName String?
+  importId   String?
+
+  createdAt  DateTime @default(now())
+
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  import     HealthImport? @relation(fields: [importId], references: [id], onDelete: SetNull)
+
+  @@index([userId, metric, startDate])
+  @@index([userId, startDate])
+  @@index([importId])
+  @@map("health_records")
 }
 
 // ---------------------------------------------------------------------------
