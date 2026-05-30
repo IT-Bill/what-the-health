@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import type {
   ReportData,
@@ -14,11 +15,39 @@ type Tab = (typeof TABS)[number];
 
 const WEEK_DAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 
+// --- Demo types ---
+interface DemoUser {
+  id: string;
+  username: string;
+  name: string;
+  avatarUrl: string | null;
+}
+
+interface DemoEntry {
+  user: DemoUser;
+  report: {
+    id: string;
+    periodType: string;
+    periodStart: string;
+    periodEnd: string;
+    summary: string | null;
+    data: ReportData;
+  } | null;
+  insights: InsightRecord[];
+}
+
+interface DemoApiResponse {
+  demos: DemoEntry[];
+  demo: true;
+}
+
 // --- Main Component ---
 
 export default function MemoryPage() {
   const [activeTab, setActiveTab] = useState<Tab>("周报");
   const [data, setData] = useState<MemoryApiResponse | null>(null);
+  const [demoData, setDemoData] = useState<DemoApiResponse | null>(null);
+  const [isDemo, setIsDemo] = useState(false);
   const [loading, setLoading] = useState(true);
   const [currentPeriodIdx, setCurrentPeriodIdx] = useState(0);
 
@@ -31,17 +60,28 @@ export default function MemoryPage() {
         const params = new URLSearchParams({ type: periodType });
         if (periodStart) params.set("periodStart", periodStart);
         const res = await fetch(`/api/memory?${params}`);
-        const json: MemoryApiResponse = await res.json();
-        setData(json);
-        // Find index of current period in available list
-        if (json.report && json.available.length > 0) {
-          const idx = json.available.findIndex(
-            (d) => d.slice(0, 10) === json.report!.periodStart.slice(0, 10)
-          );
-          setCurrentPeriodIdx(idx >= 0 ? idx : 0);
+        const json = await res.json();
+
+        if (json.demo) {
+          // Unauthenticated — demo mode
+          setIsDemo(true);
+          setDemoData(json as DemoApiResponse);
+          setData(null);
+        } else {
+          // Authenticated — user's own data
+          setIsDemo(false);
+          setDemoData(null);
+          setData(json as MemoryApiResponse);
+          if (json.report && json.available?.length > 0) {
+            const idx = json.available.findIndex(
+              (d: string) => d.slice(0, 10) === json.report!.periodStart.slice(0, 10)
+            );
+            setCurrentPeriodIdx(idx >= 0 ? idx : 0);
+          }
         }
       } catch {
         setData(null);
+        setDemoData(null);
       } finally {
         setLoading(false);
       }
@@ -89,8 +129,8 @@ export default function MemoryPage() {
           ))}
         </div>
 
-        {/* Period Navigator (for 周报/月报) */}
-        {activeTab !== "洞察" && data?.report && (
+        {/* Period Navigator (for 周报/月报, authenticated only) */}
+        {!isDemo && activeTab !== "洞察" && data?.report && (
           <PeriodNav
             report={data.report}
             periodType={periodType}
@@ -104,6 +144,8 @@ export default function MemoryPage() {
         {/* Content */}
         {loading ? (
           <LoadingSkeleton />
+        ) : isDemo ? (
+          <DemoView demos={demoData?.demos ?? []} periodType={periodType} />
         ) : !data?.report && activeTab !== "洞察" ? (
           <EmptyState />
         ) : activeTab === "洞察" ? (
@@ -545,6 +587,124 @@ function ShareableCard({ report }: { report: ReportWithInsights }) {
 
         <p className="text-xs text-outline mt-4">─── 由 Mindful 生成 ───</p>
       </div>
+    </section>
+  );
+}
+
+// --- Demo View (unauthenticated visitors) ---
+function DemoView({ demos, periodType }: { demos: DemoEntry[]; periodType: string }) {
+  if (demos.length === 0) {
+    return (
+      <div className="text-center py-16 text-on-surface-variant">
+        <span className="material-symbols-outlined text-5xl mb-4 block">auto_stories</span>
+        <p>暂无示例数据</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-6 animate-[fadeIn_0.4s_ease]">
+      {/* CTA Banner */}
+      <section className="bg-gradient-to-br from-secondary-container/50 to-tertiary-container/30 rounded-2xl p-6 text-center border border-outline-variant/20">
+        <span className="material-symbols-outlined text-3xl text-secondary mb-2">auto_awesome</span>
+        <p className="text-base font-medium text-on-surface mb-1">解锁你的专属健康记忆</p>
+        <p className="text-sm text-on-surface-variant mb-4">登录后，AI 会为你生成个性化的周报、月报和洞察</p>
+        <Link
+          href="/login"
+          className="inline-flex items-center gap-1.5 px-6 py-2.5 rounded-full bg-inverse-surface text-inverse-on-surface text-sm font-medium hover:opacity-90 transition-opacity"
+        >
+          登录 / 注册
+          <span className="material-symbols-outlined text-base">arrow_forward</span>
+        </Link>
+      </section>
+
+      {/* Demo user cards */}
+      <p className="text-xs text-on-surface-variant uppercase tracking-widest text-center">
+        以下是资深用户的健康报告示例
+      </p>
+
+      {demos.map((entry) => (
+        <DemoUserCard key={entry.user.id} entry={entry} periodType={periodType} />
+      ))}
+    </div>
+  );
+}
+
+function DemoUserCard({ entry, periodType }: { entry: DemoEntry; periodType: string }) {
+  const { user, report, insights } = entry;
+  const data = report?.data;
+
+  return (
+    <section className="bg-primary-container rounded-2xl p-6 ambient-shadow flex flex-col gap-4">
+      {/* User header */}
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-full bg-surface-container-high overflow-hidden flex items-center justify-center">
+          {user.avatarUrl ? (
+            <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
+          ) : (
+            <span className="material-symbols-outlined text-on-surface-variant">person</span>
+          )}
+        </div>
+        <div>
+          <p className="text-sm font-medium text-on-surface">{user.name}</p>
+          <p className="text-xs text-on-surface-variant">
+            {periodType === "monthly" ? "月报" : "周报"}示例
+          </p>
+        </div>
+        {data?.overallScore && (
+          <div className="ml-auto text-right">
+            <p className="text-2xl font-semibold text-on-surface">{data.overallScore}</p>
+            <p className="text-[10px] text-on-surface-variant">综合评分</p>
+          </div>
+        )}
+      </div>
+
+      {/* Mood row */}
+      {data?.moodEmojis && (
+        <div className="flex gap-1 flex-wrap">
+          {data.moodEmojis.slice(0, periodType === "monthly" ? 14 : 7).map((emoji, i) => (
+            <span key={i} className="text-base">{emoji}</span>
+          ))}
+          {periodType === "monthly" && data.moodEmojis.length > 14 && (
+            <span className="text-xs text-on-surface-variant self-center ml-1">+{data.moodEmojis.length - 14}</span>
+          )}
+        </div>
+      )}
+
+      {/* Stats preview */}
+      {data?.stats && data.stats.length > 0 && (
+        <div className="grid grid-cols-2 gap-2">
+          {data.stats.slice(0, 4).map((stat) => (
+            <div key={stat.label} className="flex items-center gap-2 py-1">
+              <span className="material-symbols-outlined text-sm text-on-surface-variant">{stat.icon}</span>
+              <span className="text-xs text-on-surface-variant">{stat.label}</span>
+              <span className="text-xs font-medium text-on-surface ml-auto">{stat.value}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Summary */}
+      {report?.summary && (
+        <p className="text-sm text-on-surface-variant italic border-l-2 border-outline-variant/30 pl-3">
+          {report.summary}
+        </p>
+      )}
+
+      {/* Insights preview */}
+      {insights.length > 0 && (
+        <div className="flex flex-col gap-2 pt-2 border-t border-outline-variant/10">
+          <p className="text-xs text-on-surface-variant uppercase tracking-widest">AI 洞察</p>
+          {insights.slice(0, 2).map((insight) => (
+            <div key={insight.id} className="flex items-start gap-2">
+              <span className="text-sm">
+                {insight.type === "pattern" ? "🆕" : insight.type === "prediction" ? "⚠️" : "💡"}
+              </span>
+              <p className="text-xs text-on-surface-variant line-clamp-1">{insight.content}</p>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
