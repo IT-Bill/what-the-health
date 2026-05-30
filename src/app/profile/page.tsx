@@ -99,13 +99,23 @@ export default function ProfilePage() {
                 alt="Profile Avatar"
                 className="w-16 h-16 rounded-full glass-panel ambient-shadow bg-primary-container object-cover shrink-0"
               />
-              <div className="flex flex-col">
-                <h2 className="font-[var(--font-display)] text-xl font-medium text-on-surface">
+              <div className="flex flex-col gap-1">
+                <h2 className="[font-family:var(--font-display)] text-xl font-medium text-on-surface">
                   {user.name || "未设置昵称"}
                 </h2>
                 <p className="text-sm text-on-surface-variant">
-                  {user.username}
+                  @{user.username}
                 </p>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(user.username);
+                    alert("已复制用户名");
+                  }}
+                  className="flex items-center gap-1 text-xs text-outline hover:text-secondary transition-colors mt-0.5 self-start"
+                >
+                  <span className="material-symbols-outlined text-sm">content_copy</span>
+                  <span>ID: {user.id.slice(0, 8)}...</span>
+                </button>
               </div>
             </div>
           )}
