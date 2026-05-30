@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import type {
   ReportData,
@@ -14,11 +15,39 @@ type Tab = (typeof TABS)[number];
 
 const WEEK_DAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 
+// --- Demo types ---
+interface DemoUser {
+  id: string;
+  username: string;
+  name: string;
+  avatarUrl: string | null;
+}
+
+interface DemoEntry {
+  user: DemoUser;
+  report: {
+    id: string;
+    periodType: string;
+    periodStart: string;
+    periodEnd: string;
+    summary: string | null;
+    data: ReportData;
+  } | null;
+  insights: InsightRecord[];
+}
+
+interface DemoApiResponse {
+  demos: DemoEntry[];
+  demo: true;
+}
+
 // --- Main Component ---
 
 export default function MemoryPage() {
   const [activeTab, setActiveTab] = useState<Tab>("周报");
   const [data, setData] = useState<MemoryApiResponse | null>(null);
+  const [demoData, setDemoData] = useState<DemoApiResponse | null>(null);
+  const [isDemo, setIsDemo] = useState(false);
   const [loading, setLoading] = useState(true);
   const [currentPeriodIdx, setCurrentPeriodIdx] = useState(0);
 
@@ -31,17 +60,28 @@ export default function MemoryPage() {
         const params = new URLSearchParams({ type: periodType });
         if (periodStart) params.set("periodStart", periodStart);
         const res = await fetch(`/api/memory?${params}`);
-        const json: MemoryApiResponse = await res.json();
-        setData(json);
-        // Find index of current period in available list
-        if (json.report && json.available.length > 0) {
-          const idx = json.available.findIndex(
-            (d) => d.slice(0, 10) === json.report!.periodStart.slice(0, 10)
-          );
-          setCurrentPeriodIdx(idx >= 0 ? idx : 0);
+        const json = await res.json();
+
+        if (json.demo) {
+          // Unauthenticated — demo mode
+          setIsDemo(true);
+          setDemoData(json as DemoApiResponse);
+          setData(null);
+        } else {
+          // Authenticated — user's own data
+          setIsDemo(false);
+          setDemoData(null);
+          setData(json as MemoryApiResponse);
+          if (json.report && json.available?.length > 0) {
+            const idx = json.available.findIndex(
+              (d: string) => d.slice(0, 10) === json.report!.periodStart.slice(0, 10)
+            );
+            setCurrentPeriodIdx(idx >= 0 ? idx : 0);
+          }
         }
       } catch {
         setData(null);
+        setDemoData(null);
       } finally {
         setLoading(false);
       }
@@ -72,19 +112,6 @@ export default function MemoryPage() {
   return (
     <AppShell>
       <div className="flex flex-col gap-8 max-w-3xl mx-auto w-full">
-        {/* Header */}
-        <div className="flex items-center gap-3">
-          <span
-            className="material-symbols-outlined text-primary text-3xl"
-            style={{ fontVariationSettings: "'FILL' 1" }}
-          >
-            psychology
-          </span>
-          <h1 className="font-[var(--font-display)] text-3xl font-medium text-on-surface">
-            Memory
-          </h1>
-        </div>
-
         {/* Tab Navigation */}
         <div className="flex gap-2 overflow-x-auto no-scrollbar">
           {TABS.map((tab) => (
@@ -102,8 +129,8 @@ export default function MemoryPage() {
           ))}
         </div>
 
-        {/* Period Navigator (for 周报/月报) */}
-        {activeTab !== "洞察" && data?.report && (
+        {/* Period Navigator (for 周报/月报, authenticated only) */}
+        {!isDemo && activeTab !== "洞察" && data?.report && (
           <PeriodNav
             report={data.report}
             periodType={periodType}
@@ -117,6 +144,8 @@ export default function MemoryPage() {
         {/* Content */}
         {loading ? (
           <LoadingSkeleton />
+        ) : isDemo ? (
+          <DemoView demos={demoData?.demos ?? []} periodType={periodType} activeTab={activeTab} />
         ) : !data?.report && activeTab !== "洞察" ? (
           <EmptyState />
         ) : activeTab === "洞察" ? (
@@ -318,10 +347,10 @@ function ReportView({
                 {d.sleepData.map((hours, i) => {
                   const height = ((hours - 4) / 4) * 100;
                   return (
-                    <div key={i} className="flex-1 flex flex-col items-center gap-2">
-                      <span className="text-xs text-on-surface-variant">{hours}h</span>
+                    <div key={i} className="flex-1 flex flex-col items-center h-full justify-end">
+                      <span className="text-xs text-on-surface-variant mb-1">{hours}h</span>
                       <div
-                        className="w-full max-w-[32px] bg-secondary/60 rounded-t-lg mx-auto"
+                        className="w-full max-w-[32px] bg-secondary/60 rounded-t-lg"
                         style={{ height: `${Math.max(height, 10)}%` }}
                       />
                     </div>
@@ -559,6 +588,159 @@ function ShareableCard({ report }: { report: ReportWithInsights }) {
         <p className="text-xs text-outline mt-4">─── 由 Mindful 生成 ───</p>
       </div>
     </section>
+  );
+}
+
+// --- Demo View (unauthenticated visitors) ---
+function DemoView({ demos, periodType, activeTab }: { demos: DemoEntry[]; periodType: string; activeTab: Tab }) {
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+  const [paused, setPaused] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+
+  if (demos.length === 0) {
+    return (
+      <div className="text-center py-16 text-on-surface-variant">
+        <span className="material-symbols-outlined text-5xl mb-4 block">auto_stories</span>
+        <p>暂无示例数据</p>
+      </div>
+    );
+  }
+
+  const selected = selectedIdx !== null ? demos[selectedIdx] : null;
+
+  function handleCardClick(idx: number, cardEl: HTMLButtonElement) {
+    if (selectedIdx === idx) {
+      // Deselect
+      setSelectedIdx(null);
+      setPaused(false);
+      setShowReport(false);
+      return;
+    }
+
+    // Pause and select
+    setPaused(true);
+    setSelectedIdx(idx);
+    setShowReport(false);
+
+    // Scroll to center the clicked card
+    const container = containerRef.current;
+    if (container) {
+      const containerRect = container.getBoundingClientRect();
+      const cardRect = cardEl.getBoundingClientRect();
+      const scrollLeft = container.scrollLeft + (cardRect.left - containerRect.left) - (containerRect.width / 2) + (cardRect.width / 2);
+      container.scrollTo({ left: scrollLeft, behavior: "smooth" });
+    }
+
+    // Show report after centering animation
+    setTimeout(() => setShowReport(true), 400);
+  }
+
+  return (
+    <div className="flex flex-col gap-6 animate-[fadeIn_0.4s_ease]">
+      {/* CTA Banner */}
+      <section className="bg-gradient-to-br from-secondary-container/50 to-tertiary-container/30 rounded-2xl p-6 text-center border border-outline-variant/20">
+        <span className="material-symbols-outlined text-3xl text-secondary mb-2">auto_awesome</span>
+        <p className="text-base font-medium text-on-surface mb-1">解锁你的专属健康记忆</p>
+        <p className="text-sm text-on-surface-variant mb-4">登录后，AI 会为你生成个性化的周报、月报和洞察</p>
+        <Link
+          href="/login"
+          className="inline-flex items-center gap-1.5 px-6 py-2.5 rounded-full bg-inverse-surface text-inverse-on-surface text-sm font-medium hover:opacity-90 transition-opacity"
+        >
+          登录 / 注册
+          <span className="material-symbols-outlined text-base">arrow_forward</span>
+        </Link>
+      </section>
+
+      {/* Scrolling user cards carousel */}
+      <div
+        ref={containerRef}
+        className="overflow-x-auto no-scrollbar scroll-smooth"
+      >
+        <div
+          ref={trackRef}
+          className={`flex gap-4 px-4 ${paused ? "" : "animate-[scrollCards_12s_linear_infinite]"}`}
+          style={{ width: "max-content" }}
+        >
+          {/* Duplicate cards for seamless loop */}
+          {[...demos, ...demos].map((entry, idx) => {
+            const realIdx = idx % demos.length;
+            const isSelected = selectedIdx === realIdx;
+            const data = entry.report?.data;
+            return (
+              <button
+                key={`${entry.user.id}-${idx}`}
+                onClick={(e) => handleCardClick(realIdx, e.currentTarget)}
+                className={`flex-shrink-0 w-64 bg-primary-container rounded-2xl p-4 ambient-shadow flex flex-col gap-2 text-left transition-all duration-500 ${
+                  isSelected
+                    ? "ring-2 ring-secondary scale-[1.02] shadow-[0_20px_40px_rgba(45,45,45,0.08)]"
+                    : "hover:-translate-y-0.5 hover:shadow-[0_16px_32px_rgba(45,45,45,0.06)]"
+                }`}
+              >
+                {/* User row */}
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-full bg-surface-container-high overflow-hidden flex items-center justify-center flex-shrink-0">
+                    {entry.user.avatarUrl ? (
+                      <img src={entry.user.avatarUrl} alt={entry.user.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="material-symbols-outlined text-sm text-on-surface-variant">person</span>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-on-surface truncate">{entry.user.name}</p>
+                    <p className="text-[10px] text-on-surface-variant">
+                      {activeTab === "洞察" ? "洞察" : periodType === "monthly" ? "月报" : "周报"}示例
+                    </p>
+                  </div>
+                  {data?.overallScore && (
+                    <span className="text-lg font-semibold text-secondary">{data.overallScore}</span>
+                  )}
+                </div>
+                {/* Mood preview */}
+                {data?.moodEmojis && (
+                  <div className="flex gap-0.5">
+                    {data.moodEmojis.slice(0, 7).map((emoji, i) => (
+                      <span key={i} className="text-sm">{emoji}</span>
+                    ))}
+                  </div>
+                )}
+                {/* One-line summary */}
+                {entry.report?.summary && (
+                  <p className="text-[11px] text-on-surface-variant line-clamp-1">{entry.report.summary}</p>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Expanded report below */}
+      {selected && showReport ? (
+        <div className="animate-[fadeIn_0.4s_ease]">
+          {activeTab === "洞察" ? (
+            <InsightsView
+              reportInsights={selected.insights}
+              globalInsights={[]}
+            />
+          ) : selected.report ? (
+            <ReportView
+              report={{
+                ...selected.report,
+                insights: selected.insights,
+              } as ReportWithInsights}
+              periodType={periodType}
+            />
+          ) : (
+            <EmptyState />
+          )}
+        </div>
+      ) : !selected ? (
+        <p className="text-xs text-on-surface-variant text-center">
+          点击卡片查看完整报告
+        </p>
+      ) : null}
+    </div>
   );
 }
 

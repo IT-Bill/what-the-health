@@ -32,11 +32,13 @@ export interface SeededUser {
 export async function seedUsers(prisma: PrismaClient, configs: SeedUserConfig[]): Promise<SeededUser[]> {
   const users: SeededUser[] = [];
 
-  for (const config of configs) {
+  for (let i = 0; i < configs.length; i++) {
+    const config = configs[i];
     const passwordHash = await bcrypt.hash(config.password, 10);
+    // All seeded users are marked as showcase (demo for unauthenticated visitors)
     const user = await prisma.user.upsert({
       where: { username: config.username },
-      update: { passwordHash },
+      update: { passwordHash, isShowcase: true },
       create: {
         username: config.username,
         passwordHash,
@@ -44,6 +46,7 @@ export async function seedUsers(prisma: PrismaClient, configs: SeedUserConfig[])
         memberSince: new Date("2021-01-01"),
         credits: 2450,
         primaryGoal: "healthyHabits",
+        isShowcase: true,
       },
     });
     users.push({ id: user.id, username: user.username });

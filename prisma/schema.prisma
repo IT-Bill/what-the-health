@@ -154,6 +154,8 @@ model User {
   credits              Int     @default(0)
 
   primaryGoal GoalType?
+  /// Showcase users have their Memory data publicly visible as demos.
+  isShowcase  Boolean  @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
