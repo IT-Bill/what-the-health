@@ -593,6 +593,8 @@ function ShareableCard({ report }: { report: ReportWithInsights }) {
 
 // --- Demo View (unauthenticated visitors) ---
 function DemoView({ demos, periodType }: { demos: DemoEntry[]; periodType: string }) {
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+
   if (demos.length === 0) {
     return (
       <div className="text-center py-16 text-on-surface-variant">
@@ -601,6 +603,8 @@ function DemoView({ demos, periodType }: { demos: DemoEntry[]; periodType: strin
       </div>
     );
   }
+
+  const selected = selectedIdx !== null ? demos[selectedIdx] : null;
 
   return (
     <div className="flex flex-col gap-6 animate-[fadeIn_0.4s_ease]">
@@ -618,144 +622,49 @@ function DemoView({ demos, periodType }: { demos: DemoEntry[]; periodType: strin
         </Link>
       </section>
 
-      {/* Demo user cards */}
-      <p className="text-xs text-on-surface-variant uppercase tracking-widest text-center">
-        以下是资深用户的健康报告示例
-      </p>
-
-      {demos.map((entry) => (
-        <DemoUserCard key={entry.user.id} entry={entry} periodType={periodType} />
-      ))}
-    </div>
-  );
-}
-
-function DemoUserCard({ entry, periodType }: { entry: DemoEntry; periodType: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const { user, report, insights } = entry;
-  const data = report?.data;
-
-  return (
-    <section
-      className="bg-primary-container rounded-2xl p-6 ambient-shadow flex flex-col gap-4 cursor-pointer transition-all duration-500 hover:-translate-y-0.5 hover:shadow-[0_24px_48px_rgba(45,45,45,0.06)]"
-      onClick={() => setExpanded(!expanded)}
-    >
-      {/* User header */}
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-surface-container-high overflow-hidden flex items-center justify-center">
-          {user.avatarUrl ? (
-            <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
-          ) : (
-            <span className="material-symbols-outlined text-on-surface-variant">person</span>
-          )}
-        </div>
-        <div>
-          <p className="text-sm font-medium text-on-surface">{user.name}</p>
-          <p className="text-xs text-on-surface-variant">
-            {periodType === "monthly" ? "月报" : "周报"}示例
-          </p>
-        </div>
-        {data?.overallScore && (
-          <div className="ml-auto text-right">
-            <p className="text-2xl font-semibold text-on-surface">{data.overallScore}</p>
-            <p className="text-[10px] text-on-surface-variant">综合评分</p>
-          </div>
-        )}
-        <span className={`material-symbols-outlined text-on-surface-variant text-lg transition-transform duration-300 ${expanded ? "rotate-180" : ""}`}>
-          expand_more
-        </span>
-      </div>
-
-      {/* Mood row (always visible) */}
-      {data?.moodEmojis && (
-        <div className="flex gap-1 flex-wrap">
-          {data.moodEmojis.slice(0, periodType === "monthly" ? 14 : 7).map((emoji, i) => (
-            <span key={i} className="text-base">{emoji}</span>
-          ))}
-          {periodType === "monthly" && data.moodEmojis.length > 14 && (
-            <span className="text-xs text-on-surface-variant self-center ml-1">+{data.moodEmojis.length - 14}</span>
-          )}
-        </div>
-      )}
-
-      {/* Expanded content */}
-      <div className={`flex flex-col gap-4 overflow-hidden transition-all duration-500 ${expanded ? "max-h-[800px] opacity-100" : "max-h-0 opacity-0"}`}>
-        {/* Stats */}
-        {data?.stats && data.stats.length > 0 && (
-          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-outline-variant/10">
-            {data.stats.map((stat) => (
-              <div key={stat.label} className="flex items-center gap-2 py-1.5">
-                <span className="material-symbols-outlined text-sm text-on-surface-variant">{stat.icon}</span>
-                <span className="text-xs text-on-surface-variant">{stat.label}</span>
-                <span className="text-xs font-medium text-on-surface ml-auto">{stat.value}</span>
-                {stat.change && (
-                  <span className={`text-[10px] ${stat.positive ? "text-secondary" : "text-error"}`}>
-                    {stat.change}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Sleep chart */}
-        {data?.sleepData && data.sleepData.length > 0 && (
-          <div className="pt-2">
-            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-2">睡眠趋势</p>
-            <div className="flex items-end gap-px h-16">
-              {data.sleepData.map((hours, i) => {
-                const height = ((hours - 5) / 3) * 100;
-                return (
-                  <div
-                    key={i}
-                    className="flex-1 bg-secondary/50 rounded-t-sm"
-                    style={{ height: `${Math.max(height, 5)}%` }}
-                  />
-                );
-              })}
+      {/* User selector chips */}
+      <div className="flex gap-3 justify-center">
+        {demos.map((entry, idx) => (
+          <button
+            key={entry.user.id}
+            onClick={() => setSelectedIdx(selectedIdx === idx ? null : idx)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-300 ${
+              selectedIdx === idx
+                ? "bg-secondary-container text-on-secondary-container"
+                : "border border-outline-variant/30 text-on-surface-variant hover:bg-surface-variant/20"
+            }`}
+          >
+            <div className="w-6 h-6 rounded-full bg-surface-container-high overflow-hidden flex items-center justify-center">
+              {entry.user.avatarUrl ? (
+                <img src={entry.user.avatarUrl} alt={entry.user.name} className="w-full h-full object-cover" />
+              ) : (
+                <span className="material-symbols-outlined text-xs text-on-surface-variant">person</span>
+              )}
             </div>
-          </div>
-        )}
-
-        {/* Summary */}
-        {report?.summary && (
-          <p className="text-sm text-on-surface-variant italic border-l-2 border-outline-variant/30 pl-3">
-            {report.summary}
-          </p>
-        )}
-
-        {/* Achievements */}
-        {data?.achievements && data.achievements.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {data.achievements.map((a) => (
-              <span key={a.title} className="text-xs bg-secondary-container/50 text-on-secondary-container px-2.5 py-1 rounded-lg flex items-center gap-1">
-                <span>{a.icon}</span> {a.title}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Insights */}
-        {insights.length > 0 && (
-          <div className="flex flex-col gap-2 pt-2 border-t border-outline-variant/10">
-            <p className="text-xs text-on-surface-variant uppercase tracking-widest">AI 洞察</p>
-            {insights.map((insight) => (
-              <div key={insight.id} className="flex items-start gap-2">
-                <span className="text-sm">
-                  {insight.type === "pattern" ? "🆕" : insight.type === "prediction" ? "⚠️" : "💡"}
-                </span>
-                <p className="text-xs text-on-surface-variant">{insight.content}</p>
-              </div>
-            ))}
-          </div>
-        )}
+            <span className="text-sm font-medium">{entry.user.name}</span>
+          </button>
+        ))}
       </div>
 
-      {/* Collapsed hint */}
-      {!expanded && (
-        <p className="text-[10px] text-outline text-center">点击展开完整报告</p>
+      {/* Render selected user's report using the same components as logged-in view */}
+      {selected ? (
+        selected.report ? (
+          <ReportView
+            report={{
+              ...selected.report,
+              insights: selected.insights,
+            } as ReportWithInsights}
+            periodType={periodType}
+          />
+        ) : (
+          <EmptyState />
+        )
+      ) : (
+        <p className="text-sm text-on-surface-variant text-center py-8">
+          选择一位用户查看他们的{periodType === "monthly" ? "月报" : "周报"}示例
+        </p>
       )}
-    </section>
+    </div>
   );
 }
 
