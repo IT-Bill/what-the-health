@@ -8,9 +8,6 @@ interface HealthDevice {
   icon: string;
   name: string;
   description: string;
-  connected: boolean;
-  type: "toggle" | "button";
-  importable: boolean;
 }
 
 interface ImportRecord {
@@ -27,56 +24,40 @@ interface ImportRecord {
   createdAt: string;
 }
 
-const initialDevices: HealthDevice[] = [
+const devices: HealthDevice[] = [
   {
     id: "apple",
     icon: "favorite",
     name: "Apple Health",
     description: "同步步数、心率、睡眠数据",
-    connected: true,
-    type: "toggle",
-    importable: true,
   },
   {
     id: "huawei",
     icon: "watch",
     name: "华为运动健康",
     description: "同步运动、睡眠、心率数据",
-    connected: false,
-    type: "button",
-    importable: true,
   },
   {
     id: "samsung",
     icon: "phone_android",
     name: "Samsung Health",
     description: "同步步数、心率、睡眠数据",
-    connected: false,
-    type: "button",
-    importable: true,
   },
   {
     id: "xiaomi",
     icon: "fitness_center",
     name: "小米健康 / Zepp Life",
     description: "同步运动、睡眠数据",
-    connected: false,
-    type: "button",
-    importable: true,
   },
   {
     id: "google",
     icon: "cloud",
     name: "Google Fit",
     description: "同步活动、心率数据",
-    connected: false,
-    type: "button",
-    importable: true,
   },
 ];
 
 export default function HealthConnectionsPage() {
-  const [devices, setDevices] = useState(initialDevices);
   const [showUpload, setShowUpload] = useState(false);
   const [imports, setImports] = useState<ImportRecord[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -89,12 +70,6 @@ export default function HealthConnectionsPage() {
       .then((data) => setImports(Array.isArray(data) ? data : []))
       .catch(() => {});
   }, []);
-
-  function toggleDevice(id: string) {
-    setDevices((prev) =>
-      prev.map((d) => (d.id === id ? { ...d, connected: !d.connected } : d))
-    );
-  }
 
   async function handleUpload(file: File) {
     setUploading(true);
@@ -155,43 +130,22 @@ export default function HealthConnectionsPage() {
                 index < devices.length - 1 ? "border-b border-on-surface-variant/10" : ""
               }`}
             >
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface">
+              <div className="flex items-center gap-4 flex-1 min-w-0">
+                <div className="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface flex-shrink-0">
                   <span className="material-symbols-outlined">{device.icon}</span>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-base text-on-surface font-medium">{device.name}</p>
                   <p className="text-sm text-on-surface-variant">{device.description}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                {device.importable && (
-                  <button
-                    onClick={() => setShowUpload(true)}
-                    className="text-xs font-medium text-secondary border border-secondary/30 rounded-full px-3 py-1 hover:bg-secondary/5 transition-colors"
-                  >
-                    导入
-                  </button>
-                )}
-                {device.type === "toggle" ? (
-                  <button
-                    onClick={() => toggleDevice(device.id)}
-                    className={`relative w-12 h-6 rounded-full transition-colors duration-300 ${
-                      device.connected ? "bg-secondary" : "bg-surface-variant"
-                    }`}
-                    aria-label={`Toggle ${device.name}`}
-                  >
-                    <div
-                      className={`absolute top-0.5 w-5 h-5 rounded-full bg-white border-2 transition-all duration-300 ${
-                        device.connected ? "right-0.5 border-secondary" : "left-0.5 border-outline-variant"
-                      }`}
-                    />
-                  </button>
-                ) : (
-                  <button className="text-sm font-medium text-secondary border border-secondary/30 rounded-full px-4 py-1.5 hover:bg-secondary/5 transition-colors">
-                    连接
-                  </button>
-                )}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  onClick={() => setShowUpload(true)}
+                  className="text-xs font-medium text-on-surface-variant border border-outline-variant/40 rounded-full px-3 py-1.5 hover:bg-surface-variant/20 transition-colors"
+                >
+                  导入
+                </button>
               </div>
             </div>
           ))}
