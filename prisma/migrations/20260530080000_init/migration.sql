@@ -1,3 +1,6 @@
+-- CreateSchema
+CREATE SCHEMA IF NOT EXISTS "public";
+
 -- CreateEnum
 CREATE TYPE "Gender" AS ENUM ('female', 'male', 'nonBinary', 'undisclosed');
 
@@ -27,6 +30,12 @@ CREATE TYPE "ConnectionStatus" AS ENUM ('connected', 'disconnected');
 
 -- CreateEnum
 CREATE TYPE "RedemptionStatus" AS ENUM ('pending', 'fulfilled', 'cancelled');
+
+-- CreateEnum
+CREATE TYPE "PeriodType" AS ENUM ('weekly', 'monthly');
+
+-- CreateEnum
+CREATE TYPE "InsightType" AS ENUM ('pattern', 'prediction', 'correlation', 'milestone');
 
 -- CreateTable
 CREATE TABLE "users" (
@@ -114,22 +123,46 @@ CREATE TABLE "chat_messages" (
 );
 
 -- CreateTable
-CREATE TABLE "journeys" (
+CREATE TABLE "posts" (
     "id" TEXT NOT NULL,
+    "authorId" TEXT NOT NULL,
     "title" TEXT NOT NULL,
-    "quote" TEXT,
+    "excerpt" TEXT,
+    "body" TEXT NOT NULL,
     "category" "JourneyCategory" NOT NULL,
     "categoryIcon" TEXT,
-    "authorName" TEXT NOT NULL,
-    "authorAvatar" TEXT,
     "coverImage" TEXT,
     "readMinutes" INTEGER NOT NULL DEFAULT 5,
     "published" BOOLEAN NOT NULL DEFAULT true,
     "publishedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "viewCount" INTEGER NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "journeys_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "posts_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "comments" (
+    "id" TEXT NOT NULL,
+    "postId" TEXT NOT NULL,
+    "authorId" TEXT NOT NULL,
+    "parentId" TEXT,
+    "body" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "comments_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "likes" (
+    "id" TEXT NOT NULL,
+    "postId" TEXT NOT NULL,
+    "authorId" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "likes_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -192,6 +225,36 @@ CREATE TABLE "redemptions" (
     CONSTRAINT "redemptions_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "reports" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "periodType" "PeriodType" NOT NULL,
+    "periodStart" DATE NOT NULL,
+    "periodEnd" DATE NOT NULL,
+    "data" JSONB NOT NULL,
+    "summary" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "reports_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "insights" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "reportId" TEXT,
+    "type" "InsightType" NOT NULL,
+    "title" TEXT NOT NULL,
+    "content" TEXT NOT NULL,
+    "metadata" JSONB,
+    "dismissed" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "insights_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
 
@@ -214,7 +277,22 @@ CREATE INDEX "chat_sessions_userId_updatedAt_idx" ON "chat_sessions"("userId", "
 CREATE INDEX "chat_messages_sessionId_createdAt_idx" ON "chat_messages"("sessionId", "createdAt");
 
 -- CreateIndex
-CREATE INDEX "journeys_category_published_idx" ON "journeys"("category", "published");
+CREATE INDEX "posts_category_published_publishedAt_idx" ON "posts"("category", "published", "publishedAt");
+
+-- CreateIndex
+CREATE INDEX "posts_authorId_idx" ON "posts"("authorId");
+
+-- CreateIndex
+CREATE INDEX "comments_postId_createdAt_idx" ON "comments"("postId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "comments_parentId_idx" ON "comments"("parentId");
+
+-- CreateIndex
+CREATE INDEX "likes_postId_idx" ON "likes"("postId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "likes_postId_authorId_key" ON "likes"("postId", "authorId");
 
 -- CreateIndex
 CREATE INDEX "memories_userId_createdAt_idx" ON "memories"("userId", "createdAt");
@@ -227,6 +305,18 @@ CREATE UNIQUE INDEX "health_connections_userId_provider_key" ON "health_connecti
 
 -- CreateIndex
 CREATE INDEX "redemptions_userId_createdAt_idx" ON "redemptions"("userId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "reports_userId_periodType_periodStart_idx" ON "reports"("userId", "periodType", "periodStart");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "reports_userId_periodType_periodStart_key" ON "reports"("userId", "periodType", "periodStart");
+
+-- CreateIndex
+CREATE INDEX "insights_userId_createdAt_idx" ON "insights"("userId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "insights_reportId_idx" ON "insights"("reportId");
 
 -- AddForeignKey
 ALTER TABLE "mood_checkins" ADD CONSTRAINT "mood_checkins_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -247,6 +337,24 @@ ALTER TABLE "chat_sessions" ADD CONSTRAINT "chat_sessions_userId_fkey" FOREIGN K
 ALTER TABLE "chat_messages" ADD CONSTRAINT "chat_messages_sessionId_fkey" FOREIGN KEY ("sessionId") REFERENCES "chat_sessions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "posts" ADD CONSTRAINT "posts_authorId_fkey" FOREIGN KEY ("authorId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "comments" ADD CONSTRAINT "comments_postId_fkey" FOREIGN KEY ("postId") REFERENCES "posts"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "comments" ADD CONSTRAINT "comments_authorId_fkey" FOREIGN KEY ("authorId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "comments" ADD CONSTRAINT "comments_parentId_fkey" FOREIGN KEY ("parentId") REFERENCES "comments"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "likes" ADD CONSTRAINT "likes_postId_fkey" FOREIGN KEY ("postId") REFERENCES "posts"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "likes" ADD CONSTRAINT "likes_authorId_fkey" FOREIGN KEY ("authorId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "memories" ADD CONSTRAINT "memories_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -260,3 +368,13 @@ ALTER TABLE "redemptions" ADD CONSTRAINT "redemptions_userId_fkey" FOREIGN KEY (
 
 -- AddForeignKey
 ALTER TABLE "redemptions" ADD CONSTRAINT "redemptions_productId_fkey" FOREIGN KEY ("productId") REFERENCES "products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "reports" ADD CONSTRAINT "reports_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "insights" ADD CONSTRAINT "insights_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "insights" ADD CONSTRAINT "insights_reportId_fkey" FOREIGN KEY ("reportId") REFERENCES "reports"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+

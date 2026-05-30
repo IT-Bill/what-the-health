@@ -130,6 +130,9 @@ model User {
   redemptions       Redemption[]
   reports           Report[]
   insights          Insight[]
+  posts             Post[]
+  comments          Comment[]
+  likes             Like[]
 
   @@map("users")
 }
@@ -228,27 +231,72 @@ model ChatMessage {
 }
 
 // ---------------------------------------------------------------------------
-// Discover journeys (design _8)
+// Discover posts (blog/community — evolved from Journey)
 // ---------------------------------------------------------------------------
 
-model Journey {
+model Post {
   id           String          @id @default(cuid())
+  authorId     String
   title        String
-  quote        String?
+  /// Short excerpt or pull-quote displayed on cards.
+  excerpt      String?
+  /// Full markdown/rich-text body.
+  body         String
   category     JourneyCategory
   categoryIcon String?
-  authorName   String
-  authorAvatar String?
   coverImage   String?
   readMinutes  Int             @default(5)
   published    Boolean         @default(true)
   publishedAt  DateTime        @default(now())
+  /// View count for popularity sorting.
+  viewCount    Int             @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([category, published])
-  @@map("journeys")
+  author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comments Comment[]
+  likes    Like[]
+
+  @@index([category, published, publishedAt])
+  @@index([authorId])
+  @@map("posts")
+}
+
+model Comment {
+  id       String  @id @default(cuid())
+  postId   String
+  authorId String
+  /// Optional parent comment for threaded replies.
+  parentId String?
+  body     String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  post     Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies  Comment[] @relation("CommentReplies")
+
+  @@index([postId, createdAt])
+  @@index([parentId])
+  @@map("comments")
+}
+
+model Like {
+  id       String @id @default(cuid())
+  postId   String
+  authorId String
+
+  createdAt DateTime @default(now())
+
+  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, authorId])
+  @@index([postId])
+  @@map("likes")
 }
 
 // ---------------------------------------------------------------------------
