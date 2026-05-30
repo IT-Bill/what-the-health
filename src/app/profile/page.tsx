@@ -27,6 +27,7 @@ const menuItems: MenuItem[] = [
   { id: "personal", icon: "person", label: "个人信息", href: "/profile/personal-info" },
   { id: "friends", icon: "group", label: "好友", href: "/profile/friends" },
   { id: "health", icon: "watch", label: "健康连接", href: "/profile/health-connections" },
+  { id: "health-data", icon: "health_metrics", label: "健康数据", href: "/profile/health-data" },
   { id: "prefs", icon: "settings", label: "偏好设置", href: "/profile/preferences" },
 ];
 
