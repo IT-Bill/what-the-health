@@ -631,11 +631,15 @@ function DemoView({ demos, periodType }: { demos: DemoEntry[]; periodType: strin
 }
 
 function DemoUserCard({ entry, periodType }: { entry: DemoEntry; periodType: string }) {
+  const [expanded, setExpanded] = useState(false);
   const { user, report, insights } = entry;
   const data = report?.data;
 
   return (
-    <section className="bg-primary-container rounded-2xl p-6 ambient-shadow flex flex-col gap-4">
+    <section
+      className="bg-primary-container rounded-2xl p-6 ambient-shadow flex flex-col gap-4 cursor-pointer transition-all duration-500 hover:-translate-y-0.5 hover:shadow-[0_24px_48px_rgba(45,45,45,0.06)]"
+      onClick={() => setExpanded(!expanded)}
+    >
       {/* User header */}
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-full bg-surface-container-high overflow-hidden flex items-center justify-center">
@@ -657,9 +661,12 @@ function DemoUserCard({ entry, periodType }: { entry: DemoEntry; periodType: str
             <p className="text-[10px] text-on-surface-variant">综合评分</p>
           </div>
         )}
+        <span className={`material-symbols-outlined text-on-surface-variant text-lg transition-transform duration-300 ${expanded ? "rotate-180" : ""}`}>
+          expand_more
+        </span>
       </div>
 
-      {/* Mood row */}
+      {/* Mood row (always visible) */}
       {data?.moodEmojis && (
         <div className="flex gap-1 flex-wrap">
           {data.moodEmojis.slice(0, periodType === "monthly" ? 14 : 7).map((emoji, i) => (
@@ -671,39 +678,82 @@ function DemoUserCard({ entry, periodType }: { entry: DemoEntry; periodType: str
         </div>
       )}
 
-      {/* Stats preview */}
-      {data?.stats && data.stats.length > 0 && (
-        <div className="grid grid-cols-2 gap-2">
-          {data.stats.slice(0, 4).map((stat) => (
-            <div key={stat.label} className="flex items-center gap-2 py-1">
-              <span className="material-symbols-outlined text-sm text-on-surface-variant">{stat.icon}</span>
-              <span className="text-xs text-on-surface-variant">{stat.label}</span>
-              <span className="text-xs font-medium text-on-surface ml-auto">{stat.value}</span>
+      {/* Expanded content */}
+      <div className={`flex flex-col gap-4 overflow-hidden transition-all duration-500 ${expanded ? "max-h-[800px] opacity-100" : "max-h-0 opacity-0"}`}>
+        {/* Stats */}
+        {data?.stats && data.stats.length > 0 && (
+          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-outline-variant/10">
+            {data.stats.map((stat) => (
+              <div key={stat.label} className="flex items-center gap-2 py-1.5">
+                <span className="material-symbols-outlined text-sm text-on-surface-variant">{stat.icon}</span>
+                <span className="text-xs text-on-surface-variant">{stat.label}</span>
+                <span className="text-xs font-medium text-on-surface ml-auto">{stat.value}</span>
+                {stat.change && (
+                  <span className={`text-[10px] ${stat.positive ? "text-secondary" : "text-error"}`}>
+                    {stat.change}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Sleep chart */}
+        {data?.sleepData && data.sleepData.length > 0 && (
+          <div className="pt-2">
+            <p className="text-xs text-on-surface-variant uppercase tracking-widest mb-2">睡眠趋势</p>
+            <div className="flex items-end gap-px h-16">
+              {data.sleepData.map((hours, i) => {
+                const height = ((hours - 5) / 3) * 100;
+                return (
+                  <div
+                    key={i}
+                    className="flex-1 bg-secondary/50 rounded-t-sm"
+                    style={{ height: `${Math.max(height, 5)}%` }}
+                  />
+                );
+              })}
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        )}
 
-      {/* Summary */}
-      {report?.summary && (
-        <p className="text-sm text-on-surface-variant italic border-l-2 border-outline-variant/30 pl-3">
-          {report.summary}
-        </p>
-      )}
+        {/* Summary */}
+        {report?.summary && (
+          <p className="text-sm text-on-surface-variant italic border-l-2 border-outline-variant/30 pl-3">
+            {report.summary}
+          </p>
+        )}
 
-      {/* Insights preview */}
-      {insights.length > 0 && (
-        <div className="flex flex-col gap-2 pt-2 border-t border-outline-variant/10">
-          <p className="text-xs text-on-surface-variant uppercase tracking-widest">AI 洞察</p>
-          {insights.slice(0, 2).map((insight) => (
-            <div key={insight.id} className="flex items-start gap-2">
-              <span className="text-sm">
-                {insight.type === "pattern" ? "🆕" : insight.type === "prediction" ? "⚠️" : "💡"}
+        {/* Achievements */}
+        {data?.achievements && data.achievements.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {data.achievements.map((a) => (
+              <span key={a.title} className="text-xs bg-secondary-container/50 text-on-secondary-container px-2.5 py-1 rounded-lg flex items-center gap-1">
+                <span>{a.icon}</span> {a.title}
               </span>
-              <p className="text-xs text-on-surface-variant line-clamp-1">{insight.content}</p>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
+
+        {/* Insights */}
+        {insights.length > 0 && (
+          <div className="flex flex-col gap-2 pt-2 border-t border-outline-variant/10">
+            <p className="text-xs text-on-surface-variant uppercase tracking-widest">AI 洞察</p>
+            {insights.map((insight) => (
+              <div key={insight.id} className="flex items-start gap-2">
+                <span className="text-sm">
+                  {insight.type === "pattern" ? "🆕" : insight.type === "prediction" ? "⚠️" : "💡"}
+                </span>
+                <p className="text-xs text-on-surface-variant">{insight.content}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Collapsed hint */}
+      {!expanded && (
+        <p className="text-[10px] text-outline text-center">点击展开完整报告</p>
       )}
     </section>
   );
