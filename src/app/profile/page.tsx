@@ -103,18 +103,15 @@ export default function ProfilePage() {
                 <h2 className="[font-family:var(--font-display)] text-xl font-medium text-on-surface">
                   {user.name || "未设置昵称"}
                 </h2>
-                <p className="text-sm text-on-surface-variant">
-                  @{user.username}
-                </p>
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(user.username);
-                    alert("已复制用户名");
+                    alert("已复制用户名: @" + user.username);
                   }}
-                  className="flex items-center gap-1 text-xs text-outline hover:text-secondary transition-colors mt-0.5 self-start"
+                  className="flex items-center gap-1.5 text-sm text-on-surface-variant hover:text-secondary transition-colors self-start"
                 >
+                  <span>@{user.username}</span>
                   <span className="material-symbols-outlined text-sm">content_copy</span>
-                  <span>ID: {user.id.slice(0, 8)}...</span>
                 </button>
               </div>
             </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -126,6 +126,7 @@ function FriendsList({
   onUpdate: () => void;
 }) {
   const [selectedFriend, setSelectedFriend] = useState<Friend | null>(null);
+  const [viewingFriend, setViewingFriend] = useState<Friend | null>(null);
 
   if (loading) {
     return (
@@ -153,20 +154,38 @@ function FriendsList({
         {friends.map((friend) => (
           <div
             key={friend.id}
-            className="bg-primary-container rounded-2xl p-4 ambient-shadow flex items-center gap-4 cursor-pointer hover:bg-surface-container-low transition-colors"
-            onClick={() => setSelectedFriend(friend)}
+            className="bg-primary-container rounded-2xl p-4 ambient-shadow flex items-center gap-3"
           >
             <Avatar user={friend} size={44} />
             <div className="flex-1 min-w-0">
               <p className="text-base font-medium text-on-surface">{friend.name}</p>
               <p className="text-xs text-on-surface-variant">@{friend.username}</p>
             </div>
-            <span className="material-symbols-outlined text-on-surface-variant text-lg">
-              settings
-            </span>
+            <button
+              onClick={() => setViewingFriend(friend)}
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-secondary hover:bg-secondary-container/50 transition-colors"
+              title="查看分享"
+            >
+              <span className="material-symbols-outlined text-lg">visibility</span>
+            </button>
+            <button
+              onClick={() => setSelectedFriend(friend)}
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-on-surface-variant hover:bg-surface-variant/30 transition-colors"
+              title="权限设置"
+            >
+              <span className="material-symbols-outlined text-lg">settings</span>
+            </button>
           </div>
         ))}
       </div>
+
+      {/* View friend's shared content */}
+      {viewingFriend && (
+        <SharedContentView
+          friend={viewingFriend}
+          onClose={() => setViewingFriend(null)}
+        />
+      )}
 
       {/* Permission Management Modal */}
       {selectedFriend && (
@@ -511,6 +530,171 @@ function RequestsTab({
             ))}
           </div>
         </section>
+      )}
+    </div>
+  );
+}
+
+// --- Shared Content Viewer ---
+function SharedContentView({ friend, onClose }: { friend: Friend; onClose: () => void }) {
+  const [data, setData] = useState<Record<string, unknown> | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`/api/friends/${friend.id}/shared`)
+      .then((r) => r.json())
+      .then((d) => setData(d))
+      .catch(() => setData(null))
+      .finally(() => setLoading(false));
+  }, [friend.id]);
+
+  const permissions = (data?.permissions ?? []) as string[];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-inverse-surface/30 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-surface w-full sm:w-[480px] sm:rounded-2xl rounded-t-2xl max-h-[85vh] overflow-y-auto p-6 flex flex-col gap-5 animate-[fadeIn_0.2s_ease]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <Avatar user={friend} size={40} />
+          <div className="flex-1">
+            <p className="text-base font-medium text-on-surface">{friend.name} 的分享</p>
+            <p className="text-xs text-on-surface-variant">@{friend.username}</p>
+          </div>
+          <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface">
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="py-12 text-center text-on-surface-variant">加载中...</div>
+        ) : permissions.length === 0 ? (
+          <div className="py-12 text-center text-on-surface-variant">
+            <span className="material-symbols-outlined text-4xl mb-3 block">lock</span>
+            <p>对方暂未分享任何内容给你</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {/* Weekly Report */}
+            {!!data?.weeklyReport && (
+              <SharedSection title="周报" icon="calendar_view_week">
+                <ReportCard report={data.weeklyReport as Record<string, unknown>} />
+              </SharedSection>
+            )}
+
+            {/* Monthly Report */}
+            {!!data?.monthlyReport && (
+              <SharedSection title="月报" icon="calendar_month">
+                <ReportCard report={data.monthlyReport as Record<string, unknown>} />
+              </SharedSection>
+            )}
+
+            {/* Insights */}
+            {Array.isArray(data?.insights) && data.insights.length > 0 && (
+              <SharedSection title="AI 洞察" icon="psychology">
+                <div className="flex flex-col gap-2">
+                  {(data.insights as Array<{ id: string; title: string; content: string; type: string }>).map((insight) => (
+                    <div key={insight.id} className="bg-surface-container-low rounded-xl p-3">
+                      <p className="text-sm font-medium text-on-surface">{insight.title}</p>
+                      <p className="text-xs text-on-surface-variant mt-1 line-clamp-2">{insight.content}</p>
+                    </div>
+                  ))}
+                </div>
+              </SharedSection>
+            )}
+
+            {/* Goals */}
+            {Array.isArray(data?.goals) && data.goals.length > 0 && (
+              <SharedSection title="目标进度" icon="flag">
+                <div className="flex flex-col gap-2">
+                  {(data.goals as Array<{ id: string; title: string; icon: string; completionsThisWeek: number }>).map((goal) => (
+                    <div key={goal.id} className="flex items-center gap-3 py-1">
+                      <span className="material-symbols-outlined text-secondary text-lg">{goal.icon}</span>
+                      <span className="text-sm text-on-surface flex-1">{goal.title}</span>
+                      <span className="text-xs text-on-surface-variant">{goal.completionsThisWeek}次/周</span>
+                    </div>
+                  ))}
+                </div>
+              </SharedSection>
+            )}
+
+            {/* Mood History */}
+            {Array.isArray(data?.moodHistory) && data.moodHistory.length > 0 && (
+              <SharedSection title="情绪记录" icon="mood">
+                <div className="flex flex-wrap gap-2">
+                  {(data.moodHistory as Array<{ mood: string; createdAt: string }>).map((m, i) => {
+                    const emoji = m.mood === "calm" ? "😊" : m.mood === "anxious" ? "😰" : "😴";
+                    return (
+                      <div key={i} className="flex flex-col items-center">
+                        <span className="text-lg">{emoji}</span>
+                        <span className="text-[9px] text-on-surface-variant">
+                          {new Date(m.createdAt).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </SharedSection>
+            )}
+
+            {/* Posts */}
+            {Array.isArray(data?.posts) && data.posts.length > 0 && (
+              <SharedSection title="文章" icon="article">
+                <div className="flex flex-col gap-2">
+                  {(data.posts as Array<{ id: string; title: string; excerpt: string | null; publishedAt: string }>).map((post) => (
+                    <Link
+                      key={post.id}
+                      href={`/discover/${post.id}`}
+                      className="bg-surface-container-low rounded-xl p-3 hover:bg-surface-variant/30 transition-colors"
+                    >
+                      <p className="text-sm font-medium text-on-surface line-clamp-1">{post.title}</p>
+                      {post.excerpt && <p className="text-xs text-on-surface-variant mt-0.5 line-clamp-1">{post.excerpt}</p>}
+                    </Link>
+                  ))}
+                </div>
+              </SharedSection>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SharedSection({ title, icon, children }: { title: string; icon: string; children: ReactNode }) {
+  return (
+    <section className="bg-primary-container rounded-2xl p-4 ambient-shadow">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="material-symbols-outlined text-secondary text-lg">{icon}</span>
+        <h4 className="text-sm font-medium text-on-surface">{title}</h4>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function ReportCard({ report }: { report: Record<string, unknown> }) {
+  const data = report.data as Record<string, unknown> | undefined;
+  const summary = report.summary as string | undefined;
+  const score = data?.overallScore as number | undefined;
+
+  return (
+    <div className="flex flex-col gap-2">
+      {score !== undefined && (
+        <div className="flex items-center gap-2">
+          <span className="text-2xl font-semibold text-on-surface">{score}</span>
+          <span className="text-xs text-on-surface-variant">/100 综合评分</span>
+        </div>
+      )}
+      {!!summary && <p className="text-xs text-on-surface-variant italic">{summary}</p>}
+      {Array.isArray(data?.moodEmojis) && (
+        <div className="flex gap-0.5 flex-wrap">
+          {(data.moodEmojis as string[]).slice(0, 7).map((e, i) => (
+            <span key={i} className="text-sm">{e}</span>
+          ))}
+        </div>
       )}
     </div>
   );
