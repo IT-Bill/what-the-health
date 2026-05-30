@@ -21,6 +21,13 @@ const CATEGORIES = [
 
 export default function DiscoverPage() {
   const [topTab, setTopTab] = useState<TopTab>("文章");
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/me")
+      .then((r) => { if (r.ok) setIsLoggedIn(true); })
+      .catch(() => {});
+  }, []);
 
   return (
     <AppShell>
@@ -43,7 +50,7 @@ export default function DiscoverPage() {
         </div>
 
         {/* Tab Content */}
-        {topTab === "文章" ? <PostsTab /> : <ShopTab />}
+        {topTab === "文章" ? <PostsTab isLoggedIn={isLoggedIn} /> : <ShopTab isLoggedIn={isLoggedIn} />}
       </div>
     </AppShell>
   );
@@ -53,7 +60,7 @@ export default function DiscoverPage() {
 // Posts Tab (existing functionality)
 // ============================================================================
 
-function PostsTab() {
+function PostsTab({ isLoggedIn }: { isLoggedIn: boolean }) {
   const [posts, setPosts] = useState<PostCard[]>([]);
   const [activeCategory, setActiveCategory] = useState("all");
   const [loading, setLoading] = useState(true);
@@ -68,8 +75,17 @@ function PostsTab() {
       .finally(() => setLoading(false));
   }, [activeCategory]);
 
+  function handleCreatePost() {
+    if (!isLoggedIn) {
+      window.location.href = "/login";
+      return;
+    }
+    // TODO: navigate to post creation page
+    window.location.href = "/discover/new";
+  }
+
   return (
-    <div className="flex flex-col gap-6 animate-[fadeIn_0.3s_ease]">
+    <div className="flex flex-col gap-6 animate-[fadeIn_0.3s_ease] relative">
       {/* Category Chips */}
       <div className="flex flex-wrap justify-center gap-2">
         {CATEGORIES.map((cat) => (
@@ -106,6 +122,15 @@ function PostsTab() {
           ))}
         </div>
       )}
+
+      {/* FAB — Create Post */}
+      <button
+        onClick={handleCreatePost}
+        className="fixed bottom-24 right-6 w-14 h-14 rounded-full bg-secondary text-on-secondary flex items-center justify-center ambient-shadow hover:opacity-90 active:scale-95 transition-all duration-300 z-40"
+        aria-label="发布文章"
+      >
+        <span className="material-symbols-outlined text-2xl">add</span>
+      </button>
     </div>
   );
 }
@@ -180,7 +205,7 @@ function PostCardComponent({ post }: { post: PostCard }) {
 const SHOP_TABS = ["积分兑换", "赚取规则", "积分明细"] as const;
 type ShopSubTab = (typeof SHOP_TABS)[number];
 
-function ShopTab() {
+function ShopTab({ isLoggedIn }: { isLoggedIn: boolean }) {
   const [data, setData] = useState<ShopApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeSubTab, setActiveSubTab] = useState<ShopSubTab>("积分兑换");
@@ -218,20 +243,36 @@ function ShopTab() {
     <div className="flex flex-col gap-6 animate-[fadeIn_0.3s_ease]">
       {/* Balance Hero */}
       <section className="bg-primary-container rounded-2xl p-6 md:p-8 ambient-shadow text-center">
-        <span className="text-xs font-medium text-on-surface-variant uppercase tracking-widest">
-          可用余额
-        </span>
-        <div className="flex items-baseline justify-center gap-2 mt-2">
-          <span className="[font-family:var(--font-display)] text-5xl font-semibold text-on-surface">
-            {data.balance.toLocaleString()}
-          </span>
-          <span className="[font-family:var(--font-display)] text-xl font-medium text-outline">
-            Cr
-          </span>
-        </div>
-        <p className="text-sm text-on-surface-variant mt-3 max-w-sm mx-auto">
-          坚持健康习惯获取积分，兑换精选好物
-        </p>
+        {isLoggedIn ? (
+          <>
+            <span className="text-xs font-medium text-on-surface-variant uppercase tracking-widest">
+              可用余额
+            </span>
+            <div className="flex items-baseline justify-center gap-2 mt-2">
+              <span className="[font-family:var(--font-display)] text-5xl font-semibold text-on-surface">
+                {data.balance.toLocaleString()}
+              </span>
+              <span className="[font-family:var(--font-display)] text-xl font-medium text-outline">
+                Cr
+              </span>
+            </div>
+            <p className="text-sm text-on-surface-variant mt-3 max-w-sm mx-auto">
+              坚持健康习惯获取积分，兑换精选好物
+            </p>
+          </>
+        ) : (
+          <>
+            <span className="material-symbols-outlined text-4xl text-outline mb-2">account_circle</span>
+            <p className="text-base text-on-surface mb-3">登录后查看你的积分余额</p>
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-1.5 px-6 py-2.5 rounded-full bg-inverse-surface text-inverse-on-surface text-sm font-medium hover:opacity-90 transition-opacity"
+            >
+              去登录
+              <span className="material-symbols-outlined text-base">arrow_forward</span>
+            </Link>
+          </>
+        )}
       </section>
 
       {/* Sub Tabs */}
