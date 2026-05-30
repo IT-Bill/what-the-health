@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { signToken, setAuthCookie } from "@/lib/auth";
 import bcrypt from "bcryptjs";
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { email, password } = body;
+    const { username, password } = body;
 
-    if (!email || !password) {
+    if (!username || !password) {
       return NextResponse.json(
         { error: "账号和密码不能为空" },
         { status: 400 }
@@ -15,7 +16,7 @@ export async function POST(request: NextRequest) {
     }
 
     const existingUser = await prisma.user.findUnique({
-      where: { email },
+      where: { username },
     });
 
     if (existingUser) {
@@ -30,17 +31,20 @@ export async function POST(request: NextRequest) {
     const user = await prisma.user.create({
       data: {
         id: crypto.randomUUID(),
-        email,
+        username,
         passwordHash,
         name: "",
       },
       select: {
         id: true,
-        email: true,
+        username: true,
         name: true,
         createdAt: true,
       },
     });
+
+    const token = await signToken({ userId: user.id, username: user.username });
+    await setAuthCookie(token);
 
     return NextResponse.json({ user }, { status: 201 });
   } catch (error) {
