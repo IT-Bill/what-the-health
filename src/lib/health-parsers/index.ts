@@ -1,11 +1,16 @@
 import AdmZip from "adm-zip";
 import type { HealthParser, ParseResult } from "./types";
 import { appleHealthParser } from "./apple-health";
+import { huaweiHealthParser } from "./huawei-health";
+import { xiaomiHealthParser } from "./xiaomi-health";
+import { samsungHealthParser } from "./samsung-health";
 
-/** All registered parsers, checked in order. */
+/** All registered parsers, checked in order (most specific first). */
 const parsers: HealthParser[] = [
   appleHealthParser,
-  // Phase 2: huaweiHealthParser, xiaomiHealthParser, samsungHealthParser
+  samsungHealthParser, // Samsung before Huawei (more specific file naming)
+  huaweiHealthParser,
+  xiaomiHealthParser,
   // Phase 3: googleFitParser
 ];
 
@@ -24,7 +29,7 @@ export async function parseHealthExport(zipBuffer: Buffer): Promise<ParseResult>
   }
 
   throw new Error(
-    "无法识别该文件格式。目前支持：Apple Health。请确认上传的是正确的健康数据导出文件。"
+    "无法识别该文件格式。目前支持：Apple Health、华为运动健康、Samsung Health、小米/Zepp Life。请确认上传的是正确的健康数据导出文件。"
   );
 }
 
