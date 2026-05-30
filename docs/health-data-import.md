@@ -331,23 +331,58 @@ export const config = {
 
 ### 实现分期
 
-#### Phase 1（本次）
-- [ ] Schema: HealthRecord + HealthImport 表 + 枚举
-- [ ] Apple Health XML 流式解析器
-- [ ] POST /api/health/import (同步，< 50MB)
-- [ ] GET /api/health/records 查询接口
-- [ ] 前端：上传入口 + 导入结果显示
-- [ ] 文档
+#### Phase 1 ✅
+- [x] Schema: HealthRecord + HealthImport 表 + 枚举（增量 migration）
+- [x] Apple Health XML 流式解析器（SAX, 15+ HK 指标）
+- [x] POST /api/health/import (同步解析，500条/批入库)
+- [x] GET /api/health/import (导入历史列表)
+- [x] GET /api/health/import/[id] (导入状态)
+- [x] DELETE /api/health/import/[id] (删除导入+记录)
+- [x] GET /api/health/records (按 metric/日期范围查询 + 聚合统计)
+- [x] 前端：上传对话框 + 导入历史 + 删除功能
+- [x] 文档
 
-#### Phase 2
-- [ ] 华为运动健康解析器
-- [ ] 小米/Zepp Life 解析器
-- [ ] Samsung Health 解析器
-- [ ] 大文件异步处理
-- [ ] 导入进度实时更新
+#### Phase 2 ✅
+- [x] 华为运动健康解析器 (JSON, 自动检测 motion/ 目录)
+- [x] 小米/Zepp Life 解析器 (JSON + CSV 双格式)
+- [x] Samsung Health 解析器 (CSV, com.samsung.health.* 文件名)
+- [x] 自动检测文件来源格式（registry 按优先级匹配）
 
-#### Phase 3
-- [ ] Google Fit 解析器
-- [ ] 数据可视化（步数/心率趋势图）
-- [ ] 数据与 Memory 报告系统集成（HealthRecord → Report 聚合）
-- [ ] 数据去重（相同时间段的重复导入）
+#### Phase 3 ✅
+- [x] Google Fit 解析器 (Takeout JSON, bucket/dataset/point 结构)
+- [x] 数据可视化页面 (/profile/health-data: 指标概览 + 趋势条形图 + 记录列表)
+- [x] 数据去重 API (POST /api/health/dedup, SQL ROW_NUMBER 窗口函数)
+- [x] Profile 菜单加入"健康数据"入口
+
+#### 未来可选
+- [ ] 大文件异步处理 (> 50MB 文件的后台队列)
+- [ ] 导入进度实时更新 (WebSocket/SSE)
+- [ ] 数据与 Memory 报告系统集成（HealthRecord → Report 聚合因子）
+- [ ] OPPO/一加健康解析器
+- [ ] 手动输入健康数据（表单）
+
+---
+
+### 代码结构
+
+```
+src/lib/health-parsers/
+├── index.ts           # Registry: 自动检测 + dispatch
+├── types.ts           # ParsedRecord, ParseResult, HealthParser 接口
+├── apple-health.ts    # Apple Health XML (SAX 流式)
+├── huawei-health.ts   # 华为运动健康 (JSON)
+├── xiaomi-health.ts   # 小米/Zepp Life (JSON + CSV)
+├── samsung-health.ts  # Samsung Health (CSV)
+└── google-fit.ts      # Google Fit Takeout (JSON)
+
+src/app/api/health/
+├── import/
+│   ├── route.ts       # POST (上传解析) + GET (导入列表)
+│   └── [id]/route.ts  # GET (状态) + DELETE (删除)
+├── records/route.ts   # GET (查询记录 + 聚合)
+└── dedup/route.ts     # POST (去重)
+
+src/app/profile/
+├── health-connections/page.tsx  # 连接管理 + 导入入口
+└── health-data/page.tsx         # 数据可视化仪表盘
+```
