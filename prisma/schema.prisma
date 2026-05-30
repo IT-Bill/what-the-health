@@ -153,6 +153,30 @@ enum ShareableContent {
   goals          // 习惯目标进度
   moodHistory    // 情绪记录
   posts          // 发布的文章
+  purchases      // 购买记录
+}
+
+/// Type of friend activity event.
+enum ActivityType {
+  milestone        // 达成里程碑
+  goalAchieved     // 完成健康目标
+  sleepImproved    // 睡眠质量显著改善
+  productPurchased // 购买商品后指标改善
+  postBookmarked   // 收藏/多次浏览帖子
+  streakReached    // 连续打卡达标
+  reportHighScore  // 周报/月报高分
+}
+
+/// Type of notification (unified for all sources).
+enum NotificationType {
+  system           // 系统公告、版本更新
+  friendRequest    // 好友请求
+  friendActivity   // 好友达成成就/动态
+  creditEarned     // 积分获得
+  reportReady      // 周报/月报生成完毕
+  aiInsight        // AI 发现新洞察
+  reminder         // 健康提醒（喝水、正念等）
+  leaderboard      // 排行榜变动
 }
 
 /// Period type for pre-computed reports.
@@ -214,6 +238,12 @@ model User {
   healthImports      HealthImport[]
   healthRecords      HealthRecord[]
 
+  // Friend activity & notifications
+  friendActivities      FriendActivity[]
+  notificationsReceived Notification[]    @relation("NotificationRecipient")
+  notificationsSent     Notification[]    @relation("NotificationSender")
+  weeklyLeaderboards    WeeklyLeaderboard[]
+
   // Friend system
   sentFriendRequests     Friendship[] @relation("FriendshipRequester")
   receivedFriendRequests Friendship[] @relation("FriendshipAddressee")
@@ -264,6 +294,77 @@ model FriendPermission {
   @@unique([ownerId, friendId, content])
   @@index([ownerId, friendId])
   @@map("friend_permissions")
+}
+
+// ---------------------------------------------------------------------------
+// Friend Activity & Notifications (social motivation system)
+// ---------------------------------------------------------------------------
+
+/// An activity event generated when a user achieves something shareable.
+model FriendActivity {
+  id        String       @id @default(cuid())
+  userId    String
+  type      ActivityType
+  title     String
+  content   String
+  /// Related entity type: "goal" | "product" | "post" | "report"
+  refType   String?
+  refId     String?
+  /// Whether this activity is visible to friends (user can hide)
+  visible   Boolean      @default(true)
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, visible, createdAt])
+  @@map("friend_activities")
+}
+
+/// Unified notification for all types (system, friend, AI, credits, etc.)
+model Notification {
+  id          String           @id @default(cuid())
+  recipientId String
+  type        NotificationType
+  title       String
+  message     String
+  /// Icon name (Material Symbols) for display
+  icon        String?
+  /// Related entity for navigation on click
+  refType     String?          // "activity" | "post" | "report" | "friend" | "product" | "insight"
+  refId       String?
+  /// Sender info (for friend-related notifications)
+  senderId    String?
+  read        Boolean          @default(false)
+  dismissed   Boolean          @default(false)
+
+  createdAt DateTime @default(now())
+
+  recipient User  @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  sender    User? @relation("NotificationSender", fields: [senderId], references: [id], onDelete: SetNull)
+
+  @@index([recipientId, read, createdAt])
+  @@map("notifications")
+}
+
+/// Weekly leaderboard snapshot for friend circle rankings.
+model WeeklyLeaderboard {
+  id           String   @id @default(cuid())
+  userId       String
+  weekStart    DateTime @db.Date
+  score        Int      @default(0)
+  totalSteps   Int      @default(0)
+  workoutCount Int      @default(0)
+  mindfulCount Int      @default(0)
+  rank         Int?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, weekStart])
+  @@index([weekStart])
+  @@map("weekly_leaderboards")
 }
 
 // ---------------------------------------------------------------------------
