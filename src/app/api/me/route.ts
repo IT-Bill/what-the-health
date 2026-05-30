@@ -14,7 +14,7 @@ export async function GET() {
       return NextResponse.json({ error: "登录已过期" }, { status: 401 });
     }
 
-    const user = await prisma.users.findUnique({
+    const user = await prisma.user.findUnique({
       where: { id: payload.userId },
       select: {
         id: true,

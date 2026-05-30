@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const existingUser = await prisma.users.findUnique({
+    const existingUser = await prisma.user.findUnique({
       where: { username },
     });
 
@@ -28,13 +28,12 @@ export async function POST(request: NextRequest) {
 
     const passwordHash = await bcrypt.hash(password, 12);
 
-    const user = await prisma.users.create({
+    const user = await prisma.user.create({
       data: {
         id: crypto.randomUUID(),
         username,
         passwordHash,
         name: "",
-        updatedAt: new Date(),
       },
       select: {
         id: true,

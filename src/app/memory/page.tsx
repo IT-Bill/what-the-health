@@ -1,117 +1,589 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { AppShell } from "@/components/app-shell";
+import type {
+  ReportData,
+  ReportWithInsights,
+  InsightRecord,
+  MemoryApiResponse,
+} from "@/lib/memory-types";
 
-interface Reaction {
-  id: string;
-  icon: string;
-  label: string;
-}
+const TABS = ["周报", "月报", "洞察"] as const;
+type Tab = (typeof TABS)[number];
 
-const reactions: Reaction[] = [
-  { id: "inspired", icon: "lightbulb", label: "我有启发" },
-  { id: "resonate", icon: "favorite", label: "感同身受" },
-  { id: "try", icon: "directions_walk", label: "值得尝试" },
-];
+const WEEK_DAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
+
+// --- Main Component ---
 
 export default function MemoryPage() {
-  const [selectedReactions, setSelectedReactions] = useState<string[]>([]);
-  const [note, setNote] = useState("");
+  const [activeTab, setActiveTab] = useState<Tab>("周报");
+  const [data, setData] = useState<MemoryApiResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [currentPeriodIdx, setCurrentPeriodIdx] = useState(0);
 
-  function toggleReaction(id: string) {
-    setSelectedReactions((prev) =>
-      prev.includes(id) ? prev.filter((r) => r !== id) : [...prev, id]
-    );
+  const periodType = activeTab === "月报" ? "monthly" : "weekly";
+
+  const fetchReport = useCallback(
+    async (periodStart?: string) => {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams({ type: periodType });
+        if (periodStart) params.set("periodStart", periodStart);
+        const res = await fetch(`/api/memory?${params}`);
+        const json: MemoryApiResponse = await res.json();
+        setData(json);
+        // Find index of current period in available list
+        if (json.report && json.available.length > 0) {
+          const idx = json.available.findIndex(
+            (d) => d.slice(0, 10) === json.report!.periodStart.slice(0, 10)
+          );
+          setCurrentPeriodIdx(idx >= 0 ? idx : 0);
+        }
+      } catch {
+        setData(null);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [periodType]
+  );
+
+  useEffect(() => {
+    setCurrentPeriodIdx(0);
+    fetchReport();
+  }, [fetchReport]);
+
+  function goPrev() {
+    if (!data || currentPeriodIdx >= data.available.length - 1) return;
+    const prevPeriod = data.available[currentPeriodIdx + 1];
+    fetchReport(prevPeriod.slice(0, 10));
   }
+
+  function goNext() {
+    if (!data || currentPeriodIdx <= 0) return;
+    const nextPeriod = data.available[currentPeriodIdx - 1];
+    fetchReport(nextPeriod.slice(0, 10));
+  }
+
+  const hasPrev = data ? currentPeriodIdx < data.available.length - 1 : false;
+  const hasNext = data ? currentPeriodIdx > 0 : false;
 
   return (
     <AppShell>
-      <div className="flex flex-col gap-20">
-        {/* Storyline End */}
-        <section className="max-w-2xl mx-auto w-full">
-          <div className="bg-primary-container rounded-3xl p-8 md:p-12 ambient-shadow relative overflow-hidden group">
-            <div className="absolute -top-12 -right-12 w-48 h-48 bg-surface-container-low rounded-full mix-blend-multiply filter blur-3xl opacity-50 group-hover:scale-110 transition-transform duration-1000" />
-            <h2 className="font-[var(--font-display)] text-3xl font-medium text-primary mb-8 relative z-10">
-              A Quiet Conclusion
-            </h2>
-            <div className="space-y-6 text-on-surface-variant text-lg leading-relaxed relative z-10">
-              <p>
-                The noise of the day finally settles, leaving behind a profound
-                stillness. It is in these moments of pause that we truly hear
-                ourselves. The journey wasn&apos;t about reaching a destination,
-                but learning to walk with a gentler stride.
-              </p>
-              <p>
-                As the light shifts, casting soft shadows across the room, you
-                realize the weight you&apos;ve been carrying has imperceptibly
-                lightened.
-              </p>
-            </div>
-          </div>
-        </section>
+      <div className="flex flex-col gap-8 max-w-3xl mx-auto w-full">
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <span
+            className="material-symbols-outlined text-primary text-3xl"
+            style={{ fontVariationSettings: "'FILL' 1" }}
+          >
+            psychology
+          </span>
+          <h1 className="font-[var(--font-display)] text-3xl font-medium text-on-surface">
+            Memory
+          </h1>
+        </div>
 
-        {/* Interaction Zone */}
-        <section className="max-w-2xl mx-auto w-full flex flex-col gap-8">
-          <div className="text-center">
-            <h3 className="font-[var(--font-display)] text-2xl font-medium text-on-surface mb-2">
-              这一刻的共鸣
-            </h3>
-            <p className="text-base text-on-surface-variant">
-              What resonates with you right now?
-            </p>
-          </div>
-
-          {/* Quick Reactions */}
-          <div className="flex flex-wrap justify-center gap-4">
-            {reactions.map((reaction) => (
-              <button
-                key={reaction.id}
-                onClick={() => toggleReaction(reaction.id)}
-                className={`px-6 py-3 rounded-full border text-sm font-medium tracking-wide transition-all duration-300 active:scale-95 flex items-center gap-2 ${
-                  selectedReactions.includes(reaction.id)
-                    ? "bg-surface-variant/40 border-secondary/50"
-                    : "border-outline-variant/30 text-on-surface hover:bg-surface-variant/20"
-                }`}
-              >
-                <span
-                  className="material-symbols-outlined text-[18px]"
-                  style={
-                    selectedReactions.includes(reaction.id)
-                      ? { fontVariationSettings: "'FILL' 1" }
-                      : undefined
-                  }
-                >
-                  {reaction.icon}
-                </span>
-                {reaction.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Personal Note */}
-          <div className="mt-4">
-            <label htmlFor="memory-note" className="sr-only">
-              Record your feelings
-            </label>
-            <textarea
-              id="memory-note"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="记录下此刻的感受，我们会为您铭记..."
-              rows={4}
-              className="w-full bg-surface-container-low border border-transparent focus:border-secondary focus:ring-0 rounded-2xl p-6 text-lg text-on-surface placeholder:text-outline resize-none transition-colors duration-300 shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)]"
-            />
-          </div>
-
-          {/* Action Button */}
-          <div className="mt-8 flex justify-center">
-            <button className="bg-inverse-surface text-inverse-on-surface px-12 py-4 rounded-full text-sm font-medium tracking-widest uppercase hover:opacity-90 hover:shadow-lg transition-all duration-300 active:scale-95 w-full md:w-auto min-w-[240px]">
-              沉淀记忆
+        {/* Tab Navigation */}
+        <div className="flex gap-2 overflow-x-auto no-scrollbar">
+          {TABS.map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-5 py-2.5 rounded-full text-sm font-medium tracking-wide transition-all duration-300 whitespace-nowrap ${
+                activeTab === tab
+                  ? "bg-secondary-container text-on-secondary-container"
+                  : "border border-outline-variant/30 text-on-surface-variant hover:bg-surface-variant/20"
+              }`}
+            >
+              {tab}
             </button>
-          </div>
-        </section>
+          ))}
+        </div>
+
+        {/* Period Navigator (for 周报/月报) */}
+        {activeTab !== "洞察" && data?.report && (
+          <PeriodNav
+            report={data.report}
+            periodType={periodType}
+            hasPrev={hasPrev}
+            hasNext={hasNext}
+            onPrev={goPrev}
+            onNext={goNext}
+          />
+        )}
+
+        {/* Content */}
+        {loading ? (
+          <LoadingSkeleton />
+        ) : !data?.report && activeTab !== "洞察" ? (
+          <EmptyState />
+        ) : activeTab === "洞察" ? (
+          <InsightsView
+            reportInsights={data?.report?.insights ?? []}
+            globalInsights={data?.globalInsights ?? []}
+          />
+        ) : (
+          <ReportView report={data!.report!} periodType={periodType} />
+        )}
       </div>
     </AppShell>
+  );
+}
+
+// --- Period Navigator ---
+function PeriodNav({
+  report,
+  periodType,
+  hasPrev,
+  hasNext,
+  onPrev,
+  onNext,
+}: {
+  report: ReportWithInsights;
+  periodType: string;
+  hasPrev: boolean;
+  hasNext: boolean;
+  onPrev: () => void;
+  onNext: () => void;
+}) {
+  const start = new Date(report.periodStart);
+  const label =
+    periodType === "monthly"
+      ? `${start.getUTCFullYear()}年${start.getUTCMonth() + 1}月`
+      : formatWeekLabel(start);
+
+  return (
+    <div className="flex items-center justify-between">
+      <button
+        onClick={onPrev}
+        disabled={!hasPrev}
+        className="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-variant/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+      >
+        <span className="material-symbols-outlined">chevron_left</span>
+      </button>
+      <span className="text-base font-medium text-on-surface">{label}</span>
+      <button
+        onClick={onNext}
+        disabled={!hasNext}
+        className="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-variant/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+      >
+        <span className="material-symbols-outlined">chevron_right</span>
+      </button>
+    </div>
+  );
+}
+
+function formatWeekLabel(start: Date): string {
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 6);
+  const fmt = (d: Date) => `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
+  return `${fmt(start)} — ${fmt(end)}`;
+}
+
+// --- Report View (renders whichever sections have data) ---
+function ReportView({
+  report,
+  periodType,
+}: {
+  report: ReportWithInsights;
+  periodType: string;
+}) {
+  const d = report.data;
+  const isMonthly = periodType === "monthly";
+
+  return (
+    <div className="flex flex-col gap-6 animate-[fadeIn_0.4s_ease]">
+      {/* Overall Score */}
+      {d.overallScore !== undefined && (
+        <section className="bg-surface-container-low rounded-3xl p-6 md:p-8 border border-outline-variant/20 ambient-shadow text-center">
+          <p className="text-sm text-on-surface-variant uppercase tracking-widest mb-2">综合评分</p>
+          <p className="font-[var(--font-display)] text-5xl font-semibold text-on-surface mb-3">
+            {d.overallScore}
+            <span className="text-2xl text-on-surface-variant font-normal">/100</span>
+          </p>
+          <div className="w-full max-w-xs mx-auto h-3 bg-surface-variant rounded-full overflow-hidden">
+            <div
+              className="h-full bg-secondary rounded-full transition-all duration-1000"
+              style={{ width: `${d.overallScore}%` }}
+            />
+          </div>
+        </section>
+      )}
+
+      {/* Summary */}
+      {report.summary && (
+        <section className="bg-primary-container rounded-3xl p-6 md:p-8 ambient-shadow relative overflow-hidden">
+          <div className="absolute -top-8 -right-8 w-32 h-32 bg-tertiary-container/40 rounded-full blur-2xl" />
+          <p className="text-base text-on-surface leading-relaxed relative z-10 italic">
+            &ldquo;{report.summary}&rdquo;
+          </p>
+        </section>
+      )}
+
+      {/* Mood Emojis */}
+      {d.moodEmojis && d.moodEmojis.length > 0 && (
+        <section className="bg-primary-container rounded-3xl p-6 md:p-8 ambient-shadow">
+          <h3 className="text-sm font-medium text-on-surface-variant uppercase tracking-widest mb-4">
+            {isMonthly ? "情绪日历" : "本周情绪"}
+          </h3>
+          {isMonthly ? (
+            <div className="grid grid-cols-7 gap-2">
+              {d.moodEmojis.map((mood, i) => (
+                <div
+                  key={i}
+                  className="aspect-square flex items-center justify-center rounded-lg bg-surface/60 text-lg"
+                >
+                  {mood}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex justify-between items-center">
+              {d.moodEmojis.map((mood, i) => (
+                <div key={i} className="flex flex-col items-center gap-2">
+                  <span className="text-2xl">{mood}</span>
+                  <span className="text-xs text-on-surface-variant">
+                    {WEEK_DAYS[i] ?? ""}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Stats Grid */}
+      {d.stats && d.stats.length > 0 && (
+        <section className="grid grid-cols-2 gap-4">
+          {d.stats.map((stat) => (
+            <div
+              key={stat.label}
+              className="bg-primary-container rounded-2xl p-5 ambient-shadow flex flex-col gap-2"
+            >
+              <div className="flex items-center gap-2 text-on-surface-variant">
+                <span className="material-symbols-outlined text-lg">{stat.icon}</span>
+                <span className="text-xs font-medium uppercase tracking-wider">
+                  {stat.label}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-semibold text-on-surface">{stat.value}</span>
+                {stat.change && (
+                  <span
+                    className={`text-sm font-medium ${
+                      stat.positive ? "text-secondary" : "text-error"
+                    }`}
+                  >
+                    {stat.change}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {/* Sleep Chart */}
+      {d.sleepData && d.sleepData.length > 0 && (
+        <section className="bg-primary-container rounded-3xl p-6 md:p-8 ambient-shadow">
+          <h3 className="text-sm font-medium text-on-surface-variant uppercase tracking-widest mb-6">
+            {isMonthly ? "30天睡眠趋势" : "本周睡眠"}
+          </h3>
+          {isMonthly ? (
+            <>
+              <div className="flex items-end gap-px h-20">
+                {d.sleepData.map((hours, i) => {
+                  const height = ((hours - 5) / 3) * 100;
+                  return (
+                    <div
+                      key={i}
+                      className="flex-1 bg-secondary/50 rounded-t-sm hover:bg-secondary/80 transition-colors"
+                      style={{ height: `${Math.max(height, 5)}%` }}
+                      title={`Day ${i + 1}: ${hours}h`}
+                    />
+                  );
+                })}
+              </div>
+              <div className="flex justify-between mt-2">
+                <span className="text-xs text-on-surface-variant">1日</span>
+                <span className="text-xs text-on-surface-variant">15日</span>
+                <span className="text-xs text-on-surface-variant">30日</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-end justify-between gap-1 h-24">
+                {d.sleepData.map((hours, i) => {
+                  const height = ((hours - 4) / 4) * 100;
+                  return (
+                    <div key={i} className="flex-1 flex flex-col items-center gap-2">
+                      <span className="text-xs text-on-surface-variant">{hours}h</span>
+                      <div
+                        className="w-full max-w-[32px] bg-secondary/60 rounded-t-lg mx-auto"
+                        style={{ height: `${Math.max(height, 10)}%` }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex justify-between mt-2 px-1">
+                {WEEK_DAYS.map((d) => (
+                  <span key={d} className="text-xs text-on-surface-variant flex-1 text-center">
+                    {d}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
+        </section>
+      )}
+
+      {/* Highlights */}
+      {d.highlights && d.highlights.length > 0 && (
+        <section className="bg-surface-container-low rounded-3xl p-6 md:p-8 border border-outline-variant/20 ambient-shadow">
+          <h3 className="text-sm font-medium text-on-surface-variant uppercase tracking-widest mb-5">
+            {isMonthly ? "本月亮点" : "本周亮点"}
+          </h3>
+          <div className="flex flex-col gap-4">
+            {d.highlights.map((h) => (
+              <div
+                key={h.label}
+                className="flex items-center gap-4 py-2 border-b border-on-surface-variant/5 last:border-b-0"
+              >
+                <span className="material-symbols-outlined text-secondary text-xl">
+                  {h.icon}
+                </span>
+                <span className="text-base text-on-surface-variant flex-1">{h.label}</span>
+                <span className="text-base font-medium text-on-surface">{h.value}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Achievements */}
+      {d.achievements && d.achievements.length > 0 && (
+        <section className="bg-primary-container rounded-3xl p-6 md:p-8 ambient-shadow">
+          <h3 className="text-sm font-medium text-on-surface-variant uppercase tracking-widest mb-5">
+            🏆 成就
+          </h3>
+          <div className="flex flex-col gap-3">
+            {d.achievements.map((a) => (
+              <div key={a.title} className="flex items-center gap-4 py-2">
+                <span className="text-2xl">{a.icon}</span>
+                <div className="flex-1">
+                  <p className="text-base text-on-surface font-medium">{a.title}</p>
+                  <p className="text-xs text-on-surface-variant">{a.date}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Report-linked insights */}
+      {report.insights.length > 0 && (
+        <section className="flex flex-col gap-4">
+          <h3 className="text-sm font-medium text-on-surface-variant uppercase tracking-widest px-1">
+            🤖 AI 洞察
+          </h3>
+          {report.insights.map((insight) => (
+            <InsightCard key={insight.id} insight={insight} />
+          ))}
+        </section>
+      )}
+
+      {/* Shareable Card (monthly only) */}
+      {isMonthly && d.overallScore && (
+        <ShareableCard report={report} />
+      )}
+    </div>
+  );
+}
+
+// --- Insights View ---
+function InsightsView({
+  reportInsights,
+  globalInsights,
+}: {
+  reportInsights: InsightRecord[];
+  globalInsights: InsightRecord[];
+}) {
+  const all = [...reportInsights, ...globalInsights];
+  const correlations = all.filter((i) => i.type === "correlation");
+  const others = all.filter((i) => i.type !== "correlation");
+
+  return (
+    <div className="flex flex-col gap-6 animate-[fadeIn_0.4s_ease]">
+      {/* AI understanding level */}
+      <section className="bg-surface-container-low rounded-3xl p-6 md:p-8 border border-outline-variant/20 ambient-shadow text-center">
+        <p className="text-sm text-on-surface-variant uppercase tracking-widest mb-2">
+          AI 对你的了解度
+        </p>
+        <p className="font-[var(--font-display)] text-4xl font-semibold text-on-surface mb-3">
+          Level 3
+        </p>
+        <div className="w-full max-w-xs mx-auto h-3 bg-surface-variant rounded-full overflow-hidden">
+          <div
+            className="h-full bg-secondary rounded-full transition-all duration-1000"
+            style={{ width: "78%" }}
+          />
+        </div>
+        <p className="text-sm text-on-surface-variant mt-2">
+          78% — 再聊几次就能解锁更深度的洞察
+        </p>
+      </section>
+
+      {/* Insight Cards */}
+      {others.map((insight) => (
+        <InsightCard key={insight.id} insight={insight} />
+      ))}
+
+      {/* Correlations */}
+      {correlations.length > 0 && (
+        <section className="bg-primary-container rounded-3xl p-6 md:p-8 ambient-shadow">
+          <h3 className="text-sm font-medium text-on-surface-variant uppercase tracking-widest mb-5">
+            身体关联地图
+          </h3>
+          <div className="flex flex-col gap-3">
+            {correlations.map((c) => {
+              const meta = c.metadata as { strength?: number } | null;
+              const strength = meta?.strength ?? 50;
+              return (
+                <div key={c.id} className="flex flex-col gap-2 py-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-on-surface">{c.title}</span>
+                    <span className="text-xs text-on-surface-variant">{strength}%</span>
+                  </div>
+                  <div className="w-full h-2 bg-surface-variant rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-secondary/70 rounded-full transition-all duration-700"
+                      style={{ width: `${strength}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-on-surface-variant">{c.content}</p>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+// --- Insight Card ---
+function InsightCard({ insight }: { insight: InsightRecord }) {
+  const typeConfig: Record<string, { emoji: string; tag: string }> = {
+    pattern: { emoji: "🆕", tag: "行为模式" },
+    prediction: { emoji: "⚠️", tag: "预测" },
+    correlation: { emoji: "💡", tag: "关联分析" },
+    milestone: { emoji: "🏆", tag: "里程碑" },
+  };
+  const config = typeConfig[insight.type] ?? { emoji: "💡", tag: insight.type };
+
+  return (
+    <section className="bg-primary-container rounded-3xl p-6 md:p-8 ambient-shadow relative overflow-hidden group">
+      <div className="absolute -bottom-6 -right-6 w-24 h-24 bg-tertiary-container/30 rounded-full blur-xl group-hover:scale-150 transition-transform duration-700" />
+      <div className="flex items-center gap-2 mb-3 relative z-10">
+        <span className="text-xl">{config.emoji}</span>
+        <h3 className="text-base font-medium text-on-surface">{insight.title}</h3>
+        <span className="ml-auto text-xs text-on-surface-variant bg-surface-variant/50 px-2.5 py-0.5 rounded-full">
+          {config.tag}
+        </span>
+      </div>
+      <p className="text-base text-on-surface-variant leading-relaxed relative z-10">
+        {insight.content}
+      </p>
+    </section>
+  );
+}
+
+// --- Shareable Card ---
+function ShareableCard({ report }: { report: ReportWithInsights }) {
+  const d = report.data;
+  return (
+    <section className="bg-gradient-to-br from-primary-container via-surface to-tertiary-container/30 rounded-3xl p-8 ambient-shadow border border-outline-variant/20 relative overflow-hidden">
+      <div
+        className="absolute inset-0 opacity-[0.02]"
+        style={{
+          backgroundImage:
+            "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
+        }}
+      />
+      <div className="relative z-10 text-center">
+        <p className="text-sm text-on-surface-variant uppercase tracking-widest mb-4">
+          ✨ 我的月度身体报告
+        </p>
+
+        {d.moodEmojis && (
+          <div className="flex flex-wrap justify-center gap-1 mb-6 max-w-[280px] mx-auto">
+            {d.moodEmojis.map((m, i) => (
+              <span key={i} className="text-base">
+                {m}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {d.stats && (
+          <div className="grid grid-cols-3 gap-4 mb-6">
+            {d.stats.slice(0, 3).map((s) => (
+              <div key={s.label}>
+                <p className="text-lg font-semibold text-on-surface">{s.value}</p>
+                <p className="text-xs text-on-surface-variant">
+                  {s.label} {s.change}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {d.overallScore && (
+          <div className="mb-4">
+            <p className="text-xs text-on-surface-variant mb-1">
+              🤖 综合评分
+            </p>
+            <div className="w-48 h-2 mx-auto bg-surface-variant rounded-full overflow-hidden">
+              <div
+                className="h-full bg-secondary rounded-full"
+                style={{ width: `${d.overallScore}%` }}
+              />
+            </div>
+            <p className="text-xs text-on-surface-variant mt-1">{d.overallScore}/100</p>
+          </div>
+        )}
+
+        <p className="text-xs text-outline mt-4">─── 由 Mindful 生成 ───</p>
+      </div>
+    </section>
+  );
+}
+
+// --- Loading & Empty States ---
+function LoadingSkeleton() {
+  return (
+    <div className="flex flex-col gap-6 animate-pulse">
+      <div className="bg-primary-container rounded-3xl h-32" />
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-primary-container rounded-2xl h-24" />
+        <div className="bg-primary-container rounded-2xl h-24" />
+      </div>
+      <div className="bg-primary-container rounded-3xl h-40" />
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="flex flex-col items-center justify-center py-20 text-center">
+      <span className="material-symbols-outlined text-5xl text-outline-variant mb-4">
+        auto_stories
+      </span>
+      <p className="text-lg text-on-surface-variant">还没有这个时期的报告</p>
+      <p className="text-sm text-outline mt-2">继续使用Mindful，AI会定期为你生成分析</p>
+    </div>
   );
 }
