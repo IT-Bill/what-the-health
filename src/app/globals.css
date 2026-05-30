@@ -1,26 +1,161 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Colors - Quiet Luxury Wellness Design System */
+  --color-surface: #fcf9f8;
+  --color-surface-dim: #dcd9d9;
+  --color-surface-bright: #fcf9f8;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f6f3f2;
+  --color-surface-container: #f0eded;
+  --color-surface-container-high: #eae7e7;
+  --color-surface-container-highest: #e4e2e1;
+  --color-surface-variant: #e4e2e1;
+  --color-surface-tint: #5f5e5b;
+
+  --color-on-surface: #1b1c1c;
+  --color-on-surface-variant: #474741;
+  --color-on-background: #1b1c1c;
+
+  --color-inverse-surface: #303030;
+  --color-inverse-on-surface: #f3f0f0;
+  --color-inverse-primary: #c9c6c2;
+
+  --color-outline: #787770;
+  --color-outline-variant: #c8c7be;
+
+  --color-primary: #5f5e5b;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #f5f2ed;
+  --color-on-primary-container: #6f6e6a;
+  --color-primary-fixed: #e5e2dd;
+  --color-primary-fixed-dim: #c9c6c2;
+  --color-on-primary-fixed: #1c1c19;
+  --color-on-primary-fixed-variant: #474743;
+
+  --color-secondary: #56642b;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #d6e7a1;
+  --color-on-secondary-container: #5a682f;
+  --color-secondary-fixed: #d9eaa3;
+  --color-secondary-fixed-dim: #bdce89;
+  --color-on-secondary-fixed: #161f00;
+  --color-on-secondary-fixed-variant: #3e4c16;
+
+  --color-tertiary: #6b5c4c;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #fff0e3;
+  --color-on-tertiary-container: #7b6b5b;
+  --color-tertiary-fixed: #f4dfcb;
+  --color-tertiary-fixed-dim: #d7c3b0;
+  --color-on-tertiary-fixed: #241a0e;
+  --color-on-tertiary-fixed-variant: #524436;
+  --color-background: #fcf9f8;
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+
+  /* Typography - Font Families */
+  --font-display: "Playfair Display", serif;
+  --font-body: "Geist", sans-serif;
+
+  /* Border Radius */
+  --radius-DEFAULT: 1rem;
+  --radius-lg: 2rem;
+  --radius-xl: 3rem;
+  --radius-full: 9999px;
+
+  /* Spacing */
+  --spacing-unit: 8px;
+  --spacing-element-gap: 16px;
+  --spacing-gutter: 24px;
+  --spacing-container-mobile: 24px;
+  --spacing-container-desktop: 64px;
+  --spacing-section-gap: 80px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* Noise texture background */
+body {
+  background-color: #fcf9f8;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
+  font-family: var(--font-body);
+  color: var(--color-on-surface);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Selection styling */
+::selection {
+  background-color: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+}
+
+/* Smooth scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #e4e2e1;
+  border-radius: 10px;
+}
+
+/* Ambient shadow utility */
+.ambient-shadow {
+  box-shadow: 0 20px 40px rgba(45, 45, 45, 0.04);
+}
+
+/* Glass panel utility */
+.glass-panel {
+  background: rgba(252, 249, 248, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(200, 199, 190, 0.3);
+}
+
+/* Prevent text selection on long press */
+.no-select {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Waveform animation for voice input */
+.waveform-bar {
+  animation: waveform 1s ease-in-out infinite;
+}
+
+@keyframes waveform {
+  0%, 100% { height: 8px; }
+  50% { height: 24px; }
+}
+
+/* Chat bubble animation */
+.chat-bubble-enter {
+  animation: slideUpFadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+@keyframes slideUpFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Hide scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
