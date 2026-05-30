@@ -81,6 +81,26 @@ enum RedemptionStatus {
   cancelled
 }
 
+/// Action type that can earn credits.
+enum CreditAction {
+  dailyCheckin       // 每日签到/对话
+  habitComplete      // 完成一个习惯目标
+  allHabitsComplete  // 每日所有目标全部完成 (bonus)
+  moodCheckin        // 记录情绪打卡
+  streakWeekly       // 连续7天完成目标 (streak bonus)
+  mindfulness        // 完成正念练习
+  postPublish        // 发布一篇文章
+  postLiked          // 文章被点赞
+  redemption         // 兑换商品 (negative)
+  adminAdjust        // 管理员手动调整
+}
+
+/// Direction of a credit transaction.
+enum CreditDirection {
+  earn
+  spend
+}
+
 /// Period type for pre-computed reports.
 enum PeriodType {
   weekly
@@ -134,6 +154,7 @@ model User {
   comments          Comment[]
   likes             Like[]
   persona           UserPersona?
+  creditTransactions CreditTransaction[]
 
   @@map("users")
 }
@@ -406,6 +427,57 @@ model Redemption {
 
   @@index([userId, createdAt])
   @@map("redemptions")
+}
+
+// ---------------------------------------------------------------------------
+// Credit system (earning rules + transaction ledger)
+// ---------------------------------------------------------------------------
+
+/// Defines how credits are earned. Each rule maps an action to a reward amount.
+/// Rules are displayed to users in the shop for transparency.
+model CreditRule {
+  id          String       @id @default(cuid())
+  action      CreditAction @unique
+  /// Human-readable name displayed in the UI.
+  name        String
+  /// Detailed description of how to earn this credit.
+  description String
+  /// Credits awarded per occurrence.
+  amount      Int
+  /// Maximum times this action can earn credits per day (0 = unlimited).
+  dailyCap    Int          @default(0)
+  /// Icon name (Material Symbols) for display.
+  icon        String?
+  /// Whether this rule is currently active.
+  active      Boolean      @default(true)
+  sortOrder   Int          @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("credit_rules")
+}
+
+/// Immutable ledger of all credit changes (earnings and spendings).
+model CreditTransaction {
+  id        String          @id @default(cuid())
+  userId    String
+  action    CreditAction
+  direction CreditDirection
+  amount    Int
+  /// Running balance after this transaction.
+  balance   Int
+  /// Optional reference to the entity that triggered this transaction.
+  refId     String?
+  /// Human-readable note.
+  note      String?
+  createdAt DateTime        @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, action, createdAt])
+  @@map("credit_transactions")
 }
 
 // ---------------------------------------------------------------------------

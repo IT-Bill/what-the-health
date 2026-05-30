@@ -1,4 +1,5 @@
-import "dotenv/config";
+import { config } from "dotenv";
+config({ override: true });
 import { defineConfig } from "prisma/config";
 
 // Prisma 7 moves connection URLs and seed config out of schema.prisma.
