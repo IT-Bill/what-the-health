@@ -170,6 +170,7 @@ model User {
   posts             Post[]
   comments          Comment[]
   likes             Like[]
+  persona           UserPersona?
   creditTransactions CreditTransaction[]
 
   // Friend system
@@ -222,6 +223,27 @@ model FriendPermission {
   @@unique([ownerId, friendId, content])
   @@index([ownerId, friendId])
   @@map("friend_permissions")
+}
+
+// ---------------------------------------------------------------------------
+// User Persona — Alice Agent Loop four cognitive dimensions
+// ---------------------------------------------------------------------------
+
+model UserPersona {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  identity    Json @default("{}")
+  behavior    Json @default("{}")
+  expression  Json @default("{}")
+  preferences Json @default("{}")
+
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("user_personas")
 }
 
 /// A daily emotional check-in (design _1 mood selection).

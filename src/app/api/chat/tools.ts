@@ -1,6 +1,7 @@
 import { Type } from "@sinclair/typebox";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { prisma } from "@/lib/prisma";
+import { getOrCreatePersona } from "@/lib/persona-service";
 
 // ---------------------------------------------------------------------------
 // Wellness Tools for Mindful Agent
@@ -14,6 +15,26 @@ function p(params: unknown): Record<string, any> {
 }
 
 export function createTools(userId: string): AgentTool[] {
+  const getUserPersonaTool: AgentTool = {
+    name: "get_user_persona",
+    label: "获取用户画像",
+    description:
+      "获取当前用户的完整画像信息，包括身份、行为模式、表达方式和偏好。这是最高优先级的个性化信息来源。",
+    parameters: Type.Object({}),
+    execute: async () => {
+      const persona = await getOrCreatePersona(userId);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify(persona, null, 2),
+          },
+        ],
+        details: persona,
+      };
+    },
+  };
+
   const getUserProfileTool: AgentTool = {
     name: "get_user_profile",
     label: "获取用户资料",
@@ -278,6 +299,7 @@ export function createTools(userId: string): AgentTool[] {
   };
 
   return [
+    getUserPersonaTool,
     getUserProfileTool,
     getRecentMoodCheckinsTool,
     getGoalsAndHabitsTool,
