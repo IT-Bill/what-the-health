@@ -1,10 +1,20 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Camera, Image, FileText, CircleCheck, CircleX } from "lucide-react";
 import { BottomNavBar } from "@/components/bottom-nav-bar";
+import {
+  CHAT_CACHED_SESSION_KEY,
+  CHAT_HAS_ACTIVITY_KEY,
+  CHAT_RESTORE_LATEST_KEY,
+  PENDING_VOICE_TEXT_KEY,
+  VOICE_SUBMIT_EVENT,
+  type PendingVoiceText,
+  type VoiceSubmitEventDetail,
+} from "@/lib/voice-events";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -41,6 +51,36 @@ interface ToolCallInfo {
 interface SseEvent {
   type: string;
   [key: string]: unknown;
+}
+
+interface CachedChatSessionPayload {
+  sessionId?: string;
+  messages: Message[];
+  savedAt: number;
+}
+
+function normalizeCachedMessages(messages: Message[]) {
+  return messages
+    .filter((message) => message.id !== "init")
+    .map((message) => ({ ...message, isStreaming: false }));
+}
+
+function coerceCachedMessage(value: unknown): Message | null {
+  if (!value || typeof value !== "object") return null;
+
+  const message = value as Partial<Message>;
+  if (message.role !== "user" && message.role !== "agent") return null;
+  if (typeof message.id !== "string" || typeof message.content !== "string") {
+    return null;
+  }
+
+  return {
+    ...message,
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    isStreaming: false,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -136,8 +176,12 @@ export default function ChatPage() {
   ]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
+  const isStreamingRef = useRef(false);
   const [sessionId, setSessionId] = useState<string | undefined>();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [isSessionBootstrapDone, setIsSessionBootstrapDone] = useState(false);
+  const [pendingVoiceText, setPendingVoiceText] = useState<PendingVoiceText | null>(null);
+  const hadPendingVoiceOnMountRef = useRef(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [currentAgentState, setCurrentAgentState] = useState<
     "idle" | "thinking" | "tools"
@@ -153,6 +197,8 @@ export default function ChatPage() {
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const messagesRef = useRef<Message[]>(messages);
+  const sessionIdRef = useRef<string | undefined>(sessionId);
   const abortRef = useRef<AbortController | null>(null);
   const assistantAccRef = useRef("");
   const reasoningAccRef = useRef("");
@@ -169,6 +215,14 @@ export default function ChatPage() {
   const recordingTextRef = useRef("");
   const [volumeBars, setVolumeBars] = useState<number[]>(Array(20).fill(0.15));
 
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
+
   // Auth check
   useEffect(() => {
     fetch("/api/me")
@@ -182,16 +236,160 @@ export default function ChatPage() {
       });
   }, []);
 
+  const queueVoiceText = useCallback(
+    (text: string | null | undefined, startNewSession = false) => {
+      const trimmed = text?.trim();
+      if (trimmed) setPendingVoiceText({ text: trimmed, startNewSession });
+    },
+    []
+  );
+
+  const readPendingVoiceText = useCallback((): PendingVoiceText | null => {
+    const raw = sessionStorage.getItem(PENDING_VOICE_TEXT_KEY);
+    if (!raw) return null;
+
+    try {
+      const parsed = JSON.parse(raw) as Partial<PendingVoiceText>;
+      const text = typeof parsed.text === "string" ? parsed.text.trim() : "";
+      if (!text) return null;
+      return { text, startNewSession: parsed.startNewSession === true };
+    } catch {
+      const text = raw.trim();
+      return text ? { text, startNewSession: true } : null;
+    }
+  }, []);
+
+  const markChatActivity = useCallback(() => {
+    sessionStorage.setItem(CHAT_HAS_ACTIVITY_KEY, "1");
+  }, []);
+
+  const markRestoreLatestOnReturn = useCallback(() => {
+    if (sessionStorage.getItem(CHAT_HAS_ACTIVITY_KEY) === "1") {
+      sessionStorage.setItem(CHAT_RESTORE_LATEST_KEY, "1");
+    }
+  }, []);
+
+  const writeCachedChatSession = useCallback(() => {
+    if (typeof window === "undefined") return;
+    if (sessionStorage.getItem(CHAT_HAS_ACTIVITY_KEY) !== "1") return;
+    if (isStreamingRef.current) return;
+
+    const cachedMessages = normalizeCachedMessages(messagesRef.current);
+    if (cachedMessages.length === 0) return;
+
+    const payload: CachedChatSessionPayload = {
+      sessionId: sessionIdRef.current,
+      messages: cachedMessages,
+      savedAt: Date.now(),
+    };
+    sessionStorage.setItem(CHAT_CACHED_SESSION_KEY, JSON.stringify(payload));
+  }, []);
+
+  const readCachedChatSession = useCallback((): CachedChatSessionPayload | null => {
+    const raw = sessionStorage.getItem(CHAT_CACHED_SESSION_KEY);
+    if (!raw) return null;
+
+    try {
+      const parsed = JSON.parse(raw) as Partial<CachedChatSessionPayload>;
+      const messages = Array.isArray(parsed.messages)
+        ? parsed.messages.map(coerceCachedMessage).filter((m): m is Message => m !== null)
+        : [];
+
+      if (messages.length === 0) return null;
+
+      return {
+        sessionId: typeof parsed.sessionId === "string" ? parsed.sessionId : undefined,
+        messages,
+        savedAt: typeof parsed.savedAt === "number" ? parsed.savedAt : 0,
+      };
+    } catch {
+      sessionStorage.removeItem(CHAT_CACHED_SESSION_KEY);
+      return null;
+    }
+  }, []);
+
+  const hydrateCachedChatSession = useCallback(() => {
+    const cached = readCachedChatSession();
+    if (!cached) return false;
+
+    sessionIdRef.current = cached.sessionId;
+    messagesRef.current = cached.messages;
+    setSessionId(cached.sessionId);
+    setMessages(cached.messages);
+    return true;
+  }, [readCachedChatSession]);
+
+  const prepareRestoreLatestOnReturn = useCallback(() => {
+    writeCachedChatSession();
+    markRestoreLatestOnReturn();
+  }, [markRestoreLatestOnReturn, writeCachedChatSession]);
+
+  useEffect(() => () => writeCachedChatSession(), [writeCachedChatSession]);
+
+  // Queue voice message from BottomNavBar navigation.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const pendingVoiceText = readPendingVoiceText();
+    if (pendingVoiceText) {
+      hadPendingVoiceOnMountRef.current = true;
+      sessionStorage.removeItem(PENDING_VOICE_TEXT_KEY);
+      queueMicrotask(() =>
+        queueVoiceText(pendingVoiceText.text, pendingVoiceText.startNewSession === true)
+      );
+      return;
+    }
+
+    // Backward compatibility for old /chat?voice=... links.
+    const params = new URLSearchParams(window.location.search);
+    const voiceText = params.get("voice");
+    if (!voiceText) return;
+
+    hadPendingVoiceOnMountRef.current = true;
+    queueMicrotask(() => queueVoiceText(voiceText, true));
+    params.delete("voice");
+    const nextSearch = params.toString();
+    const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`;
+    window.history.replaceState({}, "", nextUrl);
+  }, [queueVoiceText, readPendingVoiceText]);
+
+  // Queue voice message when the center nav button is used while already on /chat.
+  useEffect(() => {
+    const handleVoiceSubmit = (event: Event) => {
+      const detail = (event as CustomEvent<VoiceSubmitEventDetail>).detail;
+      queueVoiceText(detail?.text, detail?.startNewSession === true);
+    };
+
+    window.addEventListener(VOICE_SUBMIT_EVENT, handleVoiceSubmit);
+    return () => window.removeEventListener(VOICE_SUBMIT_EVENT, handleVoiceSubmit);
+  }, [queueVoiceText]);
+
+  // Render the last chat instantly on return, then let the database fetch refresh it.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const shouldRestoreLatest =
+      sessionStorage.getItem(CHAT_RESTORE_LATEST_KEY) === "1" &&
+      !hadPendingVoiceOnMountRef.current;
+    if (!shouldRestoreLatest) return;
+
+    queueMicrotask(() => {
+      if (!hadPendingVoiceOnMountRef.current) hydrateCachedChatSession();
+    });
+  }, [hydrateCachedChatSession]);
+
   const startNewSession = useCallback(async () => {
     abortRef.current?.abort();
-    setMessages([
+    const initialMessages: Message[] = [
       {
         id: "init",
         role: "agent",
         content:
           "欢迎回来。我是 Mindful，你的疗愈陪伴者。在这个当下，你感觉如何？",
       },
-    ]);
+    ];
+    messagesRef.current = initialMessages;
+    sessionIdRef.current = undefined;
+    sessionStorage.removeItem(CHAT_CACHED_SESSION_KEY);
+    setMessages(initialMessages);
     setSessionId(undefined);
     setError(null);
     setShowSidebar(false);
@@ -202,53 +400,92 @@ export default function ChatPage() {
     setSessionId(sid);
     setShowSidebar(false);
     setError(null);
+    isStreamingRef.current = true;
     setIsStreaming(true);
 
     try {
       const res = await fetch(`/api/chat/sessions/${sid}/messages`);
       const data = await res.json();
       if (data.session?.messages) {
-        setMessages(
-          data.session.messages.map((m: { id: string; role: string; content: string; toolCallsJson?: string }) => ({
+        const nextMessages: Message[] = data.session.messages.map(
+          (m: {
+            id: string;
+            role: string;
+            content: string;
+            toolCallsJson?: string;
+          }) => ({
             id: m.id,
             role: m.role === "user" ? "user" : "agent",
             content: m.content,
             toolCalls: m.toolCallsJson ? JSON.parse(m.toolCallsJson) : undefined,
-          }))
+          })
         );
+        messagesRef.current = nextMessages;
+        sessionIdRef.current = sid;
+        setMessages(nextMessages);
       }
     } catch (err) {
       console.error("Load session error:", err);
     } finally {
+      isStreamingRef.current = false;
       setIsStreaming(false);
     }
   }, []);
 
-  // Load sessions on mount
+  // Load sessions on mount before auto-submitting queued voice text.
   useEffect(() => {
-    fetch("/api/chat/sessions")
-      .then((r) => {
+    let cancelled = false;
+
+    async function loadInitialSessions() {
+      try {
+        const r = await fetch("/api/chat/sessions");
         if (r.status === 401) {
           window.location.href = "/login";
-          return null;
+          return;
         }
-        return r.json();
-      })
-      .then((data) => {
+        const data = await r.json();
+        if (cancelled) return;
         if (data?.sessions) {
           setSessions(data.sessions);
-          if (data.sessions.length > 0) {
-            loadSession(data.sessions[0].id);
+          const shouldRestoreLatest =
+            sessionStorage.getItem(CHAT_RESTORE_LATEST_KEY) === "1" &&
+            !hadPendingVoiceOnMountRef.current;
+
+          if (shouldRestoreLatest && data.sessions.length > 0) {
+            await loadSession(data.sessions[0].id);
           }
         }
-      })
-      .catch(console.error);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        if (!cancelled) setIsSessionBootstrapDone(true);
+      }
+    }
 
-  async function handleSend(overrideText?: string) {
+    loadInitialSessions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadSession]);
+
+  useEffect(() => {
+    if (!pendingVoiceText || !isSessionBootstrapDone || isStreamingRef.current || isStreaming) {
+      return;
+    }
+
+    const { text, startNewSession } = pendingVoiceText;
+    setPendingVoiceText(null);
+    void handleSend(text, { startNewSession });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingVoiceText, isSessionBootstrapDone, isStreaming]);
+
+  async function handleSend(
+    overrideText?: string,
+    options: { startNewSession?: boolean } = {}
+  ) {
     const text = (overrideText ?? input).trim();
-    if (!text || isStreaming) return;
+    if (!text || isStreamingRef.current) return;
 
     const userMsg: Message = {
       id: `u-${Date.now()}`,
@@ -257,19 +494,27 @@ export default function ChatPage() {
     };
     const assistantId = `a-${Date.now()}`;
 
-    setMessages((prev) => [
-      ...prev,
-      userMsg,
-      {
-        id: assistantId,
-        role: "agent",
-        content: "",
-        isStreaming: true,
-        toolCalls: [],
-      },
-    ]);
+    const assistantMsg: Message = {
+      id: assistantId,
+      role: "agent",
+      content: "",
+      isStreaming: true,
+      toolCalls: [],
+    };
+
+    markChatActivity();
+    const nextMessages = options.startNewSession
+      ? [userMsg, assistantMsg]
+      : [...messagesRef.current, userMsg, assistantMsg];
+    messagesRef.current = nextMessages;
+    if (options.startNewSession) {
+      sessionIdRef.current = undefined;
+      setSessionId(undefined);
+    }
+    setMessages(nextMessages);
     setInput("");
     if (textareaRef.current) textareaRef.current.style.height = "";
+    isStreamingRef.current = true;
     setIsStreaming(true);
     setCurrentAgentState("thinking");
     setError(null);
@@ -284,7 +529,10 @@ export default function ChatPage() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, sessionId }),
+        body: JSON.stringify({
+          message: text,
+          sessionId: options.startNewSession ? undefined : sessionId,
+        }),
         signal: controller.signal,
       });
 
@@ -334,6 +582,7 @@ export default function ChatPage() {
         );
       }
     } finally {
+      isStreamingRef.current = false;
       setIsStreaming(false);
       setCurrentAgentState("idle");
       abortRef.current = null;
@@ -352,7 +601,10 @@ export default function ChatPage() {
     switch (event.type) {
       case "session": {
         const sid = event.sessionId as string;
-        if (sid) setSessionId(sid);
+        if (sid) {
+          sessionIdRef.current = sid;
+          setSessionId(sid);
+        }
         break;
       }
       case "agent_start": {
@@ -621,7 +873,7 @@ export default function ChatPage() {
 
     const text = recordingTextRef.current.trim();
     if (text) {
-      setInput(text);
+      queueVoiceText(text);
     }
 
     recordingTextRef.current = "";
@@ -662,10 +914,10 @@ export default function ChatPage() {
           </div>
         </div>
         <nav className="flex gap-8 items-center h-full">
-          <a href="/chat" className="text-primary font-bold h-full flex items-center border-b-2 border-primary">Chat</a>
-          <a href="/discover" className="text-on-surface-variant hover:opacity-80 transition-opacity h-full flex items-center border-b-2 border-transparent">Discover</a>
-          <a href="/memory" className="text-on-surface-variant hover:opacity-80 transition-opacity h-full flex items-center border-b-2 border-transparent">Memory</a>
-          <a href="/profile" className="text-on-surface-variant hover:opacity-80 transition-opacity h-full flex items-center border-b-2 border-transparent">Profile</a>
+          <Link href="/chat" className="text-primary font-bold h-full flex items-center border-b-2 border-primary">Chat</Link>
+          <Link href="/discover" onClick={prepareRestoreLatestOnReturn} className="text-on-surface-variant hover:opacity-80 transition-opacity h-full flex items-center border-b-2 border-transparent">Discover</Link>
+          <Link href="/memory" onClick={prepareRestoreLatestOnReturn} className="text-on-surface-variant hover:opacity-80 transition-opacity h-full flex items-center border-b-2 border-transparent">Memory</Link>
+          <Link href="/profile" onClick={prepareRestoreLatestOnReturn} className="text-on-surface-variant hover:opacity-80 transition-opacity h-full flex items-center border-b-2 border-transparent">Profile</Link>
         </nav>
       </header>
 
@@ -1031,34 +1283,6 @@ function UserBubble({ message }: { message: Message }) {
       <div className="bg-surface-container-high rounded-[20px] rounded-tr-[4px] px-4 py-2.5 max-w-[85%] md:max-w-[70%]">
         <p className="text-on-surface text-base leading-relaxed">{message.content}</p>
       </div>
-    </div>
-  );
-}
-
-function ToolCallIndicators({ tools }: { tools: ToolCallInfo[] }) {
-  return (
-    <div className="flex flex-wrap gap-1.5 mt-3">
-      {tools.map((tool) => (
-        <span
-          key={tool.id}
-          className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border ${
-            tool.status === "running"
-              ? "bg-tertiary-container/40 border-tertiary/20 text-on-tertiary-container"
-              : tool.status === "error"
-              ? "bg-error-container/40 border-error/20 text-on-error-container"
-              : "bg-surface-container-high border-outline-variant/20 text-on-surface-variant"
-          }`}
-        >
-          <span className="material-symbols-outlined text-[14px]">
-            {tool.status === "running"
-              ? "sync"
-              : tool.status === "error"
-              ? "error"
-              : "check_circle"}
-          </span>
-          {tool.label}
-        </span>
-      ))}
     </div>
   );
 }
