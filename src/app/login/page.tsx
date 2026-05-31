@@ -49,6 +49,7 @@ export default function LoginPage() {
           src="https://lh3.googleusercontent.com/aida-public/AB6AXuCm97K8ZZvci6jBa0e8OmzlmnZNwGMD69Xa8Qd7v4ICA-DJnOZEzGUBKMaEuliXKSk_yVW7awtCRHtq-uAjHWdMzBJ_ER0biUEjl-OsIIhZ21v0zdKFcGglYCJtwJ_9FemAWWqfC5DsIRjnq8dXpm4fwg_k2d7BSOaKCORYdOjMQmwf7Wdksa4Ko8KFJ8bt7AGfwu4m3KPEsVdyMB79Lfx8ZPq2MAWltVITmBz8wElmVucXqWzb13APjlpnTtuC5ROrwtnx86M3tGA"
           alt="Serene minimal interior"
           fill
+          sizes="(min-width: 1024px) 50vw, 100vw"
           className="object-cover opacity-90 mix-blend-multiply"
           priority
         />
