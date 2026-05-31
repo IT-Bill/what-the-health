@@ -1,3 +1,14 @@
+allowBuilds:
+  '@google/genai': true
+  '@prisma/engines': true
+  esbuild: true
+  prisma: true
+  protobufjs: true
+  sharp: true
+  unrs-resolver: true
 ignoredBuiltDependencies:
   - sharp
   - unrs-resolver
+minimumReleaseAgeExclude:
+  - '@earendil-works/pi-agent-core@0.78.0'
+  - '@earendil-works/pi-ai@0.78.0'

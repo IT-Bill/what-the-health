@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { NotificationToast } from "@/components/notification-toast";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -29,7 +30,10 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-screen flex flex-col">{children}</body>
+      <body className="min-h-screen flex flex-col">
+        <NotificationToast />
+        {children}
+      </body>
     </html>
   );
 }
