@@ -427,7 +427,7 @@ function handleClientConnection(clientWs: WebSocket) {
 // Start Server
 // ---------------------------------------------------------------------------
 
-const wss = new WebSocketServer({ port: PORT });
+const wss = new WebSocketServer({ port: PORT, host: "0.0.0.0" });
 
 wss.on("connection", handleClientConnection);
 
