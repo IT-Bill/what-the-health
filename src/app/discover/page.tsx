@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import type { PostCard } from "@/lib/post-types";
 import type { ShopApiResponse } from "@/lib/shop-types";
+import { Icon } from "@/components/icon";
 
 // --- Top-level tabs ---
 const TOP_TABS = ["文章", "商城"] as const;
@@ -111,7 +112,7 @@ function PostsTab({ isLoggedIn }: { isLoggedIn: boolean }) {
         </div>
       ) : posts.length === 0 ? (
         <div className="text-center py-20 text-on-surface-variant">
-          <span className="material-symbols-outlined text-5xl mb-4 block">article</span>
+          <Icon name="article" />
           <p>暂无内容</p>
         </div>
       ) : (
@@ -138,9 +139,7 @@ function PostCardComponent({ post }: { post: PostCard }) {
             />
             <div className="absolute top-2 left-2 glass-panel px-2 py-0.5 rounded-lg flex items-center gap-1">
               {post.categoryIcon && (
-                <span className="material-symbols-outlined text-xs text-tertiary">
-                  {post.categoryIcon}
-                </span>
+                <Icon name={post.categoryIcon} size={14} className="text-tertiary" />
               )}
               <span className="text-[10px] text-tertiary font-medium uppercase tracking-wider">
                 {post.category}
@@ -163,7 +162,7 @@ function PostCardComponent({ post }: { post: PostCard }) {
                 {post.author.avatarUrl ? (
                   <img src={post.author.avatarUrl} alt={post.author.name} className="absolute inset-0 w-full h-full object-cover" />
                 ) : (
-                  <span className="material-symbols-outlined text-xs text-on-surface-variant absolute inset-0 flex items-center justify-center">person</span>
+                  <Icon name="person" />
                 )}
               </div>
               <span className="text-[10px] md:text-xs text-on-surface-variant truncate max-w-[60px] md:max-w-none">
@@ -172,11 +171,11 @@ function PostCardComponent({ post }: { post: PostCard }) {
             </div>
             <div className="flex items-center gap-2 text-[10px] md:text-xs text-on-surface-variant">
               <span className="flex items-center gap-0.5">
-                <span className="material-symbols-outlined text-xs md:text-sm">favorite</span>
+                <Icon name="favorite" />
                 {post._count.likes}
               </span>
               <span className="flex items-center gap-0.5">
-                <span className="material-symbols-outlined text-xs md:text-sm">chat_bubble</span>
+                <Icon name="chat_bubble" />
                 {post._count.comments}
               </span>
             </div>
@@ -222,7 +221,7 @@ function ShopTab({ isLoggedIn }: { isLoggedIn: boolean }) {
   if (!data) {
     return (
       <div className="text-center py-20 text-on-surface-variant">
-        <span className="material-symbols-outlined text-5xl mb-4 block">error</span>
+        <Icon name="error" />
         <p>加载失败</p>
       </div>
     );
@@ -251,14 +250,14 @@ function ShopTab({ isLoggedIn }: { isLoggedIn: boolean }) {
           </>
         ) : (
           <>
-            <span className="material-symbols-outlined text-4xl text-outline mb-2">account_circle</span>
+            <Icon name="account_circle" />
             <p className="text-base text-on-surface mb-3">登录后查看你的积分余额</p>
             <Link
               href="/login"
               className="inline-flex items-center gap-1.5 px-6 py-2.5 rounded-full bg-inverse-surface text-inverse-on-surface text-sm font-medium hover:opacity-90 transition-opacity"
             >
               去登录
-              <span className="material-symbols-outlined text-base">arrow_forward</span>
+              <Icon name="arrow_forward" />
             </Link>
           </>
         )}
@@ -309,7 +308,7 @@ function ShopRules({ rules }: { rules: ShopApiResponse["rules"] }) {
         {rules.map((rule) => (
           <div key={rule.id} className="flex items-center gap-3 py-2 border-b border-outline-variant/10 last:border-b-0">
             <div className="w-9 h-9 rounded-xl bg-secondary-container/50 flex items-center justify-center flex-shrink-0">
-              <span className="material-symbols-outlined text-secondary text-lg">
+              <span className="text-secondary text-lg">
                 {rule.icon || "star"}
               </span>
             </div>

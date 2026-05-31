@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Icon } from "./icon";
 
 interface TopAppBarProps {
   title?: string;
@@ -49,14 +50,14 @@ export function TopAppBar({
           href={leftHref}
           className="text-on-surface hover:opacity-70 transition-opacity active:scale-95 duration-300 flex items-center justify-center p-2 rounded-full"
         >
-          <span className="material-symbols-outlined">{leftIcon}</span>
+          <Icon name={leftIcon} size={24} />
         </Link>
       ) : (
         <button
           aria-label="Menu"
           className="text-on-surface hover:opacity-70 transition-opacity active:scale-95 duration-300 flex items-center justify-center p-2 rounded-full"
         >
-          <span className="material-symbols-outlined">{leftIcon}</span>
+          <Icon name={leftIcon} size={24} />
         </button>
       )}
 
@@ -71,7 +72,7 @@ export function TopAppBar({
           onClick={handleBack}
           className="text-on-surface hover:opacity-70 transition-opacity active:scale-95 duration-300 flex items-center justify-center p-2 rounded-full"
         >
-          <span className="material-symbols-outlined">{rightIcon}</span>
+          <Icon name={rightIcon} size={24} />
         </button>
       ) : rightHref ? (
         <Link
@@ -79,7 +80,7 @@ export function TopAppBar({
           aria-label={rightAriaLabel}
           className="text-on-surface hover:opacity-70 transition-opacity active:scale-95 duration-300 flex items-center justify-center p-2 rounded-full"
         >
-          <span className="material-symbols-outlined">{rightIcon}</span>
+          <Icon name={rightIcon} size={24} />
         </Link>
       ) : (
         <button
@@ -87,7 +88,7 @@ export function TopAppBar({
           aria-label={rightAriaLabel}
           className="text-on-surface hover:opacity-70 transition-opacity active:scale-95 duration-300 flex items-center justify-center p-2 rounded-full"
         >
-          <span className="material-symbols-outlined">{rightIcon}</span>
+          <Icon name={rightIcon} size={24} />
         </button>
       )}
     </header>

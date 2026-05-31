@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { Icon } from "@/components/icon";
 
 interface HealthStat {
   metric: string;
@@ -92,7 +93,7 @@ export default function HealthDataPage() {
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-secondary text-lg">{info.icon}</span>
+                      <Icon name={info.icon} />
                       <span className="text-xs font-medium text-on-surface-variant">{info.label}</span>
                     </div>
                     <p className="text-xl font-semibold text-on-surface">
@@ -111,7 +112,7 @@ export default function HealthDataPage() {
           </section>
         ) : !loading ? (
           <div className="text-center py-16 text-on-surface-variant">
-            <span className="material-symbols-outlined text-5xl mb-4 block">health_metrics</span>
+            <Icon name="health_metrics" />
             <p className="text-lg">还没有健康数据</p>
             <p className="text-sm mt-1">
               去{" "}
@@ -168,7 +169,7 @@ export default function HealthDataPage() {
                 const info = METRIC_LABELS[r.metric] || { label: r.metric, icon: "data_usage" };
                 return (
                   <div key={r.id} className="flex items-center gap-3 py-2 border-b border-outline-variant/10 last:border-b-0">
-                    <span className="material-symbols-outlined text-on-surface-variant text-lg">{info.icon}</span>
+                    <Icon name={info.icon} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-on-surface">
                         {r.value.toLocaleString()} {r.unit}
@@ -202,7 +203,7 @@ function Header({ title }: { title: string }) {
         href="/profile"
         className="text-on-surface hover:opacity-70 transition-opacity active:scale-95 duration-300 flex items-center justify-center w-10 h-10 rounded-full"
       >
-        <span className="material-symbols-outlined">arrow_back</span>
+        <Icon name="arrow_back" />
       </Link>
       <h1 className="[font-family:var(--font-display)] text-xl font-medium text-on-surface flex-1 text-center px-4">
         {title}
@@ -212,7 +213,7 @@ function Header({ title }: { title: string }) {
         aria-label="通知中心"
         className="text-on-surface hover:opacity-70 transition-opacity active:scale-95 duration-300 flex items-center justify-center w-10 h-10 rounded-full"
       >
-        <span className="material-symbols-outlined">notifications</span>
+        <Icon name="notifications" />
       </Link>
     </header>
   );

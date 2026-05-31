@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Icon } from "@/components/icon";
 
 interface PrefItem {
   id: string;
@@ -42,9 +43,7 @@ export default function PreferencesPage() {
               }`}
             >
               <div className="flex items-center gap-4">
-                <span className="material-symbols-outlined text-outline">
-                  {item.icon}
-                </span>
+                <Icon name={item.icon} className="text-outline" size={20} />
                 <span className="text-lg text-on-surface">{item.label}</span>
               </div>
               {item.type === "toggle" ? (
@@ -68,9 +67,7 @@ export default function PreferencesPage() {
                   href={item.href || "#"}
                   className="flex items-center text-on-surface-variant hover:opacity-70 transition-opacity"
                 >
-                  <span className="material-symbols-outlined text-[18px]">
-                    chevron_right
-                  </span>
+                  <Icon name="chevron_right" className="text-[18px]" />
                 </Link>
               )}
             </div>
@@ -88,7 +85,7 @@ function Header({ title }: { title: string }) {
         href="/profile"
         className="text-on-surface hover:opacity-70 transition-opacity active:scale-95 duration-300 flex items-center justify-center w-10 h-10 rounded-full"
       >
-        <span className="material-symbols-outlined">arrow_back</span>
+        <Icon name="arrow_back" />
       </Link>
       <h1 className="font-[var(--font-display)] text-xl font-medium text-on-surface flex-1 text-center px-4">
         {title}
@@ -98,7 +95,7 @@ function Header({ title }: { title: string }) {
         aria-label="通知中心"
         className="text-on-surface hover:opacity-70 transition-opacity active:scale-95 duration-300 flex items-center justify-center w-10 h-10 rounded-full"
       >
-        <span className="material-symbols-outlined">notifications</span>
+        <Icon name="notifications" />
       </Link>
     </header>
   );

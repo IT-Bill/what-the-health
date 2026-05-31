@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { Icon } from "@/components/icon";
 
 interface HealthDevice {
   id: string;
@@ -223,7 +224,7 @@ export default function HealthConnectionsPage() {
             >
               <div className="flex items-center gap-4 flex-1 min-w-0">
                 <div className="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface flex-shrink-0">
-                  <span className="material-symbols-outlined">{device.icon}</span>
+                  <Icon name={device.icon} />
                 </div>
                 <div className="min-w-0">
                   <p className="text-base text-on-surface font-medium">{device.name}</p>
@@ -252,17 +253,16 @@ export default function HealthConnectionsPage() {
               {imports.map((imp) => (
                 <div key={imp.id} className="bg-primary-container rounded-2xl p-4 ambient-shadow flex items-center gap-3">
                   <div className="w-9 h-9 rounded-xl bg-surface-container-highest flex items-center justify-center">
-                    <span
-                      className={`material-symbols-outlined text-lg ${
+                    <Icon
+                      name={imp.status === "completed" ? "check_circle" : imp.status === "failed" ? "error" : "hourglass_top"}
+                      className={
                         imp.status === "completed"
                           ? "text-secondary"
                           : imp.status === "failed"
                           ? "text-error"
                           : "text-on-surface-variant"
-                      }`}
-                    >
-                      {imp.status === "completed" ? "check_circle" : imp.status === "failed" ? "error" : "hourglass_top"}
-                    </span>
+                      }
+                    />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-on-surface truncate">{imp.fileName}</p>
@@ -287,7 +287,7 @@ export default function HealthConnectionsPage() {
                       className="text-on-surface-variant hover:text-error transition-colors p-1"
                       title="删除"
                     >
-                      <span className="material-symbols-outlined text-lg">delete</span>
+                      <Icon name="delete" />
                     </button>
                   )}
                 </div>
@@ -312,7 +312,7 @@ export default function HealthConnectionsPage() {
                 {preview ? "数据预览" : "导入健康数据"}
               </h2>
               <button onClick={handleCloseDialog} className="text-on-surface-variant">
-                <span className="material-symbols-outlined">close</span>
+                <Icon name="close" />
               </button>
             </div>
 
@@ -342,7 +342,7 @@ export default function HealthConnectionsPage() {
                       </>
                     ) : (
                       <>
-                        <span className="material-symbols-outlined text-3xl text-on-surface-variant">upload_file</span>
+                        <Icon name="upload_file" />
                         <p className="text-sm text-on-surface-variant">点击选择 ZIP 文件</p>
                         <p className="text-xs text-outline">最大 500MB</p>
                       </>
@@ -508,7 +508,7 @@ export default function HealthConnectionsPage() {
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-lg">
+                  <span className="text-lg">
                     {uploadResult.success ? "check_circle" : "error"}
                   </span>
                   {uploadResult.message}
@@ -518,7 +518,7 @@ export default function HealthConnectionsPage() {
 
             {/* Privacy Notice */}
             <div className="flex items-start gap-2 pt-2 border-t border-outline-variant/10">
-              <span className="material-symbols-outlined text-sm text-outline mt-0.5">shield</span>
+              <Icon name="shield" />
               <p className="text-[11px] text-outline leading-relaxed">
                 我们将你的隐私放在首位。所有健康数据仅在你的设备和我们的服务器之间传输，解析完成后原始文件立即删除，不会存储或发送给任何第三方。你可以随时在导入记录中删除已导入的数据。
               </p>
@@ -537,7 +537,7 @@ function Header({ title }: { title: string }) {
         href="/profile"
         className="text-on-surface hover:opacity-70 transition-opacity active:scale-95 duration-300 flex items-center justify-center w-10 h-10 rounded-full"
       >
-        <span className="material-symbols-outlined">arrow_back</span>
+        <Icon name="arrow_back" />
       </Link>
       <h1 className="[font-family:var(--font-display)] text-xl font-medium text-on-surface flex-1 text-center px-4">
         {title}
@@ -547,7 +547,7 @@ function Header({ title }: { title: string }) {
         aria-label="通知中心"
         className="text-on-surface hover:opacity-70 transition-opacity active:scale-95 duration-300 flex items-center justify-center w-10 h-10 rounded-full"
       >
-        <span className="material-symbols-outlined">notifications</span>
+        <Icon name="notifications" />
       </Link>
     </header>
   );

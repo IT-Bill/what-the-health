@@ -15,6 +15,7 @@ import {
   type PendingVoiceText,
   type VoiceSubmitEventDetail,
 } from "@/lib/voice-events";
+import { Icon } from "@/components/icon";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -889,9 +890,7 @@ export default function ChatPage() {
           onClick={() => setShowSidebar(!showSidebar)}
           className="flex items-center gap-2 text-on-surface-variant"
         >
-          <span className="material-symbols-outlined">
-            {showSidebar ? "close" : "menu"}
-          </span>
+          <Icon name={showSidebar ? "close" : "menu"} />
         </button>
         <div className="font-[var(--font-display)] text-2xl font-medium text-primary">
           Mindful
@@ -902,14 +901,14 @@ export default function ChatPage() {
           title="通知中心"
           aria-label="通知中心"
         >
-          <span className="material-symbols-outlined text-xl">notifications</span>
+          <Icon name="notifications" />
         </a>
       </header>
 
       {/* Desktop TopAppBar */}
       <header className="hidden md:flex bg-surface/80 backdrop-blur-xl sticky top-0 z-50 border-b border-outline-variant/30 justify-between items-center w-full px-16 h-20">
         <div className="flex items-center gap-4">
-          <span className="material-symbols-outlined text-primary">spa</span>
+          <Icon name="spa" />
           <div className="font-[var(--font-display)] text-2xl font-medium text-primary">
             Mindful
           </div>
@@ -926,7 +925,7 @@ export default function ChatPage() {
           title="通知中心"
           aria-label="通知中心"
         >
-          <span className="material-symbols-outlined text-xl">notifications</span>
+          <Icon name="notifications" />
         </a>
       </header>
 
@@ -955,7 +954,7 @@ export default function ChatPage() {
               onClick={() => setShowSidebar(false)}
               className="md:hidden text-on-surface-variant"
             >
-              <span className="material-symbols-outlined">close</span>
+              <Icon name="close" />
             </button>
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
@@ -963,7 +962,7 @@ export default function ChatPage() {
               onClick={startNewSession}
               className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-primary bg-primary-container/40 hover:bg-primary-container/60 transition-colors"
             >
-              <span className="material-symbols-outlined">add</span>
+              <Icon name="add" />
               <span className="text-sm font-medium">新建对话</span>
             </button>
             {sessions.map((s) => (
@@ -1009,7 +1008,7 @@ export default function ChatPage() {
                       onClick={() => handleSend(s.label)}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-outline-variant/40 bg-surface-container-low hover:bg-surface-container-high transition-colors text-xs text-on-surface-variant"
                     >
-                      <span className="material-symbols-outlined text-sm">{s.icon}</span>
+                      <Icon name={s.icon} />
                       {s.label}
                     </button>
                   ))}
@@ -1059,12 +1058,7 @@ export default function ChatPage() {
                   onClick={isRecording ? () => { cleanupRecording(); setIsRecording(false); recordingTextRef.current = ""; } : () => setShowAttachmentMenu(!showAttachmentMenu)}
                   className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-colors"
                 >
-                  <span
-                    className="material-symbols-outlined text-2xl transition-transform duration-300"
-                    style={{ transform: (isRecording || showAttachmentMenu) ? "rotate(45deg)" : "rotate(0deg)" }}
-                  >
-                    add
-                  </span>
+                  <Icon name="add" className="text-2xl transition-transform duration-300" />
                 </button>
 
                 {/* Textarea or Waveform */}
@@ -1098,7 +1092,7 @@ export default function ChatPage() {
                     disabled={isStreaming}
                     className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-on-surface text-surface hover:opacity-90 transition-all disabled:opacity-40"
                   >
-                    <span className="material-symbols-outlined text-xl">arrow_upward</span>
+                    <Icon name="arrow_upward" />
                   </button>
                 ) : (
                   <button
@@ -1108,9 +1102,7 @@ export default function ChatPage() {
                       isRecording ? "bg-error text-on-error" : "text-on-surface-variant hover:bg-surface-container-low"
                     } disabled:opacity-40`}
                   >
-                    <span className="material-symbols-outlined text-xl">
-                      {isRecording ? "stop" : "mic_none"}
-                    </span>
+                    <Icon name={isRecording ? "stop" : "mic_none"} size={20} />
                   </button>
                 )}
               </div>
@@ -1176,14 +1168,9 @@ function AgentMessage({ message }: { message: Message }) {
             onClick={() => setExpanded(e => !e)}
             className="flex items-center gap-1.5 text-on-surface-variant/60 hover:text-on-surface-variant transition-colors text-sm"
           >
-            <span className="material-symbols-outlined text-base">key</span>
+            <Icon name="key" />
             <span>{summary}</span>
-            <span
-              className="material-symbols-outlined text-base"
-              style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.12s" }}
-            >
-              expand_more
-            </span>
+            <Icon name="expand_more" className="text-base" />
           </button>
           {expanded && (
             <div className="mt-2 pl-5 border-l-2 border-outline-variant/30 text-on-surface-variant/70 text-sm leading-relaxed space-y-2">
@@ -1248,14 +1235,9 @@ function AgentThinkingState({
             onClick={() => setExpanded(e => !e)}
             className="flex items-center gap-1.5 text-on-surface-variant/60 hover:text-on-surface-variant transition-colors text-sm"
           >
-            <span className="material-symbols-outlined text-base">key</span>
+            <Icon name="key" />
             <span>{doneTools.length} 次工具调用</span>
-            <span
-              className="material-symbols-outlined text-base"
-              style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.12s" }}
-            >
-              expand_more
-            </span>
+            <Icon name="expand_more" className="text-base" />
           </button>
           {expanded && (
             <div className="mt-2 pl-5 border-l-2 border-outline-variant/30 text-on-surface-variant/70 text-sm space-y-1.5">

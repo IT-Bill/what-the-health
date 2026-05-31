@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Icon } from "@/components/icon";
 
 const CATEGORIES = [
   { id: "mindfulness", label: "正念", icon: "spa" },
@@ -70,7 +71,7 @@ export default function NewPostPage() {
           href="/discover"
           className="text-on-surface hover:opacity-70 transition-opacity flex items-center gap-1"
         >
-          <span className="material-symbols-outlined">close</span>
+          <Icon name="close" />
         </Link>
         <h1 className="[font-family:var(--font-display)] text-lg font-medium text-primary">
           发布文章
@@ -98,7 +99,7 @@ export default function NewPostPage() {
                   : "border border-outline-variant/30 text-on-surface-variant hover:bg-surface-variant/20"
               }`}
             >
-              <span className="material-symbols-outlined text-base">{cat.icon}</span>
+              <Icon name={cat.icon} />
               {cat.label}
             </button>
           ))}

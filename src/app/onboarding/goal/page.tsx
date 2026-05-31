@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Icon } from "@/components/icon";
 
 interface GoalOption {
   id: string;
@@ -44,7 +45,7 @@ export default function OnboardingGoalPage() {
           aria-label="Close"
           className="text-outline hover:opacity-80 transition-opacity p-2 rounded-full"
         >
-          <span className="material-symbols-outlined">close</span>
+          <Icon name="close" />
         </button>
         <h1 className="font-[var(--font-display)] text-2xl font-medium text-primary absolute left-1/2 -translate-x-1/2">
           Mindful
@@ -98,9 +99,7 @@ export default function OnboardingGoalPage() {
                 </div>
                 {/* Check indicator */}
                 <div className="absolute top-6 right-6 w-6 h-6 rounded-full border-2 border-outline-variant peer-checked:border-secondary peer-checked:bg-secondary flex items-center justify-center transition-colors">
-                  <span className="material-symbols-outlined text-white text-[16px] opacity-0 peer-checked:opacity-100">
-                    check
-                  </span>
+                  <Icon name="check" className="text-white text-[16px] opacity-0 peer-checked:opacity-100" />
                 </div>
               </div>
             </label>
@@ -114,14 +113,14 @@ export default function OnboardingGoalPage() {
           onClick={() => router.back()}
           className="flex flex-col items-center justify-center text-on-surface-variant px-6 py-2 hover:opacity-80 transition-opacity text-sm font-medium"
         >
-          <span className="material-symbols-outlined mb-1">arrow_back</span>
+          <Icon name="arrow_back" />
           Back
         </button>
         <button
           onClick={() => router.push("/")}
           className="flex flex-col items-center justify-center bg-primary text-on-primary rounded-full px-6 py-2 hover:bg-primary/90 transition-all duration-300 active:scale-95 text-sm font-medium"
         >
-          <span className="material-symbols-outlined mb-1">arrow_forward</span>
+          <Icon name="arrow_forward" />
           Next
         </button>
       </nav>
