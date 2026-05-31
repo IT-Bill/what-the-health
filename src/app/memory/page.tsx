@@ -9,6 +9,7 @@ import type {
   InsightRecord,
   MemoryApiResponse,
 } from "@/lib/memory-types";
+import { Icon } from "@/components/icon";
 
 const TABS = ["周报", "月报", "洞察"] as const;
 type Tab = (typeof TABS)[number];
@@ -233,7 +234,7 @@ function PeriodNav({
           disabled={!hasPrev}
           className="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-variant/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
         >
-          <span className="material-symbols-outlined">chevron_left</span>
+          <Icon name="chevron_left" />
         </button>
         <span className="text-base font-medium text-on-surface">{label}</span>
         <button
@@ -241,7 +242,7 @@ function PeriodNav({
           disabled={!hasNext}
           className="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-variant/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
         >
-          <span className="material-symbols-outlined">chevron_right</span>
+          <Icon name="chevron_right" />
         </button>
         <button
           onClick={onRegenerate}
@@ -255,7 +256,7 @@ function PeriodNav({
             </>
           ) : (
             <>
-              <span className="material-symbols-outlined text-sm">autorenew</span>
+              <Icon name="autorenew" />
               重新生成
             </>
           )}
@@ -370,7 +371,7 @@ function ReportView({
               className="bg-primary-container rounded-2xl p-5 ambient-shadow flex flex-col gap-2"
             >
               <div className="flex items-center gap-2 text-on-surface-variant">
-                <span className="material-symbols-outlined text-lg">{stat.icon}</span>
+                <Icon name={stat.icon} />
                 <span className="text-xs font-medium uppercase tracking-wider">
                   {stat.label}
                 </span>
@@ -459,9 +460,7 @@ function ReportView({
                 key={h.label}
                 className="flex items-center gap-4 py-2 border-b border-on-surface-variant/5 last:border-b-0"
               >
-                <span className="material-symbols-outlined text-secondary text-xl">
-                  {h.icon}
-                </span>
+                <Icon name={h.icon} className="text-secondary" size={22} />
                 <span className="text-base text-on-surface-variant flex-1">{h.label}</span>
                 <span className="text-base font-medium text-on-surface">{h.value}</span>
               </div>
@@ -680,7 +679,7 @@ function DemoView({ demos, periodType, activeTab }: { demos: DemoEntry[]; period
   if (demos.length === 0) {
     return (
       <div className="text-center py-16 text-on-surface-variant">
-        <span className="material-symbols-outlined text-5xl mb-4 block">auto_stories</span>
+        <Icon name="auto_stories" />
         <p>暂无示例数据</p>
       </div>
     );
@@ -719,7 +718,7 @@ function DemoView({ demos, periodType, activeTab }: { demos: DemoEntry[]; period
     <div className="flex flex-col gap-6 animate-[fadeIn_0.4s_ease]">
       {/* CTA Banner */}
       <section className="bg-gradient-to-br from-secondary-container/50 to-tertiary-container/30 rounded-2xl p-6 text-center border border-outline-variant/20">
-        <span className="material-symbols-outlined text-3xl text-secondary mb-2">auto_awesome</span>
+        <Icon name="auto_awesome" />
         <p className="text-base font-medium text-on-surface mb-1">解锁你的专属健康记忆</p>
         <p className="text-sm text-on-surface-variant mb-4">登录后，AI 会为你生成个性化的周报、月报和洞察</p>
         <Link
@@ -727,7 +726,7 @@ function DemoView({ demos, periodType, activeTab }: { demos: DemoEntry[]; period
           className="inline-flex items-center gap-1.5 px-6 py-2.5 rounded-full bg-inverse-surface text-inverse-on-surface text-sm font-medium hover:opacity-90 transition-opacity"
         >
           登录 / 注册
-          <span className="material-symbols-outlined text-base">arrow_forward</span>
+          <Icon name="arrow_forward" />
         </Link>
       </section>
 
@@ -762,7 +761,7 @@ function DemoView({ demos, periodType, activeTab }: { demos: DemoEntry[]; period
                     {entry.user.avatarUrl ? (
                       <img src={entry.user.avatarUrl} alt={entry.user.name} className="w-full h-full object-cover" />
                     ) : (
-                      <span className="material-symbols-outlined text-sm text-on-surface-variant">person</span>
+                      <Icon name="person" />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -839,9 +838,7 @@ function LoadingSkeleton() {
 function EmptyState({ onGenerate, generating }: { onGenerate: () => void; generating: boolean }) {
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center">
-      <span className="material-symbols-outlined text-5xl text-outline-variant mb-4">
-        auto_stories
-      </span>
+      <Icon name="auto_stories" className="text-5xl text-outline-variant mb-4" />
       <p className="text-lg text-on-surface-variant">还没有这个时期的报告</p>
       <p className="text-sm text-outline mt-2 mb-6">点击下方按钮立即生成，或继续使用Mindful等待自动生成</p>
       <button
@@ -856,7 +853,7 @@ function EmptyState({ onGenerate, generating }: { onGenerate: () => void; genera
           </>
         ) : (
           <>
-            <span className="material-symbols-outlined text-lg">magic_button</span>
+            <Icon name="magic_button" />
             生成报告
           </>
         )}

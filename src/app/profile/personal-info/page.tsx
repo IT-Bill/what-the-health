@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Icon } from "@/components/icon";
 
 interface User {
   id: string;
@@ -192,7 +193,7 @@ function Header({ title }: { title: string }) {
         href="/profile"
         className="text-on-surface hover:opacity-70 transition-opacity active:scale-95 duration-300 flex items-center justify-center w-10 h-10 rounded-full"
       >
-        <span className="material-symbols-outlined">arrow_back</span>
+        <Icon name="arrow_back" />
       </Link>
       <h1 className="font-[var(--font-display)] text-xl font-medium text-on-surface flex-1 text-center px-4">
         {title}
@@ -202,7 +203,7 @@ function Header({ title }: { title: string }) {
         aria-label="通知中心"
         className="text-on-surface hover:opacity-70 transition-opacity active:scale-95 duration-300 flex items-center justify-center w-10 h-10 rounded-full"
       >
-        <span className="material-symbols-outlined">notifications</span>
+        <Icon name="notifications" />
       </Link>
     </header>
   );

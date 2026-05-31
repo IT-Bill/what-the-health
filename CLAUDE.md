@@ -22,7 +22,7 @@ The design system is defined in `design/quiet_luxury_wellness/DESIGN.md` and imp
 
 - **Colors**: Material Design 3 tonal palette (surface, primary, secondary, tertiary + on-* variants). Use semantic color names like `bg-primary-container`, `text-on-surface-variant`.
 - **Typography**: Playfair Display (headings via `font-[var(--font-display)]`) and Geist (body via `font-[var(--font-body)]`). Loaded via `<link>` tags in the root layout, not `next/font/google` (build environment lacks network access).
-- **Icons**: Material Symbols Outlined, used as `<span className="material-symbols-outlined">icon_name</span>`. Fill state toggled via `style={{ fontVariationSettings: "'FILL' 1" }}`.
+- **Icons**: Lucide React (`lucide-react`), used via `<Icon name="icon_name" />` component from `src/components/icon.tsx`. Filled state via `filled` prop. Icon names use Material Symbols naming convention (mapped internally to Lucide components).
 - **Utilities**: `.ambient-shadow` and `.glass-panel` are defined in globals.css for the design system's elevation patterns.
 
 ### Routing & Navigation

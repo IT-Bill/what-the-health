@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Icon } from "@/components/icon";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -81,9 +82,7 @@ export default function LoginPage() {
                   账号
                 </label>
                 <div className="relative">
-                  <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline-variant pointer-events-none">
-                    mail
-                  </span>
+                  <Icon name="key" className="absolute left-4 top-1/2 -translate-y-1/2 text-outline-variant pointer-events-none" size={20} />
                   <input
                     id="email"
                     name="email"
@@ -105,9 +104,7 @@ export default function LoginPage() {
                   密码
                 </label>
                 <div className="relative">
-                  <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline-variant pointer-events-none">
-                    lock
-                  </span>
+                  <Icon name="lock" className="absolute left-4 top-1/2 -translate-y-1/2 text-outline-variant pointer-events-none" size={20} />
                   <input
                     id="password"
                     name="password"
