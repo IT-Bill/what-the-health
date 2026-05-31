@@ -2,14 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { AppShell } from "@/components/app-shell";
 import type { PostCard } from "@/lib/post-types";
-import type { ShopApiResponse } from "@/lib/shop-types";
 import { Icon } from "@/components/icon";
-
-// --- Top-level tabs ---
-const TOP_TABS = ["文章", "商城"] as const;
-type TopTab = (typeof TOP_TABS)[number];
 
 const CATEGORIES = [
   { id: "all", label: "全部" },
@@ -20,50 +14,14 @@ const CATEGORIES = [
 ];
 
 export default function DiscoverPage() {
-  const [topTab, setTopTab] = useState<TopTab>("文章");
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-
-  useEffect(() => {
-    fetch("/api/me")
-      .then((r) => { if (r.ok) setIsLoggedIn(true); })
-      .catch(() => {});
-  }, []);
-
-  return (
-    <AppShell>
-      <div className="flex flex-col gap-6 max-w-5xl mx-auto w-full">
-        {/* Top Tab Switch */}
-        <div className="flex gap-1 bg-surface-container rounded-xl p-1 self-center">
-          {TOP_TABS.map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setTopTab(tab)}
-              className={`px-6 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
-                topTab === tab
-                  ? "bg-surface text-on-surface ambient-shadow"
-                  : "text-on-surface-variant hover:text-on-surface"
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-
-        {/* Tab Content */}
-        {topTab === "文章" ? <PostsTab isLoggedIn={isLoggedIn} /> : <ShopTab isLoggedIn={isLoggedIn} />}
-      </div>
-    </AppShell>
-  );
-}
-
-// ============================================================================
-// Posts Tab (existing functionality)
-// ============================================================================
-
-function PostsTab({ isLoggedIn }: { isLoggedIn: boolean }) {
   const [posts, setPosts] = useState<PostCard[]>([]);
   const [activeCategory, setActiveCategory] = useState("all");
   const [loading, setLoading] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/me").then((r) => { if (r.ok) setIsLoggedIn(true); }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -74,15 +32,6 @@ function PostsTab({ isLoggedIn }: { isLoggedIn: boolean }) {
       .catch(() => setPosts([]))
       .finally(() => setLoading(false));
   }, [activeCategory]);
-
-  function handleCreatePost() {
-    if (!isLoggedIn) {
-      window.location.href = "/login";
-      return;
-    }
-    // TODO: navigate to post creation page
-    window.location.href = "/discover/new";
-  }
 
   return (
     <div className="flex flex-col gap-6 animate-[fadeIn_0.3s_ease] relative">
@@ -122,6 +71,16 @@ function PostsTab({ isLoggedIn }: { isLoggedIn: boolean }) {
           ))}
         </div>
       )}
+
+      {/* FAB */}
+      {isLoggedIn && (
+        <Link
+          href="/discover/new"
+          className="fixed bottom-24 right-6 w-14 h-14 bg-secondary text-on-secondary rounded-full flex items-center justify-center shadow-lg hover:opacity-90 transition-opacity z-40"
+        >
+          <Icon name="add" size={24} />
+        </Link>
+      )}
     </div>
   );
 }
@@ -147,251 +106,34 @@ function PostCardComponent({ post }: { post: PostCard }) {
             </div>
           </div>
         )}
-        <div className="p-3 md:p-5 flex flex-col flex-1 gap-2">
-          <h2 className="[font-family:var(--font-display)] text-sm md:text-lg font-medium text-on-surface leading-snug line-clamp-2 group-hover:text-primary transition-colors">
+        <div className="p-4 md:p-5 flex flex-col gap-2 flex-1">
+          <h2 className="text-sm md:text-base font-medium text-on-surface line-clamp-2 leading-snug">
             {post.title}
           </h2>
           {post.excerpt && (
-            <p className="text-xs md:text-sm text-on-surface-variant leading-relaxed line-clamp-2 hidden sm:block">
+            <p className="text-xs text-on-surface-variant line-clamp-2 leading-relaxed hidden md:block">
               {post.excerpt}
             </p>
           )}
-          <div className="mt-auto pt-2 md:pt-3 flex items-center justify-between border-t border-outline-variant/10">
+          <div className="flex items-center justify-between mt-auto pt-3">
             <div className="flex items-center gap-1.5">
               <div className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-surface-container-high overflow-hidden relative">
                 {post.author.avatarUrl ? (
                   <img src={post.author.avatarUrl} alt={post.author.name} className="absolute inset-0 w-full h-full object-cover" />
                 ) : (
-                  <Icon name="person" />
+                  <span className="absolute inset-0 flex items-center justify-center">
+                    <Icon name="person" size={12} className="text-on-surface-variant" />
+                  </span>
                 )}
               </div>
               <span className="text-[10px] md:text-xs text-on-surface-variant truncate max-w-[60px] md:max-w-none">
                 {post.author.name}
               </span>
             </div>
-            <div className="flex items-center gap-2 text-[10px] md:text-xs text-on-surface-variant">
-              <span className="flex items-center gap-0.5">
-                <Icon name="favorite" />
-                {post._count.likes}
-              </span>
-              <span className="flex items-center gap-0.5">
-                <Icon name="chat_bubble" />
-                {post._count.comments}
-              </span>
-            </div>
+            <span className="text-[10px] text-outline">{post.readMinutes} min</span>
           </div>
         </div>
       </article>
     </Link>
-  );
-}
-
-// ============================================================================
-// Shop Tab (credits system)
-// ============================================================================
-
-const SHOP_TABS = ["积分兑换", "赚取规则", "积分明细"] as const;
-type ShopSubTab = (typeof SHOP_TABS)[number];
-
-function ShopTab({ isLoggedIn }: { isLoggedIn: boolean }) {
-  const [data, setData] = useState<ShopApiResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [activeSubTab, setActiveSubTab] = useState<ShopSubTab>("积分兑换");
-
-  useEffect(() => {
-    fetch("/api/shop")
-      .then((r) => r.json())
-      .then((d) => setData(d))
-      .catch(() => setData(null))
-      .finally(() => setLoading(false));
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="flex flex-col gap-6 animate-pulse">
-        <div className="bg-primary-container rounded-2xl h-32" />
-        <div className="grid grid-cols-2 gap-4">
-          <div className="bg-primary-container rounded-2xl h-64" />
-          <div className="bg-primary-container rounded-2xl h-64" />
-        </div>
-      </div>
-    );
-  }
-
-  if (!data) {
-    return (
-      <div className="text-center py-20 text-on-surface-variant">
-        <Icon name="error" />
-        <p>加载失败</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-6 animate-[fadeIn_0.3s_ease]">
-      {/* Balance Hero */}
-      <section className="bg-primary-container rounded-2xl p-6 md:p-8 ambient-shadow text-center">
-        {isLoggedIn ? (
-          <>
-            <span className="text-xs font-medium text-on-surface-variant uppercase tracking-widest">
-              可用余额
-            </span>
-            <div className="flex items-baseline justify-center gap-2 mt-2">
-              <span className="[font-family:var(--font-display)] text-5xl font-semibold text-on-surface">
-                {data.balance.toLocaleString()}
-              </span>
-              <span className="[font-family:var(--font-display)] text-xl font-medium text-outline">
-                Cr
-              </span>
-            </div>
-            <p className="text-sm text-on-surface-variant mt-3 max-w-sm mx-auto">
-              坚持健康习惯获取积分，兑换精选好物
-            </p>
-          </>
-        ) : (
-          <>
-            <Icon name="account_circle" />
-            <p className="text-base text-on-surface mb-3">登录后查看你的积分余额</p>
-            <Link
-              href="/login"
-              className="inline-flex items-center gap-1.5 px-6 py-2.5 rounded-full bg-inverse-surface text-inverse-on-surface text-sm font-medium hover:opacity-90 transition-opacity"
-            >
-              去登录
-              <Icon name="arrow_forward" />
-            </Link>
-          </>
-        )}
-      </section>
-
-      {/* Sub Tabs */}
-      <div className="flex gap-2 overflow-x-auto no-scrollbar">
-        {SHOP_TABS.map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveSubTab(tab)}
-            className={`px-4 py-2 rounded-xl text-sm font-medium tracking-wide transition-all duration-300 whitespace-nowrap ${
-              activeSubTab === tab
-                ? "bg-secondary-container text-on-secondary-container"
-                : "border border-outline-variant/30 text-on-surface-variant hover:bg-surface-variant/20"
-            }`}
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
-
-      {/* Sub Tab Content */}
-      {activeSubTab === "积分兑换" && <ShopProducts products={data.products} balance={data.balance} />}
-      {activeSubTab === "赚取规则" && <ShopRules rules={data.rules} />}
-      {activeSubTab === "积分明细" && <ShopHistory transactions={data.recentTransactions} />}
-    </div>
-  );
-}
-
-function ShopProducts({ products, balance }: { products: ShopApiResponse["products"]; balance: number }) {
-  return (
-    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 animate-[fadeIn_0.3s_ease]">
-      {products.map((product) => (
-        <ProductCard key={product.id} product={product} balance={balance} />
-      ))}
-    </div>
-  );
-}
-
-function ShopRules({ rules }: { rules: ShopApiResponse["rules"] }) {
-  return (
-    <div className="bg-surface-container-low rounded-2xl p-5 md:p-6 border border-outline-variant/20 animate-[fadeIn_0.3s_ease]">
-      <h3 className="text-sm font-medium text-on-surface-variant uppercase tracking-widest mb-4">
-        如何赚取积分
-      </h3>
-      <div className="flex flex-col gap-3">
-        {rules.map((rule) => (
-          <div key={rule.id} className="flex items-center gap-3 py-2 border-b border-outline-variant/10 last:border-b-0">
-            <div className="w-9 h-9 rounded-xl bg-secondary-container/50 flex items-center justify-center flex-shrink-0">
-              <span className="text-secondary text-lg">
-                {rule.icon || "star"}
-              </span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-on-surface">{rule.name}</p>
-              <p className="text-xs text-on-surface-variant truncate">{rule.description}</p>
-            </div>
-            <div className="text-right flex-shrink-0">
-              <span className="text-sm font-semibold text-secondary">+{rule.amount}</span>
-              {rule.dailyCap > 0 && (
-                <p className="text-[10px] text-on-surface-variant">每日{rule.dailyCap}次</p>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ShopHistory({ transactions }: { transactions: ShopApiResponse["recentTransactions"] }) {
-  return (
-    <div className="bg-surface-container-low rounded-2xl p-5 md:p-6 border border-outline-variant/20 animate-[fadeIn_0.3s_ease]">
-      <h3 className="text-sm font-medium text-on-surface-variant uppercase tracking-widest mb-4">
-        最近积分变动
-      </h3>
-      {transactions.length === 0 ? (
-        <p className="text-sm text-on-surface-variant text-center py-8">暂无记录</p>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {transactions.map((tx) => (
-            <div key={tx.id} className="flex items-center justify-between py-2 border-b border-outline-variant/10 last:border-b-0">
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-on-surface">{tx.note || tx.action}</p>
-                <p className="text-[10px] text-on-surface-variant">
-                  {new Date(tx.createdAt).toLocaleDateString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                </p>
-              </div>
-              <div className="text-right flex-shrink-0">
-                <span className={`text-sm font-semibold ${tx.direction === "earn" ? "text-secondary" : "text-error"}`}>
-                  {tx.direction === "earn" ? "+" : "-"}{tx.amount}
-                </span>
-                <p className="text-[10px] text-on-surface-variant">余额 {tx.balance}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-function ProductCard({ product, balance }: { product: ShopApiResponse["products"][number]; balance: number }) {
-  const canAfford = balance >= product.priceCredits;
-
-  return (
-    <article className="flex flex-col group cursor-pointer transition-all duration-500 hover:opacity-90">
-      <div className="aspect-[4/5] w-full rounded-2xl overflow-hidden bg-surface-container-low mb-3 relative">
-        {product.image && (
-          <img
-            src={product.image}
-            alt={product.name}
-            className="absolute inset-0 w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
-          />
-        )}
-        {!canAfford && (
-          <div className="absolute inset-0 bg-surface/40 flex items-center justify-center">
-            <span className="text-xs font-medium text-on-surface-variant bg-surface/80 px-2 py-1 rounded-lg">
-              积分不足
-            </span>
-          </div>
-        )}
-      </div>
-      <div className="flex flex-col items-start px-1 gap-1">
-        <h3 className="text-sm font-medium text-on-surface line-clamp-1">{product.name}</h3>
-        <p className="text-xs text-on-surface-variant line-clamp-2 leading-relaxed">{product.description}</p>
-        <span className={`text-xs font-medium px-3 py-1 rounded-full mt-1 ${
-          canAfford
-            ? "text-secondary bg-secondary-container/50"
-            : "text-on-surface-variant bg-surface-variant/30"
-        }`}>
-          {product.priceCredits.toLocaleString()} Cr
-        </span>
-      </div>
-    </article>
   );
 }
