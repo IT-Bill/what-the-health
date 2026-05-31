@@ -285,26 +285,13 @@ export default function FamilyDetailPage() {
                   </p>
                   {/* Role selector (owner can change others' roles) */}
                   {family.myRole === "owner" && member.role !== "owner" ? (
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <select
-                        value={member.role}
-                        onChange={async (e) => {
-                          const res = await fetch(`/api/family/${familyId}/members/${member.id}`, {
-                            method: "PATCH",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ role: e.target.value }),
-                          });
-                          if (res.ok) fetchFamily();
-                        }}
-                        className="text-[11px] bg-surface-container-low text-on-surface-variant rounded-full pl-2.5 pr-6 py-1 border-0 focus:ring-1 focus:ring-secondary appearance-none cursor-pointer"
-                        style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 8px center" }}
-                      >
-                        {ROLE_OPTIONS.map((opt) => (
-                          <option key={opt.value} value={opt.value}>{opt.label}</option>
-                        ))}
-                      </select>
-                      {member.shareHealthData && <span className="text-[10px] text-outline">· 数据共享中</span>}
-                    </div>
+                    <RoleSelector
+                      currentRole={member.role}
+                      memberId={member.id}
+                      familyId={familyId}
+                      onUpdate={fetchFamily}
+                      shareHealthData={member.shareHealthData}
+                    />
                   ) : (
                     <p className="text-xs text-on-surface-variant">
                       {ROLE_LABELS[member.role]}
@@ -385,4 +372,64 @@ function formatTime(iso: string) {
   if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`;
   if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`;
   return `${Math.floor(diff / 86400000)}天前`;
+}
+
+function RoleSelector({
+  currentRole,
+  memberId,
+  familyId,
+  onUpdate,
+  shareHealthData,
+}: {
+  currentRole: string;
+  memberId: string;
+  familyId: string;
+  onUpdate: () => void;
+  shareHealthData: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+
+  async function handleSelect(role: string) {
+    setOpen(false);
+    if (role === currentRole) return;
+    const res = await fetch(`/api/family/${familyId}/members/${memberId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role }),
+    });
+    if (res.ok) onUpdate();
+  }
+
+  return (
+    <div className="relative mt-0.5 flex items-center gap-2">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1 text-[11px] bg-surface-container-low text-on-surface-variant rounded-full px-2.5 py-1 hover:bg-surface-variant/30 transition-colors"
+      >
+        {ROLE_LABELS[currentRole]}
+        <Icon name="expand_more" size={12} />
+      </button>
+      {shareHealthData && <span className="text-[10px] text-outline whitespace-nowrap">· 数据共享中</span>}
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-[70]" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-full mt-1 z-[80] bg-surface rounded-xl shadow-lg border border-outline-variant/20 py-1 w-48 animate-[fadeIn_0.15s_ease]">
+            {ROLE_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => handleSelect(opt.value)}
+                className={`w-full text-left px-3 py-2 hover:bg-surface-variant/20 transition-colors ${
+                  currentRole === opt.value ? "bg-secondary-container/30" : ""
+                }`}
+              >
+                <p className="text-xs font-medium text-on-surface">{opt.label}</p>
+                <p className="text-[10px] text-on-surface-variant">{opt.desc}</p>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
