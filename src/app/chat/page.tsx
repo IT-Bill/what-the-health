@@ -1093,7 +1093,7 @@ export default function ChatPage() {
                         onClick={() => renameSession(s.id, editTitle)}
                         className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-primary hover:bg-primary-container/40 transition-colors"
                       >
-                        <span className="material-symbols-outlined text-lg">check</span>
+                        <Icon name="check" size={18} />
                       </button>
                       <button
                         onClick={() => {
@@ -1102,7 +1102,7 @@ export default function ChatPage() {
                         }}
                         className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-colors"
                       >
-                        <span className="material-symbols-outlined text-lg">close</span>
+                        <Icon name="close" size={18} />
                       </button>
                     </div>
                   ) : (
@@ -1113,12 +1113,7 @@ export default function ChatPage() {
                       >
                         <div className="text-sm font-medium truncate flex items-center gap-1">
                           {s.pinned && (
-                            <span
-                              className="material-symbols-outlined text-xs"
-                              style={{ fontVariationSettings: "'FILL' 1" }}
-                            >
-                              push_pin
-                            </span>
+                            <Icon name="push_pin" size={12} filled />
                           )}
                           {s.title}
                         </div>
@@ -1137,7 +1132,7 @@ export default function ChatPage() {
                             : "text-on-surface-variant hover:bg-surface-container-high/60 opacity-0 group-hover:opacity-100"
                         }`}
                       >
-                        <span className="material-symbols-outlined text-lg">more_vert</span>
+                        <Icon name="more_vert" size={18} />
                       </button>
                     </>
                   )}
@@ -1154,16 +1149,14 @@ export default function ChatPage() {
                         }}
                         className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-on-surface hover:bg-surface-container-high transition-colors text-left"
                       >
-                        <span className="material-symbols-outlined text-lg">edit</span>
+                        <Icon name="edit" size={18} />
                         重命名
                       </button>
                       <button
                         onClick={() => togglePinSession(s.id, s.pinned)}
                         className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-on-surface hover:bg-surface-container-high transition-colors text-left"
                       >
-                        <span className="material-symbols-outlined text-lg">
-                          {s.pinned ? "keep_off" : "keep"}
-                        </span>
+                        <Icon name={s.pinned ? "keep_off" : "keep"} size={18} />
                         {s.pinned ? "取消置顶" : "置顶"}
                       </button>
                       <div className="mx-3 my-1 h-px bg-outline-variant/30" />
@@ -1171,7 +1164,7 @@ export default function ChatPage() {
                         onClick={() => deleteSession(s.id)}
                         className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-error hover:bg-error-container/30 transition-colors text-left"
                       >
-                        <span className="material-symbols-outlined text-lg">delete</span>
+                        <Icon name="delete" size={18} />
                         删除
                       </button>
                     </div>
