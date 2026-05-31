@@ -135,9 +135,9 @@ export default function FamilyDetailPage() {
       <main className="flex-1 px-6 py-6 max-w-screen-md mx-auto w-full flex flex-col gap-6 pb-24">
         {/* Health Data Modal (bottom sheet) */}
         {viewUserId && (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-inverse-surface/30 backdrop-blur-sm" onClick={() => window.history.back()}>
+          <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-inverse-surface/30 backdrop-blur-sm" onClick={() => window.history.back()}>
             <div
-              className="bg-surface w-full sm:w-[480px] sm:rounded-2xl rounded-t-xl max-h-[85vh] overflow-y-auto p-6 flex flex-col gap-4 animate-[fadeIn_0.2s_ease]"
+              className="bg-surface w-full sm:w-[480px] sm:rounded-2xl rounded-t-2xl max-h-[85vh] overflow-y-auto p-6 pb-24 flex flex-col gap-4 animate-[fadeIn_0.2s_ease]"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}

@@ -246,9 +246,9 @@ function PermissionsPanel({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-inverse-surface/30 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-inverse-surface/30 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="bg-surface w-full sm:w-[420px] sm:rounded-2xl rounded-t-2xl max-h-[80vh] overflow-y-auto p-6 flex flex-col gap-5 animate-[fadeIn_0.2s_ease]"
+        className="bg-surface w-full sm:w-[420px] sm:rounded-2xl rounded-t-2xl max-h-[80vh] overflow-y-auto p-6 pb-24 flex flex-col gap-5 animate-[fadeIn_0.2s_ease]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -547,9 +547,9 @@ function SharedContentView({ friend, onClose }: { friend: Friend; onClose: () =>
   const permissions = (data?.permissions ?? []) as string[];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-inverse-surface/30 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-inverse-surface/30 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="bg-surface w-full sm:w-[480px] sm:rounded-2xl rounded-t-2xl max-h-[85vh] overflow-y-auto p-6 flex flex-col gap-5 animate-[fadeIn_0.2s_ease]"
+        className="bg-surface w-full sm:w-[480px] sm:rounded-2xl rounded-t-2xl max-h-[85vh] overflow-y-auto p-6 pb-24 flex flex-col gap-5 animate-[fadeIn_0.2s_ease]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
