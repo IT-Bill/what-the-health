@@ -27,6 +27,7 @@ export interface PostCard {
   _count: {
     likes: number;
     comments: number;
+    favorites: number;
   };
 }
 
@@ -34,6 +35,7 @@ export interface PostCard {
 export interface PostDetail extends PostCard {
   body: string;
   liked: boolean; // whether current user has liked
+  favorited: boolean;
   comments: PostComment[];
 }
 
@@ -42,6 +44,12 @@ export interface PostComment {
   body: string;
   createdAt: string;
   parentId: string | null;
+  liked: boolean;
+  favorited: boolean;
+  _count: {
+    likes: number;
+    favorites: number;
+  };
   author: {
     id: string;
     name: string;

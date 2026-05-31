@@ -32,7 +32,7 @@ export async function GET(request: Request) {
         select: { id: true, name: true, avatarUrl: true },
       },
       _count: {
-        select: { likes: true, comments: true },
+        select: { likes: true, comments: true, favorites: true },
       },
     },
   });

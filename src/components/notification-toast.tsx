@@ -1,22 +1,31 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  formatNotificationTime,
   type NotificationItem,
   type PullNotificationResponse,
 } from "@/lib/notifications";
 
 type CloseReason = "auto" | "action" | "swipe";
 
-const POLL_INTERVAL_MS = 30 * 1000;
+const POLL_INTERVAL_MS = 5 * 1000;
 const AUTO_CLOSE_MS = 8000;
 const SWIPE_DISMISS_THRESHOLD = 90;
+const TITLE_MAX_LENGTH = 18;
+const BODY_MAX_LENGTH = 28;
+
+function truncateText(text: string, maxLength: number) {
+  if (text.length <= maxLength) {
+    return text;
+  }
+
+  return `${text.slice(0, Math.max(maxLength - 2, 0)).trimEnd()}……`;
+}
 
 export function NotificationToast() {
   const pathname = usePathname();
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -187,17 +196,33 @@ export function NotificationToast() {
     [isDragging, close]
   );
 
+  const displayTitle = notification
+    ? truncateText(notification.title, TITLE_MAX_LENGTH)
+    : "通知";
+  const displayBody = notification
+    ? truncateText(notification.body, BODY_MAX_LENGTH)
+    : "";
+
+  const handleAction = useCallback(async () => {
+    if (!notification?.actionUrl) {
+      return;
+    }
+
+    await close("action");
+    router.push(notification.actionUrl);
+  }, [close, notification, router]);
+
   return (
     <>
       <div
-        className="fixed inset-0 z-[100] flex items-start justify-center px-4 pt-24 md:pt-10 pointer-events-none"
+        className="fixed inset-x-0 top-0 z-[100] flex justify-center px-4 pt-20 md:pt-6 pointer-events-none"
         aria-live="polite"
         aria-hidden={!isOpen}
       >
         <section
           role="dialog"
           aria-modal="true"
-          className={`relative z-20 w-full max-w-md rounded-3xl border border-outline-variant/40 bg-surface-container-highest p-6 shadow-[0_20px_50px_rgba(45,45,45,0.16)] pointer-events-auto ${
+          className={`relative z-20 w-full max-w-md rounded-2xl border border-outline-variant/25 bg-surface/88 backdrop-blur-xl shadow-[0_18px_40px_rgba(45,45,45,0.10)] pointer-events-auto ${
             isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
           }`}
           style={motionStyle}
@@ -206,59 +231,34 @@ export function NotificationToast() {
           onPointerUp={handlePointerEnd}
           onPointerCancel={handlePointerEnd}
         >
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-on-surface-variant/70">
-                {notification?.source || "系统通知"}
-              </p>
-              <h2 className="mt-2 text-xl font-[var(--font-display)] text-on-surface">
-                {notification?.title || "通知"}
+          <div className="flex items-center gap-3 px-4 py-3">
+            <span className="material-symbols-outlined shrink-0 text-[18px] text-primary">
+              notifications
+            </span>
+            <button
+              type="button"
+              onClick={() => void handleAction()}
+              disabled={!notification?.actionUrl}
+              className="min-w-0 flex-1 text-left disabled:cursor-default"
+            >
+              <h2 className="truncate text-sm font-[var(--font-display)] text-on-surface leading-5">
+                {displayTitle}
               </h2>
-            </div>
+              <p className="truncate text-xs leading-5 text-on-surface-variant/85">
+                {displayBody}
+              </p>
+            </button>
             <button
               type="button"
               onClick={(event) => {
                 event.stopPropagation();
                 void close("action");
               }}
-              className="text-on-surface-variant/70 transition-colors duration-200 hover:text-on-surface"
+              className="shrink-0 rounded-full p-1 text-on-surface-variant/70 transition-colors duration-200 hover:bg-surface-container-low hover:text-on-surface"
               aria-label="Dismiss notification"
             >
-              <span className="material-symbols-outlined">close</span>
+              <span className="material-symbols-outlined text-lg">close</span>
             </button>
-          </div>
-
-          <p className="mt-4 text-sm leading-relaxed text-on-surface-variant">
-            {notification?.body || ""}
-          </p>
-
-          <div className="mt-6 flex items-center justify-between">
-            <span className="text-xs text-on-surface-variant/60">
-              {notification ? formatNotificationTime(notification.createdAt) : ""}
-            </span>
-            {notification?.actionUrl ? (
-              <Link
-                href={notification.actionUrl}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void close("action");
-                }}
-                className="rounded-full bg-secondary px-5 py-2 text-sm font-medium text-on-secondary shadow-md transition-transform duration-200 active:scale-95"
-              >
-                查看
-              </Link>
-            ) : (
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void close("action");
-                }}
-                className="rounded-full bg-secondary px-5 py-2 text-sm font-medium text-on-secondary shadow-md transition-transform duration-200 active:scale-95"
-              >
-                知道了
-              </button>
-            )}
           </div>
         </section>
       </div>

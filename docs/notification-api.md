@@ -9,6 +9,7 @@ This project now stores notifications in PostgreSQL via Prisma. The frontend not
 - Toast delivery endpoint: `/api/notifications/pull`
 - Mutation endpoints: `/api/notifications/[id]`, `/api/notifications/clear`
 - External agent send endpoint: `POST /api/notifications`
+- Built-in app producers: post/comment likes and favorites also write notifications into the same inbox
 
 ## Data Model
 
