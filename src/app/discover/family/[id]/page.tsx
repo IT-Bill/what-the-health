@@ -265,7 +265,7 @@ export default function FamilyDetailPage() {
               邀请
             </button>
           </div>
-          <div className="bg-primary-container rounded-2xl ambient-shadow overflow-hidden">
+          <div className="bg-primary-container rounded-2xl ambient-shadow">
             {family.members.map((member, idx) => (
               <div
                 key={member.id}
