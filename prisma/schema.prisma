@@ -684,6 +684,8 @@ model Report {
   periodStart DateTime   @db.Date
   /// End of the period (exclusive), UTC midnight.
   periodEnd   DateTime   @db.Date
+  /// Version number for the same period (1 = first generation, increments on regenerate).
+  version     Int        @default(1)
   /// JSON payload with the report's pre-computed content:
   /// {
   ///   moodEmojis?: string[],        // e.g. ["😊","😐","😴",...]
@@ -703,7 +705,7 @@ model Report {
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   insights Insight[]
 
-  @@unique([userId, periodType, periodStart])
+  @@unique([userId, periodType, periodStart, version])
   @@index([userId, periodType, periodStart])
   @@map("reports")
 }

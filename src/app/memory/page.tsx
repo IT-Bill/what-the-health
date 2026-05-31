@@ -54,11 +54,12 @@ export default function MemoryPage() {
   const periodType = activeTab === "月报" ? "monthly" : "weekly";
 
   const fetchReport = useCallback(
-    async (periodStart?: string) => {
+    async (periodStart?: string, version?: number) => {
       setLoading(true);
       try {
         const params = new URLSearchParams({ type: periodType });
         if (periodStart) params.set("periodStart", periodStart);
+        if (version) params.set("version", String(version));
         const res = await fetch(`/api/memory?${params}`);
         const json = await res.json();
 
@@ -109,6 +110,27 @@ export default function MemoryPage() {
   const hasPrev = data ? currentPeriodIdx < data.available.length - 1 : false;
   const hasNext = data ? currentPeriodIdx > 0 : false;
 
+  const [generating, setGenerating] = useState(false);
+
+  async function handleGenerate() {
+    setGenerating(true);
+    try {
+      const res = await fetch("/api/memory/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: periodType }),
+      });
+      if (res.ok) {
+        // Refresh the report data
+        await fetchReport();
+      }
+    } catch {
+      // ignore
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   return (
     <AppShell>
       <div className="flex flex-col gap-8 max-w-3xl mx-auto w-full">
@@ -138,6 +160,10 @@ export default function MemoryPage() {
             hasNext={hasNext}
             onPrev={goPrev}
             onNext={goNext}
+            versions={data.versions || []}
+            onVersionChange={(v) => fetchReport(data.report!.periodStart.slice(0, 10), v)}
+            onRegenerate={handleGenerate}
+            generating={generating}
           />
         )}
 
@@ -147,7 +173,7 @@ export default function MemoryPage() {
         ) : isDemo ? (
           <DemoView demos={demoData?.demos ?? []} periodType={periodType} activeTab={activeTab} />
         ) : !data?.report && activeTab !== "洞察" ? (
-          <EmptyState />
+          <EmptyState onGenerate={handleGenerate} generating={generating} />
         ) : activeTab === "洞察" ? (
           <InsightsView
             reportInsights={data?.report?.insights ?? []}
@@ -169,6 +195,10 @@ function PeriodNav({
   hasNext,
   onPrev,
   onNext,
+  versions,
+  onVersionChange,
+  onRegenerate,
+  generating,
 }: {
   report: ReportWithInsights;
   periodType: string;
@@ -176,6 +206,10 @@ function PeriodNav({
   hasNext: boolean;
   onPrev: () => void;
   onNext: () => void;
+  versions: { version: number; createdAt: string }[];
+  onVersionChange: (version: number) => void;
+  onRegenerate: () => void;
+  generating: boolean;
 }) {
   const start = new Date(report.periodStart);
   const label =
@@ -183,23 +217,67 @@ function PeriodNav({
       ? `${start.getUTCFullYear()}年${start.getUTCMonth() + 1}月`
       : formatWeekLabel(start);
 
+  function formatTime(iso: string) {
+    const d = new Date(iso);
+    // UTC+8
+    const cn = new Date(d.getTime() + 8 * 3600000);
+    return `${cn.getUTCMonth() + 1}/${cn.getUTCDate()} ${cn.getUTCHours().toString().padStart(2, "0")}:${cn.getUTCMinutes().toString().padStart(2, "0")}`;
+  }
+
   return (
-    <div className="flex items-center justify-between">
-      <button
-        onClick={onPrev}
-        disabled={!hasPrev}
-        className="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-variant/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-      >
-        <span className="material-symbols-outlined">chevron_left</span>
-      </button>
-      <span className="text-base font-medium text-on-surface">{label}</span>
-      <button
-        onClick={onNext}
-        disabled={!hasNext}
-        className="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-variant/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-      >
-        <span className="material-symbols-outlined">chevron_right</span>
-      </button>
+    <div className="flex flex-col gap-2">
+      {/* Period + Regenerate (same row) */}
+      <div className="flex items-center justify-between">
+        <button
+          onClick={onPrev}
+          disabled={!hasPrev}
+          className="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-variant/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          <span className="material-symbols-outlined">chevron_left</span>
+        </button>
+        <span className="text-base font-medium text-on-surface">{label}</span>
+        <button
+          onClick={onNext}
+          disabled={!hasNext}
+          className="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-variant/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          <span className="material-symbols-outlined">chevron_right</span>
+        </button>
+        <button
+          onClick={onRegenerate}
+          disabled={generating}
+          className="ml-2 px-3 py-1.5 rounded-full border border-outline-variant/40 text-xs font-medium text-on-surface-variant hover:bg-surface-variant/20 transition-colors disabled:opacity-50 flex items-center gap-1 whitespace-nowrap"
+        >
+          {generating ? (
+            <>
+              <div className="w-3 h-3 border-[1.5px] border-on-surface-variant border-t-transparent rounded-full animate-spin" />
+              生成中
+            </>
+          ) : (
+            <>
+              <span className="material-symbols-outlined text-sm">autorenew</span>
+              重新生成
+            </>
+          )}
+        </button>
+      </div>
+      {/* Version selector */}
+      {versions.length > 1 && (
+        <div className="flex items-center justify-center gap-2">
+          <span className="text-xs text-on-surface-variant">版本</span>
+          <select
+            value={report.version}
+            onChange={(e) => onVersionChange(Number(e.target.value))}
+            className="text-xs bg-surface-container-low rounded-lg px-2 py-1 text-on-surface border-0 focus:ring-1 focus:ring-secondary"
+          >
+            {versions.map((v) => (
+              <option key={v.version} value={v.version}>
+                v{v.version} · {formatTime(v.createdAt)}{v.version === versions[0].version ? " (最新)" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
     </div>
   );
 }
@@ -732,7 +810,7 @@ function DemoView({ demos, periodType, activeTab }: { demos: DemoEntry[]; period
               periodType={periodType}
             />
           ) : (
-            <EmptyState />
+            <EmptyState onGenerate={() => {}} generating={false} />
           )}
         </div>
       ) : !selected ? (
@@ -758,14 +836,31 @@ function LoadingSkeleton() {
   );
 }
 
-function EmptyState() {
+function EmptyState({ onGenerate, generating }: { onGenerate: () => void; generating: boolean }) {
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center">
       <span className="material-symbols-outlined text-5xl text-outline-variant mb-4">
         auto_stories
       </span>
       <p className="text-lg text-on-surface-variant">还没有这个时期的报告</p>
-      <p className="text-sm text-outline mt-2">继续使用Mindful，AI会定期为你生成分析</p>
+      <p className="text-sm text-outline mt-2 mb-6">点击下方按钮立即生成，或继续使用Mindful等待自动生成</p>
+      <button
+        onClick={onGenerate}
+        disabled={generating}
+        className="px-6 py-3 rounded-full bg-secondary text-on-secondary font-medium text-sm hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center gap-2"
+      >
+        {generating ? (
+          <>
+            <div className="w-4 h-4 border-2 border-on-secondary border-t-transparent rounded-full animate-spin" />
+            生成中...
+          </>
+        ) : (
+          <>
+            <span className="material-symbols-outlined text-lg">magic_button</span>
+            生成报告
+          </>
+        )}
+      </button>
     </div>
   );
 }
