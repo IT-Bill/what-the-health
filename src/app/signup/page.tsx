@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -52,12 +51,10 @@ export default function SignUpPage() {
     <div className="flex w-full min-h-screen">
       {/* Left Side: Hero Image */}
       <div className="hidden lg:flex lg:w-1/2 relative bg-surface-container overflow-hidden items-center justify-center">
-        <Image
-          src="https://lh3.googleusercontent.com/aida-public/AB6AXuCm97K8ZZvci6jBa0e8OmzlmnZNwGMD69Xa8Qd7v4ICA-DJnOZEzGUBKMaEuliXKSk_yVW7awtCRHtq-uAjHWdMzBJ_ER0biUEjl-OsIIhZ21v0zdKFcGglYCJtwJ_9FemAWWqfC5DsIRjnq8dXpm4fwg_k2d7BSOaKCORYdOjMQmwf7Wdksa4Ko8KFJ8bt7AGfwu4m3KPEsVdyMB79Lfx8ZPq2MAWltVITmBz8wElmVucXqWzb13APjlpnTtuC5ROrwtnx86M3tGA"
+        <img
+          src="/api/assets/static/pages/hero.webp"
           alt="Serene minimal interior"
-          fill
-          className="object-cover opacity-90 mix-blend-multiply"
-          priority
+          className="absolute inset-0 w-full h-full object-cover opacity-90 mix-blend-multiply"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-background/40 to-transparent" />
       </div>
