@@ -19,6 +19,7 @@ import {
   extractAndUpdatePersona,
 } from "@/lib/persona-service";
 import { buildAnswerReferenceContext } from "@/lib/memory/answer-context";
+import { indexChatMessageInBackground } from "@/lib/memory/chat-vector-memory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -395,6 +396,7 @@ export async function POST(request: Request) {
       headers: { "Content-Type": "text/event-stream" },
     });
   }
+  const userId = payload.userId;
 
   let body: { message?: string; sessionId?: string };
   try {
@@ -420,7 +422,7 @@ export async function POST(request: Request) {
 
   if (sessionId) {
     const session = await prisma.chatSession.findUnique({
-      where: { id: sessionId, userId: payload.userId },
+      where: { id: sessionId, userId },
       include: {
         messages: { orderBy: { createdAt: "asc" } },
       },
@@ -437,18 +439,26 @@ export async function POST(request: Request) {
 
   if (!sessionId) {
     const newSession = await prisma.chatSession.create({
-      data: { userId: payload.userId, title: userMessageText.slice(0, 30) },
+      data: { userId, title: userMessageText.slice(0, 30) },
     });
     sessionId = newSession.id;
   }
 
   // Persist user message
-  await prisma.chatMessage.create({
+  const userMessage = await prisma.chatMessage.create({
     data: {
       sessionId,
       role: "user",
       content: userMessageText,
     },
+  });
+  indexChatMessageInBackground({
+    id: userMessage.id,
+    userId,
+    sessionId,
+    role: "user",
+    content: userMessage.content,
+    createdAt: userMessage.createdAt,
   });
 
   // Keep the session ordering aligned with the latest user-visible message.
@@ -466,13 +476,13 @@ export async function POST(request: Request) {
   request.signal.addEventListener("abort", () => abortController.abort());
 
   // Build Alice-style layered context: persona + health goals/data + recent chat + vector memory.
-  const answerReferenceContext = await buildAnswerReferenceContext(payload.userId, userMessageText);
+  const answerReferenceContext = await buildAnswerReferenceContext(userId, userMessageText);
   const systemPrompt = await buildSystemPrompt(
     `${SYSTEM_PROMPT}\n\n${answerReferenceContext}`,
-    payload.userId
+    userId
   );
 
-  const userTools = createTools(payload.userId);
+  const userTools = createTools(userId);
 
   const agent = new Agent({
     initialState: {
@@ -500,7 +510,7 @@ export async function POST(request: Request) {
   async function persistAssistant() {
     if (persisted || !assistantText.trim()) return;
     persisted = true;
-    await prisma.chatMessage.create({
+    const assistantMessage = await prisma.chatMessage.create({
       data: {
         sessionId: sessionId!,
         role: "assistant",
@@ -510,6 +520,14 @@ export async function POST(request: Request) {
         outputTokens: assistantTokens.output || undefined,
         toolCallsJson: toolExecutions.length > 0 ? JSON.stringify(toolExecutions) : undefined,
       },
+    });
+    indexChatMessageInBackground({
+      id: assistantMessage.id,
+      userId,
+      sessionId: sessionId!,
+      role: "assistant",
+      content: assistantMessage.content,
+      createdAt: assistantMessage.createdAt,
     });
     await prisma.chatSession.update({
       where: { id: sessionId! },
