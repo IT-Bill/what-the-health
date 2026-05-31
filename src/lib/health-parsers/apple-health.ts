@@ -1,7 +1,7 @@
-import AdmZip from "adm-zip";
 import sax from "sax";
 import { Readable } from "stream";
 import type { HealthParser, ParsedRecord, ParseResult, HealthMetric } from "./types";
+import type { ZipDirectory } from "./index";
 
 /** Mapping from Apple HK type identifiers to our metric types. */
 const TYPE_MAP: Record<string, { metric: HealthMetric; unit: string }> = {
@@ -22,7 +22,6 @@ const TYPE_MAP: Record<string, { metric: HealthMetric; unit: string }> = {
   HKCategoryTypeIdentifierMindfulSession: { metric: "mindfulSession", unit: "min" },
 };
 
-/** Sleep value mapping (Apple's category values → readable metadata). */
 const SLEEP_VALUES: Record<string, string> = {
   HKCategoryValueSleepAnalysisInBed: "inBed",
   HKCategoryValueSleepAnalysisAsleepUnspecified: "asleep",
@@ -32,10 +31,7 @@ const SLEEP_VALUES: Record<string, string> = {
   HKCategoryValueSleepAnalysisAwake: "awake",
 };
 
-/** Parse Apple Health date string: "2024-01-15 07:45:00 +0800" */
 function parseAppleDate(dateStr: string): Date {
-  // Format: "YYYY-MM-DD HH:MM:SS ±HHMM"
-  // Convert to ISO: "YYYY-MM-DDTHH:MM:SS±HH:MM"
   const iso = dateStr.replace(
     /^(\d{4}-\d{2}-\d{2})\s(\d{2}:\d{2}:\d{2})\s([+-]\d{2})(\d{2})$/,
     "$1T$2$3:$4"
@@ -52,27 +48,23 @@ export const appleHealthParser: HealthParser = {
     );
   },
 
-  parse(zipBuffer: Buffer): Promise<ParseResult> {
+  async parse(directory: ZipDirectory): Promise<ParseResult> {
+    const exportFile = directory.files.find(
+      (f) => f.path === "export.xml" || f.path.endsWith("/export.xml")
+    );
+
+    if (!exportFile) {
+      throw new Error("未找到 export.xml 文件。请确认这是 Apple Health 导出的 ZIP 文件。");
+    }
+
+    const xmlContent = await exportFile.buffer();
+
     return new Promise((resolve, reject) => {
-      const zip = new AdmZip(zipBuffer);
-      const entries = zip.getEntries();
-
-      // Find export.xml
-      const exportEntry = entries.find(
-        (e) => e.entryName === "export.xml" || e.entryName.endsWith("/export.xml")
-      );
-
-      if (!exportEntry) {
-        reject(new Error("未找到 export.xml 文件。请确认这是 Apple Health 导出的 ZIP 文件。"));
-        return;
-      }
-
       const records: ParsedRecord[] = [];
       const summary: Partial<Record<HealthMetric, number>> = {};
       let dataFrom: Date | null = null;
       let dataTo: Date | null = null;
 
-      const xmlContent = exportEntry.getData();
       const stream = Readable.from(xmlContent);
       const parser = sax.createStream(true, { trim: true });
 
@@ -81,7 +73,7 @@ export const appleHealthParser: HealthParser = {
           const attrs = node.attributes as Record<string, string>;
           const typeId = attrs.type;
           const mapping = TYPE_MAP[typeId];
-          if (!mapping) return; // Skip unsupported types
+          if (!mapping) return;
 
           const value = parseFloat(attrs.value);
           const startDate = parseAppleDate(attrs.startDate);
@@ -93,7 +85,7 @@ export const appleHealthParser: HealthParser = {
           const record: ParsedRecord = {
             metric: mapping.metric,
             value: mapping.metric === "sleepAnalysis"
-              ? (endDate.getTime() - startDate.getTime()) / 60000 // duration in minutes
+              ? (endDate.getTime() - startDate.getTime()) / 60000
               : value,
             unit: mapping.unit,
             startDate,
@@ -101,29 +93,20 @@ export const appleHealthParser: HealthParser = {
             sourceName: attrs.sourceName || undefined,
           };
 
-          // Add sleep stage metadata
           if (mapping.metric === "sleepAnalysis" && attrs.value) {
-            record.metadata = {
-              stage: SLEEP_VALUES[attrs.value] || attrs.value,
-            };
+            record.metadata = { stage: SLEEP_VALUES[attrs.value] || attrs.value };
           }
-
-          // Blood pressure metadata (track systolic vs diastolic)
           if (typeId === "HKQuantityTypeIdentifierBloodPressureSystolic") {
             record.metadata = { ...record.metadata, type: "systolic" };
           } else if (typeId === "HKQuantityTypeIdentifierBloodPressureDiastolic") {
             record.metadata = { ...record.metadata, type: "diastolic" };
           }
-
-          // Calories metadata (active vs basal)
           if (typeId === "HKQuantityTypeIdentifierBasalEnergyBurned") {
             record.metadata = { ...record.metadata, type: "basal" };
           }
 
           records.push(record);
           summary[mapping.metric] = (summary[mapping.metric] || 0) + 1;
-
-          // Track date range
           if (!dataFrom || startDate < dataFrom) dataFrom = startDate;
           if (!dataTo || endDate > dataTo) dataTo = endDate;
         }
@@ -133,10 +116,9 @@ export const appleHealthParser: HealthParser = {
           const duration = parseFloat(attrs.duration);
           const startDate = parseAppleDate(attrs.startDate);
           const endDate = parseAppleDate(attrs.endDate);
-
           if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return;
 
-          const record: ParsedRecord = {
+          records.push({
             metric: "workout",
             value: duration || (endDate.getTime() - startDate.getTime()) / 60000,
             unit: "min",
@@ -150,11 +132,8 @@ export const appleHealthParser: HealthParser = {
               totalEnergyBurned: attrs.totalEnergyBurned ? parseFloat(attrs.totalEnergyBurned) : undefined,
               totalEnergyBurnedUnit: attrs.totalEnergyBurnedUnit || undefined,
             },
-          };
-
-          records.push(record);
+          });
           summary.workout = (summary.workout || 0) + 1;
-
           if (!dataFrom || startDate < dataFrom) dataFrom = startDate;
           if (!dataTo || endDate > dataTo) dataTo = endDate;
         }

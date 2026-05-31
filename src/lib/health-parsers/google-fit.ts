@@ -1,16 +1,9 @@
-import AdmZip from "adm-zip";
 import type { HealthParser, ParsedRecord, ParseResult, HealthMetric } from "./types";
+import type { ZipDirectory } from "./index";
 
 /**
  * Google Fit (via Google Takeout) export parser.
- * Google Takeout Fit data is a ZIP containing JSON files:
- * - Fit/Daily activity metrics/YYYY-MM-DD.json
- * - Fit/All Sessions/ (workout sessions)
- * - Fit/Raw Data/ (detailed sensor data)
- *
- * Daily activity JSON structure:
- * { "bucket": [...], "dataSource": [...] }
- * or simpler per-day files with data points.
+ * JSON files in Fit/ directory structure.
  */
 
 const GOOGLE_FIT_DATA_TYPES: Record<string, { metric: HealthMetric; unit: string }> = {
@@ -39,46 +32,38 @@ export const googleFitParser: HealthParser = {
     );
   },
 
-  async parse(zipBuffer: Buffer): Promise<ParseResult> {
-    const zip = new AdmZip(zipBuffer);
-    const entries = zip.getEntries();
+  async parse(directory: ZipDirectory): Promise<ParseResult> {
     const records: ParsedRecord[] = [];
     const summary: Partial<Record<HealthMetric, number>> = {};
     let dataFrom: Date | null = null;
     let dataTo: Date | null = null;
 
-    for (const entry of entries) {
-      if (entry.isDirectory || !entry.entryName.endsWith(".json")) continue;
+    for (const file of directory.files) {
+      if (file.type === "Directory" || !file.path.endsWith(".json")) continue;
 
       let parsed: unknown;
       try {
-        const content = entry.getData().toString("utf8");
+        const content = (await file.buffer()).toString("utf8");
         parsed = JSON.parse(content);
       } catch {
         continue;
       }
 
-      // Handle different Google Fit JSON structures
       if (typeof parsed === "object" && parsed !== null) {
         const obj = parsed as Record<string, unknown>;
 
-        // Structure 1: { "Data Points": [...] } (Raw Data files)
         if (Array.isArray(obj["Data Points"])) {
-          parseDataPoints(obj["Data Points"] as unknown[], entry.entryName, records, summary);
-        }
-        // Structure 2: array of data points directly
-        else if (Array.isArray(parsed)) {
-          parseDataPoints(parsed, entry.entryName, records, summary);
-        }
-        // Structure 3: { "bucket": [...] } (aggregated)
-        else if (Array.isArray(obj.bucket)) {
+          parseDataPoints(obj["Data Points"] as unknown[], file.path, records, summary);
+        } else if (Array.isArray(parsed)) {
+          parseDataPoints(parsed, file.path, records, summary);
+        } else if (Array.isArray(obj.bucket)) {
           for (const bucket of obj.bucket as unknown[]) {
             const b = bucket as Record<string, unknown>;
             if (Array.isArray(b.dataset)) {
               for (const ds of b.dataset as unknown[]) {
                 const d = ds as Record<string, unknown>;
                 if (Array.isArray(d.point)) {
-                  parseDataPoints(d.point, entry.entryName, records, summary);
+                  parseDataPoints(d.point, file.path, records, summary);
                 }
               }
             }
@@ -87,7 +72,6 @@ export const googleFitParser: HealthParser = {
       }
     }
 
-    // Calculate date range
     for (const r of records) {
       if (!dataFrom || r.startDate < dataFrom) dataFrom = r.startDate;
       if (!dataTo || r.endDate > dataTo) dataTo = r.endDate;
@@ -110,9 +94,7 @@ function parseDataPoints(
   for (const point of points) {
     const p = point as Record<string, unknown>;
 
-    // Determine metric from dataTypeName or file path
     let mapping: { metric: HealthMetric; unit: string } | null = null;
-
     const dataType = String(p.dataTypeName ?? p.originDataSourceId ?? "");
     for (const [key, m] of Object.entries(GOOGLE_FIT_DATA_TYPES)) {
       if (dataType.includes(key) || fileName.toLowerCase().includes(key.replace("com.google.", ""))) {
@@ -121,7 +103,6 @@ function parseDataPoints(
       }
     }
 
-    // Try detecting from file name if no match yet
     if (!mapping) {
       const fn = fileName.toLowerCase();
       if (fn.includes("step")) mapping = { metric: "steps", unit: "count" };
@@ -134,32 +115,23 @@ function parseDataPoints(
 
     if (!mapping) continue;
 
-    // Parse timestamps
-    const startNanos = p.startTimeNanos ?? p.startTime;
-    const endNanos = p.endTimeNanos ?? p.endTime;
-    const startDate = parseGoogleDate(startNanos);
-    const endDate = parseGoogleDate(endNanos);
+    const startDate = parseGoogleDate(p.startTimeNanos ?? p.startTime);
+    const endDate = parseGoogleDate(p.endTimeNanos ?? p.endTime);
     if (!startDate) continue;
 
-    // Parse value
     let value = 0;
     if (Array.isArray(p.value)) {
-      // Google Fit values are arrays: [{ fpVal: 72.0 }] or [{ intVal: 500 }]
       const v = (p.value as Record<string, unknown>[])[0];
-      if (v) {
-        value = parseFloat(String(v.fpVal ?? v.intVal ?? v.value ?? 0));
-      }
+      if (v) value = parseFloat(String(v.fpVal ?? v.intVal ?? v.value ?? 0));
     } else if (typeof p.value === "number") {
       value = p.value;
     } else if (p.fitValue) {
-      // Alternative structure
       const fv = (Array.isArray(p.fitValue) ? p.fitValue[0] : p.fitValue) as Record<string, unknown>;
       value = parseFloat(String(fv?.value ?? 0));
     }
 
     if (isNaN(value) || value === 0) continue;
 
-    // Sleep: convert nanos duration to minutes
     if (mapping.metric === "sleepAnalysis" && startDate && endDate) {
       value = (endDate.getTime() - startDate.getTime()) / 60000;
     }
@@ -177,13 +149,11 @@ function parseDataPoints(
   }
 }
 
-/** Parse Google Fit date: nanoseconds since epoch, milliseconds, or ISO string. */
 function parseGoogleDate(val: unknown): Date | null {
   if (!val) return null;
   if (typeof val === "string") {
     const num = Number(val);
     if (!isNaN(num)) {
-      // Nanoseconds (> 10^15) vs milliseconds (> 10^12) vs seconds
       if (num > 1e15) return new Date(num / 1e6);
       if (num > 1e12) return new Date(num);
       if (num > 1e9) return new Date(num * 1000);
