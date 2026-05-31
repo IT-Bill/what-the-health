@@ -298,6 +298,117 @@ export function createTools(userId: string): AgentTool[] {
     },
   };
 
+  const searchPostsTool: AgentTool = {
+    name: "search_posts",
+    label: "搜索帖子",
+    description:
+      "在 Discover 社区中搜索已发布的健康/疗愈相关帖子，返回帖子的基本信息（id、标题、摘要、分类等）。当你认为需要参考社区内容来回答用户问题时，先用这个工具搜索相关帖子，获取帖子 id 列表。注意：这个工具返回的 body 是截断的（最多2000字），如果需要某篇帖子的完整内容，请再调用 get_post_detail。",
+    parameters: Type.Object({
+      query: Type.Optional(
+        Type.String({ description: "搜索关键词（可选），在标题、摘要和正文中搜索" })
+      ),
+      category: Type.Optional(
+        Type.String({
+          description: "分类筛选：mindfulness（冥想正念）、nutrition（营养饮食）、sleep（睡眠）、reflection（反思成长）",
+          enum: ["mindfulness", "nutrition", "sleep", "reflection"],
+        })
+      ),
+      limit: Type.Number({ description: "返回多少条帖子（默认5）", default: 5, minimum: 1, maximum: 10 }),
+    }),
+    execute: async (_toolCallId, params) => {
+      const { query, category, limit } = p(params);
+      const take = limit ?? 5;
+
+      const where: Record<string, unknown> = { published: true };
+      if (category) where.category = category;
+      if (query?.trim()) {
+        const q = query.trim();
+        where.OR = [
+          { title: { contains: q, mode: "insensitive" } },
+          { excerpt: { contains: q, mode: "insensitive" } },
+          { body: { contains: q, mode: "insensitive" } },
+        ];
+      }
+
+      const posts = await prisma.post.findMany({
+        where,
+        orderBy: { publishedAt: "desc" },
+        take,
+        select: {
+          id: true,
+          title: true,
+          excerpt: true,
+          category: true,
+          categoryIcon: true,
+          readMinutes: true,
+          publishedAt: true,
+          viewCount: true,
+          author: { select: { name: true } },
+          _count: { select: { likes: true, comments: true } },
+        },
+      });
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text:
+              posts.length === 0
+                ? "未找到相关帖子。"
+                : JSON.stringify(posts, null, 2),
+          },
+        ],
+        details: posts,
+      };
+    },
+  };
+
+  const getPostDetailTool: AgentTool = {
+    name: "get_post_detail",
+    label: "获取帖子详情",
+    description:
+      "根据帖子 id 获取单篇帖子的完整内容（包括完整的正文、评论等）。在 search_posts 找到相关帖子后，调用此工具获取完整内容以供参考。",
+    parameters: Type.Object({
+      postId: Type.String({ description: "帖子 id" }),
+    }),
+    execute: async (_toolCallId, params) => {
+      const { postId } = p(params);
+      const post = await prisma.post.findUnique({
+        where: { id: postId, published: true },
+        select: {
+          id: true,
+          title: true,
+          excerpt: true,
+          body: true,
+          category: true,
+          categoryIcon: true,
+          readMinutes: true,
+          publishedAt: true,
+          viewCount: true,
+          author: { select: { name: true } },
+          _count: { select: { likes: true, comments: true } },
+        },
+      });
+
+      if (!post) {
+        return {
+          content: [{ type: "text" as const, text: "帖子不存在或已被删除。" }],
+          details: null,
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify(post, null, 2),
+          },
+        ],
+        details: post,
+      };
+    },
+  };
+
   return [
     getUserPersonaTool,
     getUserProfileTool,
@@ -308,5 +419,7 @@ export function createTools(userId: string): AgentTool[] {
     createJournalEntryTool,
     getRecentMemoriesTool,
     getHabitCompletionsTool,
+    searchPostsTool,
+    getPostDetailTool,
   ];
 }
