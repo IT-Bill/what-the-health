@@ -9,6 +9,7 @@ import { seedCredits } from "./seeders/credits";
 import { seedReports } from "./seeders/reports";
 import { seedMisc } from "./seeders/misc";
 import { seedFriends } from "./seeders/friends";
+import { seedFamily } from "./seeders/family";
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DIRECT_URL ?? process.env.DATABASE_URL }),
@@ -43,8 +44,11 @@ async function main() {
 
   // --- Cross-user relationships ---
   await seedFriends(prisma, users);
+  await seedFamily(prisma, users);
   console.log(`\n  friendships: ${await prisma.friendship.count()}`);
   console.log(`  friend_permissions: ${await prisma.friendPermission.count()}`);
+  console.log(`  families: ${await prisma.family.count()}`);
+  console.log(`  family_members: ${await prisma.familyMember.count()}`);
 
   // --- Summary ---
   console.log("\n--- Seed complete ---");
