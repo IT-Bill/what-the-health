@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
+import { Icon } from "@/components/icon";
 
 interface User {
   id: string;
@@ -63,9 +64,7 @@ export default function ProfilePage() {
           {!user ? (
             <div className="bg-primary-container rounded-[2rem] p-8 ambient-shadow flex flex-col items-center text-center gap-6">
               <div className="w-20 h-20 rounded-full bg-surface-container-high flex items-center justify-center">
-                <span className="material-symbols-outlined text-4xl text-outline">
-                  person
-                </span>
+                <Icon name="person" className="text-4xl text-outline" />
               </div>
               <div className="space-y-2">
                 <h2 className="font-[var(--font-display)] text-2xl font-medium text-on-surface">
@@ -112,7 +111,7 @@ export default function ProfilePage() {
                   className="flex items-center gap-1.5 text-sm text-on-surface-variant hover:text-secondary transition-colors self-start"
                 >
                   <span>@{user.username}</span>
-                  <span className="material-symbols-outlined text-sm">content_copy</span>
+                  <Icon name="content_copy" />
                 </button>
               </div>
             </div>
@@ -133,14 +132,10 @@ export default function ProfilePage() {
                   }`}
                 >
                   <div className="flex items-center gap-4">
-                    <span className="material-symbols-outlined text-outline">
-                      {item.icon}
-                    </span>
+                    <Icon name={item.icon} className="text-outline" size={20} />
                     <span className="text-lg text-on-surface">{item.label}</span>
                   </div>
-                  <span className="material-symbols-outlined text-outline text-[18px]">
-                    chevron_right
-                  </span>
+                  <Icon name="chevron_right" className="text-outline text-[18px]" />
                 </Link>
               ))}
             </div>

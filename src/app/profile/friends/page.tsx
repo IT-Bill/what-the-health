@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, type ReactNode } from "react";
 import Link from "next/link";
+import { Icon } from "@/components/icon";
 
 // --- Types ---
 interface FriendUser {
@@ -140,7 +141,7 @@ function FriendsList({
   if (friends.length === 0) {
     return (
       <div className="text-center py-16 text-on-surface-variant">
-        <span className="material-symbols-outlined text-5xl mb-4 block">group</span>
+        <Icon name="group" />
         <p className="text-lg">还没有好友</p>
         <p className="text-sm mt-1">切换到"添加"标签搜索用户</p>
       </div>
@@ -165,14 +166,14 @@ function FriendsList({
               className="w-9 h-9 rounded-xl flex items-center justify-center text-secondary hover:bg-secondary-container/50 transition-colors"
               title="查看分享"
             >
-              <span className="material-symbols-outlined text-lg">visibility</span>
+              <Icon name="visibility" />
             </button>
             <button
               onClick={() => setSelectedFriend(friend)}
               className="w-9 h-9 rounded-xl flex items-center justify-center text-on-surface-variant hover:bg-surface-variant/30 transition-colors"
               title="权限设置"
             >
-              <span className="material-symbols-outlined text-lg">settings</span>
+              <Icon name="settings" />
             </button>
           </div>
         ))}
@@ -262,7 +263,7 @@ function PermissionsPanel({
             <p className="text-xs text-on-surface-variant">@{friend.username}</p>
           </div>
           <button onClick={onClose} className="ml-auto text-on-surface-variant hover:text-on-surface">
-            <span className="material-symbols-outlined">close</span>
+            <Icon name="close" />
           </button>
         </div>
 
@@ -400,7 +401,7 @@ function SearchTab({ onUpdate }: { onUpdate: () => void }) {
           disabled={searching || !query.trim()}
           className="px-4 py-3 rounded-xl bg-secondary text-on-secondary text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-40"
         >
-          <span className="material-symbols-outlined text-lg">search</span>
+          <Icon name="search" />
         </button>
       </div>
 
@@ -468,7 +469,7 @@ function RequestsTab({
   if (received.length === 0 && sent.length === 0) {
     return (
       <div className="text-center py-16 text-on-surface-variant">
-        <span className="material-symbols-outlined text-5xl mb-4 block">mark_email_read</span>
+        <Icon name="mark_email_read" />
         <p>没有待处理的请求</p>
       </div>
     );
@@ -563,7 +564,7 @@ function SharedContentView({ friend, onClose }: { friend: Friend; onClose: () =>
             <p className="text-xs text-on-surface-variant">@{friend.username}</p>
           </div>
           <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface">
-            <span className="material-symbols-outlined">close</span>
+            <Icon name="close" />
           </button>
         </div>
 
@@ -571,7 +572,7 @@ function SharedContentView({ friend, onClose }: { friend: Friend; onClose: () =>
           <div className="py-12 text-center text-on-surface-variant">加载中...</div>
         ) : permissions.length === 0 ? (
           <div className="py-12 text-center text-on-surface-variant">
-            <span className="material-symbols-outlined text-4xl mb-3 block">lock</span>
+            <Icon name="lock" />
             <p>对方暂未分享任何内容给你</p>
           </div>
         ) : (
@@ -610,7 +611,7 @@ function SharedContentView({ friend, onClose }: { friend: Friend; onClose: () =>
                 <div className="flex flex-col gap-2">
                   {(data.goals as Array<{ id: string; title: string; icon: string; completionsThisWeek: number }>).map((goal) => (
                     <div key={goal.id} className="flex items-center gap-3 py-1">
-                      <span className="material-symbols-outlined text-secondary text-lg">{goal.icon}</span>
+                      <Icon name={goal.icon} />
                       <span className="text-sm text-on-surface flex-1">{goal.title}</span>
                       <span className="text-xs text-on-surface-variant">{goal.completionsThisWeek}次/周</span>
                     </div>
@@ -666,7 +667,7 @@ function SharedSection({ title, icon, children }: { title: string; icon: string;
   return (
     <section className="bg-primary-container rounded-2xl p-4 ambient-shadow">
       <div className="flex items-center gap-2 mb-3">
-        <span className="material-symbols-outlined text-secondary text-lg">{icon}</span>
+        <Icon name={icon} />
         <h4 className="text-sm font-medium text-on-surface">{title}</h4>
       </div>
       {children}
@@ -709,9 +710,7 @@ function Avatar({ user, size = 40 }: { user: FriendUser; size?: number }) {
       {user.avatarUrl ? (
         <img src={user.avatarUrl} alt={user.name} className="absolute inset-0 w-full h-full object-cover" />
       ) : (
-        <span className="material-symbols-outlined text-on-surface-variant absolute inset-0 flex items-center justify-center text-lg">
-          person
-        </span>
+        <Icon name="person" className="text-on-surface-variant absolute inset-0 flex items-center justify-center text-lg" />
       )}
     </div>
   );
@@ -724,7 +723,7 @@ function Header({ title }: { title: string }) {
         href="/profile"
         className="text-on-surface hover:opacity-70 transition-opacity active:scale-95 duration-300 flex items-center justify-center w-10 h-10 rounded-full"
       >
-        <span className="material-symbols-outlined">arrow_back</span>
+        <Icon name="arrow_back" />
       </Link>
       <h1 className="[font-family:var(--font-display)] text-xl font-medium text-on-surface flex-1 text-center px-4">
         {title}
@@ -734,7 +733,7 @@ function Header({ title }: { title: string }) {
         aria-label="通知中心"
         className="text-on-surface hover:opacity-70 transition-opacity active:scale-95 duration-300 flex items-center justify-center w-10 h-10 rounded-full"
       >
-        <span className="material-symbols-outlined">notifications</span>
+        <Icon name="notifications" />
       </Link>
     </header>
   );

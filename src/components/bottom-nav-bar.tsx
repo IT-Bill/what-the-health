@@ -11,6 +11,8 @@ import {
   type VoiceSubmitEventDetail,
   type PendingVoiceText,
 } from "@/lib/voice-events";
+import { Icon } from "./icon";
+import { Mic } from "lucide-react";
 
 interface NavItem {
   href: string;
@@ -240,9 +242,7 @@ export function BottomNavBar() {
                 isActive ? "text-secondary" : "text-on-surface-variant/70 hover:text-secondary scale-95"
               }`}
             >
-              <span className="material-symbols-outlined mb-1" style={isActive ? { fontVariationSettings: "'FILL' 1" } : undefined}>
-                {item.icon}
-              </span>
+              <Icon name={item.icon} size={22} filled={isActive} className="mb-1" />
               <span className="text-xs font-medium tracking-wide">{item.label}</span>
             </Link>
           );
@@ -261,9 +261,7 @@ export function BottomNavBar() {
           onTouchCancel={endPress}
           aria-label="Voice input - long press to speak"
         >
-          <span className="material-symbols-outlined text-2xl" style={{ fontVariationSettings: "'FILL' 1" }}>
-            mic
-          </span>
+          <Mic size={24} fill="currentColor" />
         </button>
 
         {/* Right items */}
@@ -278,9 +276,7 @@ export function BottomNavBar() {
                 isActive ? "text-secondary" : "text-on-surface-variant/70 hover:text-secondary scale-95"
               }`}
             >
-              <span className="material-symbols-outlined mb-1" style={isActive ? { fontVariationSettings: "'FILL' 1" } : undefined}>
-                {item.icon}
-              </span>
+              <Icon name={item.icon} size={22} filled={isActive} className="mb-1" />
               <span className="text-xs font-medium tracking-wide">{item.label}</span>
             </Link>
           );

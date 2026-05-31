@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Icon } from "@/components/icon";
 import { useRouter } from "next/navigation";
 
 interface MoodOption {
@@ -60,9 +61,7 @@ export default function OnboardingMoodPage() {
                 >
                   <div className="flex items-center gap-6 z-10">
                     <div className="w-12 h-12 rounded-full bg-surface-bright flex items-center justify-center">
-                      <span className={`material-symbols-outlined ${mood.color}`}>
-                        {mood.icon}
-                      </span>
+                      <Icon name={mood.icon} className={mood.color} size={28} />
                     </div>
                     <span className="text-lg text-on-surface">{mood.label}</span>
                   </div>

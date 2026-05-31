@@ -9,6 +9,7 @@ import {
   type NotificationListResponse,
   type NotificationMutationResponse,
 } from "@/lib/notifications";
+import { Icon } from "@/components/icon";
 
 const REFRESH_INTERVAL_MS = 5 * 1000;
 
@@ -164,7 +165,7 @@ export default function NotificationsPage() {
             </div>
           ) : error ? (
             <div className="rounded-2xl border border-dashed border-outline-variant/30 bg-surface px-5 py-12 text-center text-on-surface-variant">
-              <span className="material-symbols-outlined text-4xl mb-3 block">notifications_off</span>
+              <Icon name="notifications_off" />
               <p className="text-base text-on-surface whitespace-pre-line">{error}</p>
               <div className="mt-4 flex items-center justify-center gap-3">
                 <button
@@ -184,7 +185,7 @@ export default function NotificationsPage() {
             </div>
           ) : notifications.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-outline-variant/30 bg-surface px-5 py-12 text-center text-on-surface-variant">
-              <span className="material-symbols-outlined text-4xl mb-3 block">notifications_off</span>
+              <Icon name="notifications_off" />
               <p className="text-base text-on-surface">暂时没有通知</p>
               <p className="mt-2 text-sm text-on-surface-variant">
                 新提醒出现后会自动加入这里。
@@ -232,7 +233,7 @@ export default function NotificationsPage() {
                         href={item.actionUrl}
                         className="inline-flex items-center gap-1 rounded-full border border-secondary/30 px-3 py-1.5 text-xs text-secondary transition-colors hover:bg-secondary-container/40"
                       >
-                        <span className="material-symbols-outlined text-sm">open_in_new</span>
+                        <Icon name="open_in_new" />
                         查看
                       </Link>
                     ) : null}
@@ -242,7 +243,7 @@ export default function NotificationsPage() {
                       className="inline-flex items-center gap-1 rounded-full border border-outline-variant/30 px-3 py-1.5 text-xs text-on-surface-variant transition-colors hover:bg-surface hover:text-on-surface"
                       aria-label={`删除${item.title}`}
                     >
-                      <span className="material-symbols-outlined text-sm">delete</span>
+                      <Icon name="delete" />
                       删除
                     </button>
                   </div>
