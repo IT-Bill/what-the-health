@@ -1,5 +1,6 @@
 import { getSessionUser } from "@/lib/session-user";
 import { prisma } from "@/lib/prisma";
+import { rememberPostInteraction } from "@/lib/memory/interaction-memory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,7 +38,7 @@ export async function POST(
   const result = await prisma.$transaction(async (tx) => {
     const post = await tx.post.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, title: true, excerpt: true, category: true },
     });
 
     if (!post) {
@@ -81,12 +82,20 @@ export async function POST(
         replies: [],
       },
       status: 201 as const,
+      memory: { post, commentBody: content },
     };
   });
 
   if ("error" in result) {
     return Response.json({ error: result.error }, { status: result.status });
   }
+
+  rememberPostInteraction({
+    userId: sessionUser.userId,
+    action: "comment",
+    post: result.memory.post,
+    commentBody: result.memory.commentBody,
+  });
 
   return Response.json({ comment: result.comment }, { status: result.status });
 }

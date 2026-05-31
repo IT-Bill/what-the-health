@@ -92,8 +92,10 @@ export default function MemoryPage() {
   );
 
   useEffect(() => {
-    setCurrentPeriodIdx(0);
-    fetchReport();
+    void Promise.resolve().then(() => {
+      setCurrentPeriodIdx(0);
+      fetchReport();
+    });
   }, [fetchReport]);
 
   function goPrev() {

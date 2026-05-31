@@ -59,7 +59,6 @@ import {
   Star,
   Stethoscope,
   Sunrise,
-  Target,
   Timer,
   Trash2,
   TrendingDown,
@@ -109,6 +108,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   autorenew: RefreshCw,
   magic_button: Sparkles,
   visibility: Eye,
+  bookmark: Bookmark,
   check: Check,
 
   // Communication

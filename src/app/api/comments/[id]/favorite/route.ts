@@ -1,5 +1,6 @@
 import { getSessionUser } from "@/lib/session-user";
 import { prisma } from "@/lib/prisma";
+import { rememberCommentInteraction } from "@/lib/memory/interaction-memory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -72,14 +73,27 @@ export async function POST(
     }
 
     const favoriteCount = await tx.commentFavorite.count({ where: { commentId: id } });
-    return { favorited: true, favoriteCount };
+    return {
+      favorited: true,
+      favoriteCount,
+      memory: {
+        comment: {
+          id: comment.id,
+          body: comment.body,
+          postId: comment.postId,
+          postTitle: comment.post.title,
+        },
+      },
+    };
   });
 
   if (!result) {
     return Response.json({ error: "评论不存在" }, { status: 404 });
   }
 
-  return Response.json(result);
+  const { memory, ...response } = result;
+  rememberCommentInteraction({ userId: actor.id, action: "favorite", comment: memory.comment });
+  return Response.json(response);
 }
 
 export async function DELETE(

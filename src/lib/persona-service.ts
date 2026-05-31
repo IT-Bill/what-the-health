@@ -139,6 +139,20 @@ export async function extractAndUpdatePersona(
   }
 }
 
+export async function extractAndUpdatePersonaFromText(
+  userId: string,
+  memoryText: string,
+  apiKey: string
+): Promise<void> {
+  const trimmed = memoryText.trim();
+  if (trimmed.length < 20) return;
+  await extractAndUpdatePersona(
+    userId,
+    [{ role: "user", content: trimmed, timestamp: Date.now() } as AgentMessage],
+    apiKey
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Step 1: Lightweight check for new info
 // ---------------------------------------------------------------------------

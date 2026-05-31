@@ -2,6 +2,7 @@ import { Type } from "@sinclair/typebox";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { prisma } from "@/lib/prisma";
 import { getOrCreatePersona } from "@/lib/persona-service";
+import { searchPostsByVector } from "@/lib/posts/post-vector-search";
 
 // ---------------------------------------------------------------------------
 // Wellness Tools for Mindful Agent
@@ -9,9 +10,20 @@ import { getOrCreatePersona } from "@/lib/persona-service";
 // ability to create journal entries.
 // ---------------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function p(params: unknown): Record<string, any> {
-  return params as Record<string, any>;
+type ToolParams = {
+  category?: "mindfulness" | "nutrition" | "reflection" | "sleep";
+  days?: number;
+  includeArchived?: boolean;
+  limit?: number;
+  note?: string;
+  periodType?: "weekly" | "monthly";
+  postId?: string;
+  prompt?: string | null;
+  query?: string;
+};
+
+function p(params: unknown): ToolParams {
+  return params as ToolParams;
 }
 
 export function createTools(userId: string): AgentTool[] {
@@ -302,10 +314,10 @@ export function createTools(userId: string): AgentTool[] {
     name: "search_posts",
     label: "搜索帖子",
     description:
-      "在 Discover 社区中搜索已发布的健康/疗愈相关帖子，返回帖子的基本信息（id、标题、摘要、分类等）。当你认为需要参考社区内容来回答用户问题时，先用这个工具搜索相关帖子，获取帖子 id 列表。注意：这个工具返回的 body 是截断的（最多2000字），如果需要某篇帖子的完整内容，请再调用 get_post_detail。",
+      "在 Discover 社区中用向量语义检索已发布的健康/疗愈相关帖子，返回帖子的基本信息（id、标题、摘要、分类、相似度等）。当你认为需要参考社区内容来回答用户问题时，先用这个工具搜索相关帖子，获取帖子 id 列表。注意：这个工具返回的是基本信息，如果需要某篇帖子的完整内容，请再调用 get_post_detail。",
     parameters: Type.Object({
       query: Type.Optional(
-        Type.String({ description: "搜索关键词（可选），在标题、摘要和正文中搜索" })
+        Type.String({ description: "搜索语义 query（可选），会转成向量后匹配标题、摘要和正文" })
       ),
       category: Type.Optional(
         Type.String({
@@ -313,40 +325,11 @@ export function createTools(userId: string): AgentTool[] {
           enum: ["mindfulness", "nutrition", "sleep", "reflection"],
         })
       ),
-      limit: Type.Number({ description: "返回多少条帖子（默认5）", default: 5, minimum: 1, maximum: 10 }),
+      limit: Type.Number({ description: "返回多少条帖子（默认3，最多3条）", default: 3, minimum: 1, maximum: 3 }),
     }),
     execute: async (_toolCallId, params) => {
       const { query, category, limit } = p(params);
-      const take = limit ?? 5;
-
-      const where: Record<string, unknown> = { published: true };
-      if (category) where.category = category;
-      if (query?.trim()) {
-        const q = query.trim();
-        where.OR = [
-          { title: { contains: q, mode: "insensitive" } },
-          { excerpt: { contains: q, mode: "insensitive" } },
-          { body: { contains: q, mode: "insensitive" } },
-        ];
-      }
-
-      const posts = await prisma.post.findMany({
-        where,
-        orderBy: { publishedAt: "desc" },
-        take,
-        select: {
-          id: true,
-          title: true,
-          excerpt: true,
-          category: true,
-          categoryIcon: true,
-          readMinutes: true,
-          publishedAt: true,
-          viewCount: true,
-          author: { select: { name: true } },
-          _count: { select: { likes: true, comments: true } },
-        },
-      });
+      const posts = await searchPostsByVector({ query, category, limit });
 
       return {
         content: [

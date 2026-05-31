@@ -18,6 +18,7 @@ import {
   buildSystemPrompt,
   extractAndUpdatePersona,
 } from "@/lib/persona-service";
+import { buildAnswerReferenceContext } from "@/lib/memory/answer-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -464,8 +465,12 @@ export async function POST(request: Request) {
   const abortController = new AbortController();
   request.signal.addEventListener("abort", () => abortController.abort());
 
-  // Build persona-injected system prompt
-  const systemPrompt = await buildSystemPrompt(SYSTEM_PROMPT, payload.userId);
+  // Build Alice-style layered context: persona + health goals/data + recent chat + vector memory.
+  const answerReferenceContext = await buildAnswerReferenceContext(payload.userId, userMessageText);
+  const systemPrompt = await buildSystemPrompt(
+    `${SYSTEM_PROMPT}\n\n${answerReferenceContext}`,
+    payload.userId
+  );
 
   const userTools = createTools(payload.userId);
 

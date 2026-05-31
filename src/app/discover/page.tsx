@@ -24,13 +24,24 @@ export default function DiscoverPage() {
   }, []);
 
   useEffect(() => {
-    setLoading(true);
-    const params = new URLSearchParams({ category: activeCategory });
-    fetch(`/api/posts?${params}`)
-      .then((r) => r.json())
-      .then((data) => setPosts(data))
-      .catch(() => setPosts([]))
-      .finally(() => setLoading(false));
+    let cancelled = false;
+    async function loadPosts() {
+      setLoading(true);
+      const params = new URLSearchParams({ category: activeCategory });
+      try {
+        const response = await fetch(`/api/posts?${params}`);
+        const data = await response.json();
+        if (!cancelled) setPosts(data);
+      } catch {
+        if (!cancelled) setPosts([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void loadPosts();
+    return () => {
+      cancelled = true;
+    };
   }, [activeCategory]);
 
   return (
