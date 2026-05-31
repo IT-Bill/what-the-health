@@ -444,14 +444,15 @@ export async function POST(request: Request) {
     },
   });
 
-  // Update session title if first message
+  // Keep the session ordering aligned with the latest user-visible message.
   const msgCount = await prisma.chatMessage.count({ where: { sessionId } });
-  if (msgCount <= 2) {
-    await prisma.chatSession.update({
-      where: { id: sessionId },
-      data: { title: userMessageText.slice(0, 30) },
-    });
-  }
+  await prisma.chatSession.update({
+    where: { id: sessionId },
+    data: {
+      updatedAt: new Date(),
+      ...(msgCount <= 2 ? { title: userMessageText.slice(0, 30) } : {}),
+    },
+  });
 
   // Create an AbortController that mirrors the request signal
   const abortController = new AbortController();
