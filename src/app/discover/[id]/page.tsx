@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import type { PostDetail, PostComment } from "@/lib/post-types";
@@ -13,40 +14,84 @@ export default function PostDetailPage() {
   const [loading, setLoading] = useState(true);
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
+  const [favorited, setFavorited] = useState(false);
+  const [favoriteCount, setFavoriteCount] = useState(0);
   const [commentText, setCommentText] = useState("");
+  const [replyTarget, setReplyTarget] = useState<PostComment | null>(null);
 
   useEffect(() => {
     if (!params?.id) return;
-    setLoading(true);
-    fetch(`/api/posts/${params.id}`)
-      .then((r) => r.json())
-      .then((data) => {
+    let cancelled = false;
+    async function loadPost() {
+      setLoading(true);
+      try {
+        const response = await fetch(`/api/posts/${params.id}`);
+        const data = await response.json();
+        if (cancelled) return;
         if (data.error) {
           setPost(null);
         } else {
           setPost(data);
           setLiked(data.liked);
+          setFavorited(data.favorited);
           setLikeCount(data._count.likes);
+          setFavoriteCount(data._count.favorites);
         }
-      })
-      .catch(() => setPost(null))
-      .finally(() => setLoading(false));
+      } catch {
+        if (!cancelled) setPost(null);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void loadPost();
+    return () => {
+      cancelled = true;
+    };
   }, [params?.id]);
 
-  function handleLike() {
+  async function handleLike() {
+    if (!post) return;
+    const nextLiked = !liked;
     setLiked(!liked);
     setLikeCount((c) => (liked ? c - 1 : c + 1));
-    // TODO: POST /api/posts/[id]/like in production
+    try {
+      const res = await fetch(`/api/posts/${post.id}/like`, { method: nextLiked ? "POST" : "DELETE" });
+      if (!res.ok) throw new Error("like failed");
+      const data = await res.json();
+      setLiked(data.liked);
+      setLikeCount(data.likeCount);
+    } catch {
+      setLiked(liked);
+      setLikeCount((c) => (nextLiked ? c - 1 : c + 1));
+    }
   }
 
-  function handleComment() {
+  async function handleFavorite() {
+    if (!post) return;
+    const nextFavorited = !favorited;
+    setFavorited(nextFavorited);
+    setFavoriteCount((c) => (nextFavorited ? c + 1 : c - 1));
+    try {
+      const res = await fetch(`/api/posts/${post.id}/favorite`, { method: nextFavorited ? "POST" : "DELETE" });
+      if (!res.ok) throw new Error("favorite failed");
+      const data = await res.json();
+      setFavorited(data.favorited);
+      setFavoriteCount(data.favoriteCount);
+    } catch {
+      setFavorited(favorited);
+      setFavoriteCount((c) => (nextFavorited ? c - 1 : c + 1));
+    }
+  }
+
+  async function handleComment() {
     if (!commentText.trim() || !post) return;
-    // Optimistic local add
+    const content = commentText.trim();
+    const parentId = replyTarget?.id ?? null;
     const newComment: PostComment = {
       id: `temp-${Date.now()}`,
-      body: commentText.trim(),
+      body: content,
       createdAt: new Date().toISOString(),
-      parentId: null,
+      parentId,
       liked: false,
       favorited: false,
       _count: {
@@ -55,12 +100,40 @@ export default function PostDetailPage() {
       },
       author: { id: "", name: "你", avatarUrl: null },
     };
+    const nextComments = parentId
+      ? insertReply(post.comments, parentId, newComment)
+      : [...post.comments, newComment];
     setPost({
       ...post,
-      comments: [...post.comments, newComment],
+      comments: nextComments,
     });
     setCommentText("");
-    // TODO: POST /api/posts/[id]/comment in production
+    setReplyTarget(null);
+    try {
+      const res = await fetch(`/api/posts/${post.id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: content, parentId }),
+      });
+      if (!res.ok) throw new Error("comment failed");
+      const data = await res.json();
+      setPost((current) => {
+        if (!current) return current;
+        const withoutTemp = removeComment(current.comments, newComment.id);
+        return {
+          ...current,
+          comments: parentId
+            ? insertReply(withoutTemp, parentId, data.comment)
+            : [...withoutTemp, data.comment],
+        };
+      });
+    } catch {
+      setPost((current) =>
+        current ? { ...current, comments: removeComment(current.comments, newComment.id) } : current
+      );
+      setCommentText(content);
+      setReplyTarget(replyTarget);
+    }
   }
 
   if (loading) {
@@ -140,6 +213,7 @@ export default function PostDetailPage() {
         </div>
 
         {/* Body (rendered as markdown-like paragraphs) */}
+        <LongPressActions onLike={handleLike} onFavorite={handleFavorite} onComment={() => setReplyTarget(null)}>
         <article className="prose-custom text-base text-on-surface leading-relaxed space-y-4 mb-10">
           {post.body.split("\n\n").map((paragraph, i) => {
             if (paragraph.startsWith("## ")) {
@@ -174,6 +248,7 @@ export default function PostDetailPage() {
             );
           })}
         </article>
+        </LongPressActions>
 
         {/* Like + Stats Bar */}
         <div className="flex items-center gap-4 py-4 border-t border-b border-outline-variant/20 mb-8">
@@ -187,6 +262,17 @@ export default function PostDetailPage() {
           >
             <Icon name="favorite" className="text-lg" />
             <span className="text-sm font-medium">{likeCount}</span>
+          </button>
+          <button
+            onClick={handleFavorite}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl transition-all duration-300 ${
+              favorited
+                ? "bg-tertiary-container text-on-tertiary-container"
+                : "border border-outline-variant/30 text-on-surface-variant hover:bg-surface-variant/20"
+            }`}
+          >
+            <Icon name="bookmark" className="text-lg" />
+            <span className="text-sm font-medium">{favoriteCount}</span>
           </button>
           <span className="flex items-center gap-1.5 text-sm text-on-surface-variant">
             <Icon name="chat_bubble" />
@@ -210,14 +296,22 @@ export default function PostDetailPage() {
               <Icon name="person" />
             </div>
             <div className="flex-1 flex gap-2">
-              <input
-                type="text"
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleComment()}
-                placeholder="说点什么..."
-                className="flex-1 bg-surface-container-low border-0 rounded-xl px-4 py-2.5 text-sm text-on-surface placeholder:text-outline-variant focus:ring-1 focus:ring-secondary transition-all"
-              />
+              <div className="flex-1">
+                {replyTarget && (
+                  <div className="mb-2 flex items-center gap-2 text-xs text-on-surface-variant">
+                    <span>回复 {replyTarget.author.name}</span>
+                    <button onClick={() => setReplyTarget(null)} className="text-secondary">取消</button>
+                  </div>
+                )}
+                <input
+                  type="text"
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleComment()}
+                  placeholder={replyTarget ? "写下回复..." : "说点什么..."}
+                  className="w-full bg-surface-container-low border-0 rounded-xl px-4 py-2.5 text-sm text-on-surface placeholder:text-outline-variant focus:ring-1 focus:ring-secondary transition-all"
+                />
+              </div>
               <button
                 onClick={handleComment}
                 disabled={!commentText.trim()}
@@ -231,7 +325,16 @@ export default function PostDetailPage() {
           {/* Comment List */}
           <div className="flex flex-col gap-4">
             {post.comments.map((comment) => (
-              <CommentItem key={comment.id} comment={comment} />
+              <CommentItem
+                key={comment.id}
+                comment={comment}
+                onReply={(target) => setReplyTarget(target)}
+                onCommentChanged={(updated) => {
+                  setPost((current) =>
+                    current ? { ...current, comments: updateComment(current.comments, updated) } : current
+                  );
+                }}
+              />
             ))}
           </div>
         </section>
@@ -240,7 +343,57 @@ export default function PostDetailPage() {
   );
 }
 
-function CommentItem({ comment }: { comment: PostComment }) {
+function CommentItem({
+  comment,
+  onReply,
+  onCommentChanged,
+}: {
+  comment: PostComment;
+  onReply: (comment: PostComment) => void;
+  onCommentChanged: (comment: PostComment) => void;
+}) {
+  async function toggleCommentLike() {
+    const nextLiked = !comment.liked;
+    onCommentChanged({
+      ...comment,
+      liked: nextLiked,
+      _count: { ...comment._count, likes: comment._count.likes + (nextLiked ? 1 : -1) },
+    });
+    try {
+      const res = await fetch(`/api/comments/${comment.id}/like`, { method: nextLiked ? "POST" : "DELETE" });
+      if (!res.ok) throw new Error("comment like failed");
+      const data = await res.json();
+      onCommentChanged({
+        ...comment,
+        liked: data.liked,
+        _count: { ...comment._count, likes: data.likeCount },
+      });
+    } catch {
+      onCommentChanged(comment);
+    }
+  }
+
+  async function toggleCommentFavorite() {
+    const nextFavorited = !comment.favorited;
+    onCommentChanged({
+      ...comment,
+      favorited: nextFavorited,
+      _count: { ...comment._count, favorites: comment._count.favorites + (nextFavorited ? 1 : -1) },
+    });
+    try {
+      const res = await fetch(`/api/comments/${comment.id}/favorite`, { method: nextFavorited ? "POST" : "DELETE" });
+      if (!res.ok) throw new Error("comment favorite failed");
+      const data = await res.json();
+      onCommentChanged({
+        ...comment,
+        favorited: data.favorited,
+        _count: { ...comment._count, favorites: data.favoriteCount },
+      });
+    } catch {
+      onCommentChanged(comment);
+    }
+  }
+
   return (
     <div className="flex gap-3">
       <div className="w-8 h-8 rounded-full bg-surface-container-high overflow-hidden relative flex-shrink-0">
@@ -257,19 +410,124 @@ function CommentItem({ comment }: { comment: PostComment }) {
             {new Date(comment.createdAt).toLocaleDateString("zh-CN", { month: "short", day: "numeric" })}
           </span>
         </div>
-        <p className="text-sm text-on-surface-variant mt-1 leading-relaxed">{comment.body}</p>
+        <LongPressActions
+          onLike={toggleCommentLike}
+          onFavorite={toggleCommentFavorite}
+          onComment={() => onReply(comment)}
+        >
+          <p className="text-sm text-on-surface-variant mt-1 leading-relaxed">{comment.body}</p>
+        </LongPressActions>
+        <div className="mt-2 flex items-center gap-3 text-xs text-on-surface-variant">
+          <button onClick={toggleCommentLike} className={comment.liked ? "text-secondary" : ""}>
+            赞 {comment._count.likes}
+          </button>
+          <button onClick={toggleCommentFavorite} className={comment.favorited ? "text-tertiary" : ""}>
+            收藏 {comment._count.favorites}
+          </button>
+          <button onClick={() => onReply(comment)}>评论</button>
+        </div>
 
         {/* Nested replies */}
         {comment.replies && comment.replies.length > 0 && (
           <div className="mt-3 ml-2 pl-3 border-l border-outline-variant/20 flex flex-col gap-3">
             {comment.replies.map((reply) => (
-              <CommentItem key={reply.id} comment={reply} />
+              <CommentItem
+                key={reply.id}
+                comment={reply}
+                onReply={onReply}
+                onCommentChanged={onCommentChanged}
+              />
             ))}
           </div>
         )}
       </div>
     </div>
   );
+}
+
+function LongPressActions({
+  children,
+  onLike,
+  onFavorite,
+  onComment,
+}: {
+  children: ReactNode;
+  onLike: () => void;
+  onFavorite: () => void;
+  onComment: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function startPress() {
+    timerRef.current = setTimeout(() => setOpen(true), 450);
+  }
+
+  function endPress() {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }
+
+  return (
+    <div
+      className="relative"
+      onPointerDown={startPress}
+      onPointerUp={endPress}
+      onPointerCancel={endPress}
+      onPointerLeave={endPress}
+    >
+      {children}
+      {open && (
+        <>
+          <button className="fixed inset-0 z-40 cursor-default" onClick={() => setOpen(false)} aria-label="关闭操作菜单" />
+          <div className="absolute left-0 top-full z-50 mt-2 flex items-center gap-1 rounded-xl border border-outline-variant/30 bg-surface-container-low px-2 py-1 shadow-lg">
+            <button onClick={() => { onLike(); setOpen(false); }} className="flex items-center gap-1 rounded-lg px-3 py-2 text-sm text-on-surface hover:bg-surface-variant/30">
+              <Icon name="favorite" size={16} /> 赞
+            </button>
+            <button onClick={() => { onFavorite(); setOpen(false); }} className="flex items-center gap-1 rounded-lg px-3 py-2 text-sm text-on-surface hover:bg-surface-variant/30">
+              <Icon name="bookmark" size={16} /> 收藏
+            </button>
+            <button onClick={() => { onComment(); setOpen(false); }} className="flex items-center gap-1 rounded-lg px-3 py-2 text-sm text-on-surface hover:bg-surface-variant/30">
+              <Icon name="chat_bubble" size={16} /> 评论
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function insertReply(comments: PostComment[], parentId: string, reply: PostComment): PostComment[] {
+  return comments.map((comment) => {
+    if (comment.id === parentId) {
+      return { ...comment, replies: [...(comment.replies ?? []), reply] };
+    }
+    return {
+      ...comment,
+      replies: comment.replies ? insertReply(comment.replies, parentId, reply) : comment.replies,
+    };
+  });
+}
+
+function removeComment(comments: PostComment[], commentId: string): PostComment[] {
+  return comments
+    .filter((comment) => comment.id !== commentId)
+    .map((comment) => ({
+      ...comment,
+      replies: comment.replies ? removeComment(comment.replies, commentId) : comment.replies,
+    }));
+}
+
+function updateComment(comments: PostComment[], updated: PostComment): PostComment[] {
+  return comments.map((comment) => {
+    if (comment.id === updated.id) return { ...updated, replies: comment.replies };
+    return {
+      ...comment,
+      replies: comment.replies ? updateComment(comment.replies, updated) : comment.replies,
+    };
+  });
 }
 
 function HeaderBar({ onBack }: { onBack: () => void }) {

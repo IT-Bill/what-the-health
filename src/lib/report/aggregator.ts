@@ -380,7 +380,7 @@ async function aggregateHabits(userId: string, period: PeriodRange): Promise<Hab
     // Current streak (consecutive days ending at period.end - 1 day)
     const endDate = new Date(period.end);
     endDate.setDate(endDate.getDate() - 1);
-    let checkDate = new Date(endDate);
+    const checkDate = new Date(endDate);
     while (dates.includes(checkDate.toISOString().slice(0, 10))) {
       current++;
       checkDate.setDate(checkDate.getDate() - 1);

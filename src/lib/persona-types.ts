@@ -69,7 +69,6 @@ export function parsePersona(raw: {
   expression: unknown;
   preferences: unknown;
 }): UserPersonaData {
-  const empty = createEmptyPersona();
   return {
     identity: {
       lifestyleTags: extractStrings((raw.identity as Record<string, unknown>)?.lifestyleTags),

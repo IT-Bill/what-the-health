@@ -1,5 +1,6 @@
 import { getSessionUser } from "@/lib/session-user";
 import { prisma } from "@/lib/prisma";
+import { rememberPostInteraction } from "@/lib/memory/interaction-memory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,7 +30,7 @@ export async function POST(
   const result = await prisma.$transaction(async (tx) => {
     const post = await tx.post.findUnique({
       where: { id },
-      select: { id: true, title: true, authorId: true },
+      select: { id: true, title: true, excerpt: true, category: true, authorId: true },
     });
 
     if (!post) {
@@ -61,14 +62,16 @@ export async function POST(
     }
 
     const likeCount = await tx.like.count({ where: { postId: id } });
-    return { liked: true, likeCount };
+    return { liked: true, likeCount, memory: { post } };
   });
 
   if (!result) {
     return Response.json({ error: "文章不存在" }, { status: 404 });
   }
 
-  return Response.json(result);
+  const { memory, ...response } = result;
+  rememberPostInteraction({ userId: actor.id, action: "like", post: memory.post });
+  return Response.json(response);
 }
 
 export async function DELETE(

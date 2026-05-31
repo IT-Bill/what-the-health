@@ -499,6 +499,23 @@ model PostFavorite {
   @@map("post_favorites")
 }
 
+model VectorDocument {
+  id        String                 @id @default(dbgenerated("gen_random_uuid()::text"))
+  namespace String
+  sourceId  String                 @map("source_id")
+  userId    String?                @map("user_id")
+  title     String?
+  content   String
+  metadata  Json                   @default("{}")
+  embedding Unsupported("vector(1024)")
+  createdAt DateTime               @default(now()) @map("created_at")
+  updatedAt DateTime               @updatedAt @map("updated_at")
+
+  @@unique([namespace, sourceId], map: "vector_documents_namespace_source_id_key")
+  @@index([namespace], map: "vector_documents_namespace_idx")
+  @@map("vector_documents")
+}
+
 model CommentLike {
   id        String @id @default(cuid())
   commentId String
@@ -540,12 +557,17 @@ model Memory {
   note      String?
   /// The storyline/prompt this memory responds to, if any.
   prompt    String?
+  /// Origin of this memory: manual, chat, post-like, post-favorite, post-comment, etc.
+  source    String?
+  sourceId  String?
+  metadata  Json?
   createdAt DateTime @default(now())
 
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   reactions MemoryReaction[]
 
   @@index([userId, createdAt])
+  @@index([userId, source, createdAt])
   @@map("memories")
 }
 

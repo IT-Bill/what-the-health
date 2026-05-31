@@ -61,7 +61,7 @@ export function FriendsPanel() {
   }, []);
 
   useEffect(() => {
-    fetchFriends();
+    void Promise.resolve().then(fetchFriends);
   }, [fetchFriends]);
 
   const pendingCount = data ? data.pendingReceived.length : 0;
@@ -139,7 +139,7 @@ function FriendsList({
       <div className="text-center py-16 text-on-surface-variant">
         <Icon name="group" />
         <p className="text-lg">还没有好友</p>
-        <p className="text-sm mt-1">切换到"添加"标签搜索用户</p>
+        <p className="text-sm mt-1">切换到&quot;添加&quot;标签搜索用户</p>
       </div>
     );
   }
@@ -711,4 +711,3 @@ function Avatar({ user, size = 40 }: { user: FriendUser; size?: number }) {
     </div>
   );
 }
-
