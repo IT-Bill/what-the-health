@@ -414,7 +414,7 @@ function RoleSelector({
       {open && (
         <>
           <div className="fixed inset-0 z-[70]" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full mt-1 z-[80] bg-surface rounded-xl shadow-lg border border-outline-variant/20 py-1 w-48 animate-[fadeIn_0.15s_ease]">
+          <div className="absolute left-0 top-full mt-1 z-[80] bg-surface rounded-lg shadow-lg border border-outline-variant/20 py-1 w-48 animate-[fadeIn_0.15s_ease]">
             {ROLE_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
