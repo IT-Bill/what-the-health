@@ -67,7 +67,7 @@ export function FriendsPanel() {
   const pendingCount = data ? data.pendingReceived.length : 0;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 pb-24">
       {/* Tabs */}
       <div className="flex gap-2">
         {TABS.map((tab) => (

@@ -44,6 +44,7 @@ interface HealthViewData {
   period: { days: number; since: string };
   summary: Record<string, { count: number; avg: number; min: number; max: number; latest: number; unit: string }>;
   moodHistory: { mood: string; note: string | null; createdAt: string }[];
+  reports: { id: string; periodType: string; periodStart: string; summary?: string }[];
 }
 
 const ROLE_LABELS: Record<string, string> = { owner: "管理员", caregiver: "关怀者", member: "被关怀者" };
@@ -131,51 +132,76 @@ export default function FamilyDetailPage() {
         <h1 className="font-[var(--font-display)] text-xl font-medium text-on-surface ml-2">{family.name}</h1>
       </header>
 
-      <main className="flex-1 px-6 py-6 max-w-screen-md mx-auto w-full flex flex-col gap-6">
-        {/* Health Data View */}
+      <main className="flex-1 px-6 py-6 max-w-screen-md mx-auto w-full flex flex-col gap-6 pb-24">
+        {/* Health Data Modal (bottom sheet) */}
         {viewUserId && (
-          <section className="bg-primary-container rounded-2xl p-5 ambient-shadow">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-medium text-on-surface flex items-center gap-2">
-                <Icon name="health_metrics" size={18} className="text-secondary" />
-                {healthData?.nickname || healthData?.user?.name || "成员"}的健康数据（近7天）
-              </h3>
-              <Link href={`/discover/family/${familyId}`} className="text-xs text-on-surface-variant">
-                关闭
-              </Link>
-            </div>
-            {healthLoading ? (
-              <div className="flex justify-center py-8">
-                <div className="w-6 h-6 border-2 border-secondary border-t-transparent rounded-full animate-spin" />
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-inverse-surface/30 backdrop-blur-sm" onClick={() => window.history.back()}>
+            <div
+              className="bg-surface w-full sm:w-[480px] sm:rounded-2xl rounded-t-xl max-h-[85vh] overflow-y-auto p-6 flex flex-col gap-4 animate-[fadeIn_0.2s_ease]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-medium text-on-surface flex items-center gap-2">
+                  <Icon name="health_metrics" size={18} className="text-secondary" />
+                  {healthData?.nickname || healthData?.user?.name || "成员"}的健康概览
+                </h3>
+                <Link href={`/discover/family/${familyId}`} className="text-on-surface-variant p-1">
+                  <Icon name="close" size={20} />
+                </Link>
               </div>
-            ) : healthData && Object.keys(healthData.summary).length > 0 ? (
-              <div className="flex flex-col gap-3">
-                <div className="grid grid-cols-2 gap-3">
-                  {Object.entries(healthData.summary).map(([metric, data]) => (
-                    <div key={metric} className="bg-surface rounded-xl p-3">
-                      <p className="text-[10px] text-on-surface-variant uppercase tracking-wider">{METRIC_LABELS[metric] || metric}</p>
-                      <p className="text-lg font-medium text-on-surface mt-1">{data.avg} <span className="text-xs text-on-surface-variant">{data.unit}</span></p>
-                      <p className="text-[10px] text-outline">范围 {data.min}–{data.max}</p>
-                    </div>
-                  ))}
+
+              {healthLoading ? (
+                <div className="flex justify-center py-12">
+                  <div className="w-6 h-6 border-2 border-secondary border-t-transparent rounded-full animate-spin" />
                 </div>
-                {healthData.moodHistory.length > 0 && (
-                  <div className="bg-surface rounded-xl p-3">
-                    <p className="text-[10px] text-on-surface-variant uppercase tracking-wider mb-2">情绪记录</p>
-                    <div className="flex gap-1 flex-wrap">
-                      {healthData.moodHistory.slice(0, 7).map((m, i) => (
-                        <span key={i} className="text-lg" title={m.note || undefined}>
-                          {m.mood === "calm" ? "😊" : m.mood === "anxious" ? "😰" : "😴"}
-                        </span>
+              ) : healthData && Object.keys(healthData.summary).length > 0 ? (
+                <div className="flex flex-col gap-4">
+                  {/* Metrics Grid */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {Object.entries(healthData.summary).map(([metric, data]) => (
+                      <div key={metric} className="bg-surface-container-low rounded-xl p-3">
+                        <p className="text-[10px] text-on-surface-variant uppercase tracking-wider">{METRIC_LABELS[metric] || metric}</p>
+                        <p className="text-lg font-medium text-on-surface mt-1">{data.avg} <span className="text-xs text-on-surface-variant">{data.unit}</span></p>
+                        <p className="text-[10px] text-outline">范围 {data.min}–{data.max}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Mood History */}
+                  {healthData.moodHistory.length > 0 && (
+                    <div className="bg-surface-container-low rounded-xl p-3">
+                      <p className="text-[10px] text-on-surface-variant uppercase tracking-wider mb-2">情绪记录</p>
+                      <div className="flex gap-1 flex-wrap">
+                        {healthData.moodHistory.slice(0, 7).map((m, i) => (
+                          <span key={i} className="text-lg" title={m.note || undefined}>
+                            {m.mood === "calm" ? "😊" : m.mood === "anxious" ? "😰" : "😴"}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Reports link */}
+                  {healthData.reports && healthData.reports.length > 0 && (
+                    <div className="flex flex-col gap-2">
+                      <p className="text-xs text-on-surface-variant font-medium uppercase tracking-widest">最近报告</p>
+                      {healthData.reports.map((report: { id: string; periodType: string; periodStart: string; summary?: string }) => (
+                        <div key={report.id} className="bg-surface-container-low rounded-xl p-3">
+                          <p className="text-sm font-medium text-on-surface">
+                            {report.periodType === "weekly" ? "周报" : "月报"} · {new Date(report.periodStart).toLocaleDateString("zh-CN")}
+                          </p>
+                          {report.summary && <p className="text-xs text-on-surface-variant mt-1 line-clamp-2">{report.summary}</p>}
+                        </div>
                       ))}
                     </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-on-surface-variant text-center py-4">暂无健康数据</p>
-            )}
-          </section>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-on-surface-variant text-center py-8">暂无健康数据</p>
+              )}
+            </div>
+          </div>
         )}
 
         {/* Active Alerts */}
