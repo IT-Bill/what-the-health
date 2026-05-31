@@ -61,7 +61,7 @@ const SYSTEM_PROMPT = `你是 Mindful，一位温柔、沉静的疗愈陪伴者�
 - 使用与用户相同的语言回复（中文或英文）。
 - 你不是医生，遇到涉及医疗、心理危机的内容时，温柔地建议对方寻求专业帮助。
 
-你可以使用工具来获取用户的 wellness 数据，以便给出更个性化的回应。在调用工具前先简单说明你在做什么。`;
+你可以使用工具来获取用户的 wellness 数据，以便给出更个性化的回应。调用工具时无需向用户说明，直接调用即可。`;
 
 function agentMsgToWire(m: AgentMessage): { role: string; text: string } | null {
   if (m.role === "user") {
@@ -483,6 +483,27 @@ export async function POST(request: Request) {
   let assistantText = "";
   let assistantModel = "";
   let assistantTokens = { input: 0, output: 0 };
+  let persisted = false;
+
+  async function persistAssistant() {
+    if (persisted || !assistantText.trim()) return;
+    persisted = true;
+    await prisma.chatMessage.create({
+      data: {
+        sessionId: sessionId!,
+        role: "assistant",
+        content: assistantText.trim(),
+        model: assistantModel || undefined,
+        inputTokens: assistantTokens.input || undefined,
+        outputTokens: assistantTokens.output || undefined,
+        toolCallsJson: toolExecutions.length > 0 ? JSON.stringify(toolExecutions) : undefined,
+      },
+    });
+    await prisma.chatSession.update({
+      where: { id: sessionId! },
+      data: { updatedAt: new Date() },
+    });
+  }
 
   // Track tool executions for UI display
   const toolExecutions: Array<{
@@ -510,22 +531,7 @@ export async function POST(request: Request) {
           }
           case "agent_end": {
             // Persist assistant message
-            if (assistantText.trim()) {
-              await prisma.chatMessage.create({
-                data: {
-                  sessionId: sessionId!,
-                  role: "assistant",
-                  content: assistantText.trim(),
-                  model: assistantModel || undefined,
-                  inputTokens: assistantTokens.input || undefined,
-                  outputTokens: assistantTokens.output || undefined,
-                },
-              });
-              await prisma.chatSession.update({
-                where: { id: sessionId! },
-                data: { updatedAt: new Date() },
-              });
-            }
+            await persistAssistant();
 
             // P2: Fire-and-forget persona memory extraction
             const allMessages = agent.state.messages.slice();
@@ -630,6 +636,7 @@ export async function POST(request: Request) {
     cancel() {
       abortController.abort();
       agent.abort();
+      persistAssistant().catch(console.error);
     },
   });
 

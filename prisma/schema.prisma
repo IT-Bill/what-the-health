@@ -367,7 +367,9 @@ model ChatMessage {
   role         ChatRole
   content      String
   /// Optional reasoning/thinking trace kept separate from the visible content.
-  reasoning    String?
+  reasoning      String?
+  /// JSON-serialized ToolCallInfo[] for display in the thinking section.
+  toolCallsJson  String?
   /// Token usage / model metadata returned by the provider.
   model        String?
   inputTokens  Int?
