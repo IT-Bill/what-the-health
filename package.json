@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "example:notification-agent": "tsx scripts/notification-agent-example.ts",
+    "test:notifications": "tsx scripts/notification-api-testbench.ts",
     "asr-proxy": "tsx src/server/asr-proxy.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",

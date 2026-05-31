@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import type { PostDetail, PostComment } from "@/lib/post-types";
@@ -281,9 +282,13 @@ function HeaderBar({ onBack }: { onBack: () => void }) {
         <span className="material-symbols-outlined">arrow_back</span>
       </button>
       <h1 className="font-[var(--font-display)] text-lg font-medium text-primary">Mindful</h1>
-      <button className="w-10 h-10 flex items-center justify-center text-on-surface-variant hover:opacity-70 transition-opacity rounded-full">
-        <span className="material-symbols-outlined">share</span>
-      </button>
+      <Link
+        href="/notifications"
+        aria-label="通知中心"
+        className="w-10 h-10 flex items-center justify-center text-on-surface-variant hover:opacity-70 transition-opacity rounded-full"
+      >
+        <span className="material-symbols-outlined">notifications</span>
+      </Link>
     </header>
   );
 }

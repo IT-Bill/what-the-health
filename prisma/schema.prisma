@@ -210,6 +210,7 @@ model User {
   comments          Comment[]
   likes             Like[]
   persona           UserPersona?
+  notifications     Notification[]
   creditTransactions CreditTransaction[]
   healthImports      HealthImport[]
   healthRecords      HealthRecord[]
@@ -221,6 +222,27 @@ model User {
   permissionsGrantedToMe FriendPermission[] @relation("PermissionFriend")
 
   @@map("users")
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  body        String
+  source      String?
+  actionUrl   String?
+  metadata    Json?
+  deliveredAt DateTime?
+  readAt      DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, deliveredAt, createdAt])
+  @@index([userId, readAt, createdAt])
+  @@map("notifications")
 }
 
 // ---------------------------------------------------------------------------
