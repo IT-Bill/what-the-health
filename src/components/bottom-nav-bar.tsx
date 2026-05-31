@@ -11,6 +11,7 @@ import {
   type VoiceSubmitEventDetail,
   type PendingVoiceText,
 } from "@/lib/voice-events";
+import { getAsrWebSocketUrl, getVoiceUnavailableMessage } from "@/lib/voice-client";
 import { Icon } from "./icon";
 import { Mic } from "lucide-react";
 
@@ -90,6 +91,15 @@ export function BottomNavBar() {
 
   const startASR = useCallback(async () => {
     try {
+      const unavailableMessage = getVoiceUnavailableMessage();
+      if (unavailableMessage) {
+        alert(unavailableMessage);
+        isListeningRef.current = false;
+        shouldSendRef.current = false;
+        setIsListening(false);
+        return;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
@@ -114,9 +124,7 @@ export function BottomNavBar() {
       source.connect(processor);
       processor.connect(audioContext.destination);
 
-      const isDev = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-      const wsUrl = isDev ? `ws://localhost:3001` : `wss://${window.location.host}/api/asr`;
-      const ws = new WebSocket(wsUrl);
+      const ws = new WebSocket(getAsrWebSocketUrl());
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -162,7 +170,15 @@ export function BottomNavBar() {
         cleanupASR();
         setIsListening(false);
       };
-    } catch {
+    } catch (error) {
+      console.error("[Voice] Failed to start bottom nav recording:", error);
+      const message =
+        error instanceof DOMException && error.name === "NotAllowedError"
+          ? "无法启动录音，请在浏览器设置中允许麦克风权限。"
+          : "无法启动录音，请检查麦克风权限";
+      alert(message);
+      isListeningRef.current = false;
+      shouldSendRef.current = false;
       setIsListening(false);
     }
   }, [cleanupASR, submitVoiceText]);

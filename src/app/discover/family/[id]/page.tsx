@@ -104,11 +104,39 @@ export default function FamilyDetailPage() {
     if (res.ok) fetchFamily();
   }
 
-  function copyInviteCode() {
+  async function copyInviteCode() {
     if (!family) return;
-    navigator.clipboard.writeText(family.inviteCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    const text = family.inviteCode;
+
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        // Fallback for non-secure contexts (HTTP)
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        const ok = document.execCommand("copy");
+        document.body.removeChild(textarea);
+        if (!ok) throw new Error("execCommand failed");
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Final fallback: select the text for manual copy
+      const el = document.getElementById("invite-code-display");
+      if (el) {
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      }
+      alert("复制失败，请手动长按选择邀请码后复制");
+    }
   }
 
   if (loading) {
@@ -351,7 +379,7 @@ export default function FamilyDetailPage() {
             <h2 className="text-lg font-medium text-on-surface mb-2">邀请家人加入</h2>
             <p className="text-xs text-on-surface-variant mb-4">将以下邀请码发送给家人，对方在「加入家庭」中输入即可</p>
             <div className="bg-surface-container-low rounded-xl px-4 py-3 flex items-center justify-between mb-4">
-              <code className="text-sm font-mono text-on-surface">{family.inviteCode}</code>
+              <code id="invite-code-display" className="text-sm font-mono text-on-surface">{family.inviteCode}</code>
               <button onClick={copyInviteCode} className="text-secondary text-xs font-medium">
                 {copied ? "已复制" : "复制"}
               </button>
