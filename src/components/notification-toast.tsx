@@ -1,77 +1,135 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  formatNotificationTime,
+  type NotificationItem,
+  type PullNotificationResponse,
+} from "@/lib/notifications";
 
-type CloseReason = "auto" | "action" | "backdrop" | "swipe";
+type CloseReason = "auto" | "action" | "swipe";
 
-const STORAGE_KEY = "mindful.notification.nextShowAt";
-const INITIAL_DELAY_MS = 15000;
-const REPEAT_INTERVAL_MS = 45 * 60 * 1000;
+const POLL_INTERVAL_MS = 30 * 1000;
 const AUTO_CLOSE_MS = 8000;
 const SWIPE_DISMISS_THRESHOLD = 90;
 
-function getStoredTimestamp(): number | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    return null;
-  }
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
 export function NotificationToast() {
+  const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [notification, setNotification] = useState<NotificationItem | null>(null);
   const dragStartYRef = useRef(0);
+  const isPullingRef = useRef(false);
 
-  const show = useCallback(() => {
-    setIsOpen(true);
-  }, []);
-
-  const scheduleNext = useCallback(() => {
-    if (typeof window === "undefined") {
+  const pullNextNotification = useCallback(async () => {
+    if (typeof window === "undefined" || isPullingRef.current || isOpen) {
       return;
     }
-    const nextShowAt = Date.now() + REPEAT_INTERVAL_MS;
-    window.localStorage.setItem(STORAGE_KEY, String(nextShowAt));
-  }, []);
+
+    isPullingRef.current = true;
+    try {
+      const response = await fetch("/api/notifications/pull", {
+        method: "POST",
+        cache: "no-store",
+      });
+
+      if (response.status === 401) {
+        return;
+      }
+
+      if (!response.ok) {
+        return;
+      }
+
+      const data = (await response.json()) as PullNotificationResponse;
+      if (data.notification) {
+        setNotification(data.notification);
+        setIsOpen(true);
+      }
+    } finally {
+      isPullingRef.current = false;
+    }
+  }, [isOpen]);
+
+  const markCurrentNotificationRead = useCallback(async () => {
+    if (!notification || !notification.unread) {
+      return;
+    }
+
+    try {
+      await fetch(`/api/notifications/${notification.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action: "read" }),
+      });
+    } catch {
+      // Ignore transient failures; the notification center still holds the record.
+    }
+  }, [notification]);
 
   const close = useCallback(
-    (reason: CloseReason) => {
+    async (reason: CloseReason) => {
+      if (reason !== "auto") {
+        await markCurrentNotificationRead();
+      }
+
       setIsOpen(false);
       setIsDragging(false);
       setDragOffset(0);
-      scheduleNext();
+      setNotification(null);
     },
-    [scheduleNext]
+    [markCurrentNotificationRead]
   );
-
 
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
-    const now = Date.now();
-    const stored = getStoredTimestamp();
-    const nextShowAt = stored ?? now + INITIAL_DELAY_MS;
-    if (!stored) {
-      window.localStorage.setItem(STORAGE_KEY, String(nextShowAt));
-    }
-    const rawDelay = Math.max(nextShowAt - now, 0);
-    const delay = Math.min(rawDelay, INITIAL_DELAY_MS);
-    const timer = window.setTimeout(show, delay);
-    return () => window.clearTimeout(timer);
-  }, [show]);
+
+    void pullNextNotification();
+
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void pullNextNotification();
+      }
+    }, POLL_INTERVAL_MS);
+
+    const handleFocus = () => {
+      void pullNextNotification();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void pullNextNotification();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [pullNextNotification]);
+
+  useEffect(() => {
+    void pullNextNotification();
+  }, [pathname, pullNextNotification]);
 
   useEffect(() => {
     if (!isOpen) {
       return;
     }
-    const timer = window.setTimeout(() => close("auto"), AUTO_CLOSE_MS);
+    const timer = window.setTimeout(() => {
+      void close("auto");
+    }, AUTO_CLOSE_MS);
     return () => window.clearTimeout(timer);
   }, [isOpen, close]);
 
@@ -132,29 +190,15 @@ export function NotificationToast() {
   return (
     <>
       <div
-        className={`fixed inset-0 z-[70] flex items-start justify-center px-4 pt-24 md:pt-10 ${
-          isOpen ? "pointer-events-auto" : "pointer-events-none"
-        }`}
+        className="fixed inset-0 z-[100] flex items-start justify-center px-4 pt-24 md:pt-10 pointer-events-none"
         aria-live="polite"
         aria-hidden={!isOpen}
       >
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            close("backdrop");
-          }}
-          className={`absolute inset-0 z-10 bg-inverse-surface/10 backdrop-blur-[2px] transition-opacity duration-300 ${
-            isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-          }`}
-          aria-label="Close notification"
-        />
-
         <section
           role="dialog"
           aria-modal="true"
-          className={`relative z-20 w-full max-w-md rounded-3xl border border-outline-variant/40 bg-surface-container-highest p-6 shadow-[0_20px_50px_rgba(45,45,45,0.16)] ${
-            isOpen ? "opacity-100" : "opacity-0"
+          className={`relative z-20 w-full max-w-md rounded-3xl border border-outline-variant/40 bg-surface-container-highest p-6 shadow-[0_20px_50px_rgba(45,45,45,0.16)] pointer-events-auto ${
+            isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
           }`}
           style={motionStyle}
           onPointerDown={handlePointerDown}
@@ -165,17 +209,17 @@ export function NotificationToast() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-xs uppercase tracking-[0.3em] text-on-surface-variant/70">
-                健康提醒
+                {notification?.source || "系统通知"}
               </p>
               <h2 className="mt-2 text-xl font-[var(--font-display)] text-on-surface">
-                是时候起身放松一下
+                {notification?.title || "通知"}
               </h2>
             </div>
             <button
               type="button"
               onClick={(event) => {
                 event.stopPropagation();
-                close("action");
+                void close("action");
               }}
               className="text-on-surface-variant/70 transition-colors duration-200 hover:text-on-surface"
               aria-label="Dismiss notification"
@@ -185,23 +229,36 @@ export function NotificationToast() {
           </div>
 
           <p className="mt-4 text-sm leading-relaxed text-on-surface-variant">
-            你已工作许久，站起来活动一下，喝一杯水，给眼睛一点休息时间。
+            {notification?.body || ""}
           </p>
 
           <div className="mt-6 flex items-center justify-between">
             <span className="text-xs text-on-surface-variant/60">
-              轻触上方即可滑动关闭
+              {notification ? formatNotificationTime(notification.createdAt) : ""}
             </span>
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                close("action");
-              }}
-              className="rounded-full bg-secondary px-5 py-2 text-sm font-medium text-on-secondary shadow-md transition-transform duration-200 active:scale-95"
-            >
-              知道了
-            </button>
+            {notification?.actionUrl ? (
+              <Link
+                href={notification.actionUrl}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void close("action");
+                }}
+                className="rounded-full bg-secondary px-5 py-2 text-sm font-medium text-on-secondary shadow-md transition-transform duration-200 active:scale-95"
+              >
+                查看
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void close("action");
+                }}
+                className="rounded-full bg-secondary px-5 py-2 text-sm font-medium text-on-secondary shadow-md transition-transform duration-200 active:scale-95"
+              >
+                知道了
+              </button>
+            )}
           </div>
         </section>
       </div>

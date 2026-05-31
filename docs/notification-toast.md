@@ -1,11 +1,13 @@
 # Notification Toast
 
-This document describes the global notification toast component and how to use or extend it.
+This document describes the global notification toast component after the database-backed notification rebuild.
 
 ## Overview
 
-The notification toast is a lightweight, global reminder that appears at the top of the screen.
-It auto-shows on a timer, auto-dismisses after a short delay, and supports manual dismissal by:
+The notification toast is a lightweight, global notification surface that appears at the top of the screen.
+It no longer creates reminders on a client timer. Instead, it polls the backend for pending notifications and displays them when available.
+
+It auto-dismisses after a short delay and supports manual dismissal by:
 - Tapping the close icon (X)
 - Tapping the "知道了" button
 - Swiping upward past a threshold
@@ -19,21 +21,19 @@ The component is mounted in the root layout so it is available across all pages.
 
 ## Behavior
 
-- First appearance: 15 seconds after the page loads
-- Repeat interval: every 45 minutes
+- Polls the backend for undelivered notifications while the page is active
 - Auto-close: 8 seconds after showing
-- Dismiss: click or swipe up
-
-The schedule is stored in localStorage to avoid over-notifying.
+- Manual dismiss marks the notification as read
+- Auto-close leaves the notification unread
+- Optional `actionUrl` can render a "查看" action button
 
 ## Key Constants
 
 Edit these values to tune the behavior:
 
-- INITIAL_DELAY_MS: time before first appearance (default 15000)
-- REPEAT_INTERVAL_MS: time between reminders (default 45 minutes)
-- AUTO_CLOSE_MS: auto-dismiss delay after showing (default 8000)
-- SWIPE_DISMISS_THRESHOLD: swipe-up distance to dismiss (default 90px)
+- `POLL_INTERVAL_MS`: inbox poll interval for new pending notifications
+- `AUTO_CLOSE_MS`: auto-dismiss delay after showing
+- `SWIPE_DISMISS_THRESHOLD`: swipe-up distance to dismiss
 
 ## Visual Placement
 
@@ -44,19 +44,21 @@ The toast renders at the top of the viewport and uses the project design system 
 
 ## How It Works
 
-- On mount, a timer is scheduled based on localStorage or the initial delay.
-- When visible, an auto-close timer is started.
-- Dismiss actions clear the current state and schedule the next appearance.
+- On mount, the component calls `POST /api/notifications/pull`.
+- While the page stays open, it keeps checking for undelivered notifications.
+- When one is returned, the toast renders the server-provided title/body.
+- Manual dismiss marks the notification as read with `PATCH /api/notifications/[id]`.
 - Pointer handling supports swipe-up dismissal without blocking button clicks.
 
 ## Usage Notes
 
-- The component is a client component and must remain under "use client".
-- It assumes a browser environment (uses localStorage). Do not render on the server.
-- If you need a manual trigger for debugging, add a button in the component and call show().
+- The component is a client component and must remain under `"use client"`.
+- Notification content now comes from the database, not localStorage.
+- If another system should generate notifications, integrate it with `POST /api/notifications`.
+- See `docs/notification-api.md` for the external agent contract.
 
 ## Troubleshooting
 
-- No appearance: clear localStorage key "mindful.notification.nextShowAt" and reload.
+- No appearance: confirm the user has pending records in the `notifications` table and that `POST /api/notifications/pull` returns a notification.
 - Click does not close: ensure pointer handlers only capture on the card itself.
-- Cross-device: verify localStorage availability (private mode can disable it).
+- External sender cannot create notifications: verify `NOTIFICATION_API_SECRET` and the request headers.
