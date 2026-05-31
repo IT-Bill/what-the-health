@@ -209,6 +209,9 @@ model User {
   posts             Post[]
   comments          Comment[]
   likes             Like[]
+  postFavorites     PostFavorite[]
+  commentLikes      CommentLike[]
+  commentFavorites  CommentFavorite[]
   persona           UserPersona?
   notifications     Notification[]
   creditTransactions CreditTransaction[]
@@ -431,6 +434,7 @@ model Post {
   author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
   comments Comment[]
   likes    Like[]
+  favorites PostFavorite[]
 
   @@index([category, published, publishedAt])
   @@index([authorId])
@@ -452,6 +456,8 @@ model Comment {
   author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
   parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
   replies  Comment[] @relation("CommentReplies")
+  likes    CommentLike[]
+  favorites CommentFavorite[]
 
   @@index([postId, createdAt])
   @@index([parentId])
@@ -471,6 +477,51 @@ model Like {
   @@unique([postId, authorId])
   @@index([postId])
   @@map("likes")
+}
+
+model PostFavorite {
+  id       String @id @default(cuid())
+  postId   String
+  authorId String
+
+  createdAt DateTime @default(now())
+
+  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, authorId])
+  @@index([postId])
+  @@map("post_favorites")
+}
+
+model CommentLike {
+  id        String @id @default(cuid())
+  commentId String
+  authorId  String
+
+  createdAt DateTime @default(now())
+
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  author  User    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, authorId])
+  @@index([commentId])
+  @@map("comment_likes")
+}
+
+model CommentFavorite {
+  id        String @id @default(cuid())
+  commentId String
+  authorId  String
+
+  createdAt DateTime @default(now())
+
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  author  User    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, authorId])
+  @@index([commentId])
+  @@map("comment_favorites")
 }
 
 // ---------------------------------------------------------------------------
@@ -684,6 +735,8 @@ model Report {
   periodStart DateTime   @db.Date
   /// End of the period (exclusive), UTC midnight.
   periodEnd   DateTime   @db.Date
+  /// Version number for the same period (1 = first generation, increments on regenerate).
+  version     Int        @default(1)
   /// JSON payload with the report's pre-computed content:
   /// {
   ///   moodEmojis?: string[],        // e.g. ["😊","😐","😴",...]
@@ -703,7 +756,7 @@ model Report {
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   insights Insight[]
 
-  @@unique([userId, periodType, periodStart])
+  @@unique([userId, periodType, periodStart, version])
   @@index([userId, periodType, periodStart])
   @@map("reports")
 }

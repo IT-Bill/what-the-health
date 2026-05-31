@@ -32,7 +32,8 @@ export default function LoginPage() {
         return;
       }
 
-      router.push("/profile");
+      router.replace("/profile");
+      router.refresh();
     } catch {
       setError("网络错误，请稍后重试");
     } finally {

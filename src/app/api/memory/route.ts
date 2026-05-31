@@ -11,6 +11,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const periodType = searchParams.get("type") === "monthly" ? "monthly" as const : "weekly" as const;
   const periodStartParam = searchParams.get("periodStart");
+  const versionParam = searchParams.get("version");
 
   // Check auth
   const token = await getAuthCookie();
@@ -18,7 +19,7 @@ export async function GET(request: Request) {
 
   if (payload) {
     // --- Authenticated mode: return user's own data ---
-    return handleAuthenticatedRequest(payload.userId, periodType, periodStartParam);
+    return handleAuthenticatedRequest(payload.userId, periodType, periodStartParam, versionParam);
   } else {
     // --- Demo mode: return showcase users' data ---
     return handleDemoRequest(periodType);
@@ -28,18 +29,22 @@ export async function GET(request: Request) {
 async function handleAuthenticatedRequest(
   userId: string,
   periodType: "weekly" | "monthly",
-  periodStartParam: string | null
+  periodStartParam: string | null,
+  versionParam: string | null
 ) {
   let report;
   if (periodStartParam) {
-    report = await prisma.report.findUnique({
-      where: {
-        userId_periodType_periodStart: {
-          userId,
-          periodType: periodType as "weekly" | "monthly",
-          periodStart: new Date(periodStartParam),
-        },
-      },
+    // Get specific period, optionally specific version
+    const where: Record<string, unknown> = {
+      userId,
+      periodType: periodType as "weekly" | "monthly",
+      periodStart: new Date(periodStartParam),
+    };
+    if (versionParam) where.version = parseInt(versionParam, 10);
+
+    report = await prisma.report.findFirst({
+      where,
+      orderBy: { version: "desc" },
       include: { insights: { where: { dismissed: false }, orderBy: { createdAt: "desc" } } },
     });
   } else {
@@ -50,25 +55,49 @@ async function handleAuthenticatedRequest(
     });
   }
 
-  if (!report) {
-    return Response.json({ report: null, globalInsights: [], available: [], demo: false });
-  }
-
   const globalInsights = await prisma.insight.findMany({
     where: { userId, reportId: null, dismissed: false },
     orderBy: { createdAt: "desc" },
   });
 
-  const available = await prisma.report.findMany({
+  const allReports = await prisma.report.findMany({
     where: { userId, periodType },
-    select: { periodStart: true },
-    orderBy: { periodStart: "desc" },
+    select: { periodStart: true, version: true, createdAt: true },
+    orderBy: [{ periodStart: "desc" }, { version: "desc" }],
   });
 
+  // Deduplicated period list (for left/right navigation)
+  const available = [...new Set(allReports.map((r) => r.periodStart.toISOString()))];
+
+  // Versions for the current report's period (with createdAt for display)
+  const currentPeriodStart = report?.periodStart;
+  const versions = currentPeriodStart
+    ? allReports
+        .filter((r) => r.periodStart.toISOString() === currentPeriodStart.toISOString())
+        .map((r) => ({ version: r.version, createdAt: r.createdAt.toISOString() }))
+        .sort((a, b) => b.version - a.version)
+    : [];
+
+  // Compute AI understanding level from persona data
+  let aiUnderstanding = { level: 0, percentage: 0, conversationCount: 0 };
+  const persona = await prisma.userPersona.findUnique({ where: { userId } });
+  if (persona) {
+    const fields = [persona.identity, persona.behavior, persona.expression, persona.preferences];
+    const totalItems = fields.reduce((sum: number, f) => {
+      if (!f || typeof f !== "object") return sum;
+      return sum + Object.values(f as Record<string, unknown>).reduce<number>((s, v) => s + (Array.isArray(v) ? v.length : v ? 1 : 0), 0);
+    }, 0);
+    const percentage = Math.min(100, Math.round((totalItems / 60) * 100));
+    const level = percentage < 20 ? 1 : percentage < 40 ? 2 : percentage < 60 ? 3 : percentage < 80 ? 4 : 5;
+    aiUnderstanding = { level, percentage, conversationCount: persona.version };
+  }
+
   return Response.json({
-    report,
+    report: report || null,
     globalInsights,
-    available: available.map((a) => a.periodStart),
+    available,
+    versions,
+    aiUnderstanding,
     demo: false,
   });
 }
