@@ -55,9 +55,18 @@ export function BottomNavBar() {
     }
   }, [pathname]);
 
+  const handleChatNavClick = useCallback((e: React.MouseEvent) => {
+    if (pathname === "/chat" || pathname?.startsWith("/chat/")) return; // Already on chat page
+    const latestId = sessionStorage.getItem("wth:latest-chat-session-id");
+    if (latestId) {
+      e.preventDefault();
+      router.push(`/chat/${latestId}`);
+    }
+  }, [pathname, router]);
+
   const submitVoiceText = useCallback((text: string) => {
     const payload: PendingVoiceText = { text, startNewSession: true };
-    if (pathname === "/chat") {
+    if (pathname === "/chat" || pathname?.startsWith("/chat/")) {
       window.dispatchEvent(
         new CustomEvent<VoiceSubmitEventDetail>(VOICE_SUBMIT_EVENT, {
           detail: payload,
@@ -232,12 +241,12 @@ export function BottomNavBar() {
       <nav className="fixed bottom-0 left-0 w-full z-50 bg-surface/80 backdrop-blur-xl rounded-t-3xl shadow-[0_-20px_40px_rgba(45,45,45,0.04)] flex justify-between items-center px-4 pb-4 pt-2">
         {/* Left items */}
         {navItems.slice(0, 2).map((item) => {
-          const isActive = pathname === item.href;
+          const isActive = pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href + "/"));
           return (
             <Link
               key={item.href}
               href={item.href}
-              onClick={item.href === "/chat" ? undefined : markChatRestoreIntent}
+              onClick={item.href === "/chat" ? handleChatNavClick : markChatRestoreIntent}
               className={`flex flex-col items-center justify-center w-16 transition-colors duration-300 active:scale-90 ${
                 isActive ? "text-secondary" : "text-on-surface-variant/70 hover:text-secondary scale-95"
               }`}
@@ -266,7 +275,7 @@ export function BottomNavBar() {
 
         {/* Right items */}
         {navItems.slice(2).map((item) => {
-          const isActive = pathname === item.href;
+          const isActive = pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href + "/"));
           return (
             <Link
               key={item.href}
