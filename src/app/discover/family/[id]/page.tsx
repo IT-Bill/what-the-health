@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { Icon } from "@/components/icon";
 
 interface FamilyMember {
@@ -38,21 +38,57 @@ interface FamilyDetail {
   myRole: string;
 }
 
-const ROLE_LABELS: Record<string, string> = { owner: "管理员", caregiver: "关怀者", member: "被关怀者" };
+interface HealthViewData {
+  user: { id: string; name: string; avatarUrl: string | null };
+  nickname: string | null;
+  period: { days: number; since: string };
+  summary: Record<string, { count: number; avg: number; min: number; max: number; latest: number; unit: string }>;
+  moodHistory: { mood: string; note: string | null; createdAt: string }[];
+  reports: { id: string; periodType: string; periodStart: string; summary?: string }[];
+}
+
+const ROLE_LABELS: Record<string, string> = { owner: "管理员", caregiver: "关怀者", member: "被关怀者", observer: "普通成员" };
+const ROLE_OPTIONS = [
+  { value: "caregiver", label: "关怀者", desc: "收到被关怀者的健康预警" },
+  { value: "member", label: "被关怀者", desc: "出问题时通知关怀者" },
+  { value: "observer", label: "普通成员", desc: "可查看数据，不参与预警" },
+];
 const SEVERITY_COLORS: Record<string, string> = { critical: "text-error", warning: "text-tertiary", info: "text-on-surface-variant" };
 const SEVERITY_ICONS: Record<string, string> = { critical: "error", warning: "warning", info: "health_metrics" };
+const METRIC_LABELS: Record<string, string> = {
+  steps: "步数", heartRate: "心率", restingHR: "静息心率", sleepAnalysis: "睡眠",
+  workout: "运动", weight: "体重", bloodPressure: "血压", bloodOxygen: "血氧",
+  calories: "卡路里", distance: "距离", hrv: "HRV", stress: "压力",
+};
 
 export default function FamilyDetailPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const familyId = params.id as string;
+  const viewUserId = searchParams.get("view");
   const [family, setFamily] = useState<FamilyDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [showInvite, setShowInvite] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [healthData, setHealthData] = useState<HealthViewData | null>(null);
+  const [healthLoading, setHealthLoading] = useState(false);
 
   useEffect(() => {
     fetchFamily();
   }, [familyId]);
+
+  useEffect(() => {
+    if (viewUserId && familyId) {
+      setHealthLoading(true);
+      fetch(`/api/family/${familyId}/health/${viewUserId}?days=7`)
+        .then((r) => r.ok ? r.json() : null)
+        .then((d) => setHealthData(d))
+        .catch(() => setHealthData(null))
+        .finally(() => setHealthLoading(false));
+    } else {
+      setHealthData(null);
+    }
+  }, [viewUserId, familyId]);
 
   async function fetchFamily() {
     try {
@@ -101,7 +137,78 @@ export default function FamilyDetailPage() {
         <h1 className="font-[var(--font-display)] text-xl font-medium text-on-surface ml-2">{family.name}</h1>
       </header>
 
-      <main className="flex-1 px-6 py-6 max-w-screen-md mx-auto w-full flex flex-col gap-6">
+      <main className="flex-1 px-6 py-6 max-w-screen-md mx-auto w-full flex flex-col gap-6 pb-24">
+        {/* Health Data Modal (bottom sheet) */}
+        {viewUserId && (
+          <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-inverse-surface/30 backdrop-blur-sm" onClick={() => window.history.back()}>
+            <div
+              className="bg-surface w-full sm:w-[480px] sm:rounded-2xl rounded-t-2xl max-h-[85vh] overflow-y-auto p-6 flex flex-col gap-4 animate-[fadeIn_0.2s_ease]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-medium text-on-surface flex items-center gap-2">
+                  <Icon name="health_metrics" size={18} className="text-secondary" />
+                  {healthData?.nickname || healthData?.user?.name || "成员"}的健康概览
+                </h3>
+                <Link href={`/discover/family/${familyId}`} className="text-on-surface-variant p-1">
+                  <Icon name="close" size={20} />
+                </Link>
+              </div>
+
+              {healthLoading ? (
+                <div className="flex justify-center py-12">
+                  <div className="w-6 h-6 border-2 border-secondary border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : healthData && Object.keys(healthData.summary).length > 0 ? (
+                <div className="flex flex-col gap-4">
+                  {/* Metrics Grid */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {Object.entries(healthData.summary).map(([metric, data]) => (
+                      <div key={metric} className="bg-surface-container-low rounded-xl p-3">
+                        <p className="text-[10px] text-on-surface-variant uppercase tracking-wider">{METRIC_LABELS[metric] || metric}</p>
+                        <p className="text-lg font-medium text-on-surface mt-1">{data.avg} <span className="text-xs text-on-surface-variant">{data.unit}</span></p>
+                        <p className="text-[10px] text-outline">范围 {data.min}–{data.max}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Mood History */}
+                  {healthData.moodHistory.length > 0 && (
+                    <div className="bg-surface-container-low rounded-xl p-3">
+                      <p className="text-[10px] text-on-surface-variant uppercase tracking-wider mb-2">情绪记录</p>
+                      <div className="flex gap-1 flex-wrap">
+                        {healthData.moodHistory.slice(0, 7).map((m, i) => (
+                          <span key={i} className="text-lg" title={m.note || undefined}>
+                            {m.mood === "calm" ? "😊" : m.mood === "anxious" ? "😰" : "😴"}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Reports link */}
+                  {healthData.reports && healthData.reports.length > 0 && (
+                    <div className="flex flex-col gap-2">
+                      <p className="text-xs text-on-surface-variant font-medium uppercase tracking-widest">最近报告</p>
+                      {healthData.reports.map((report: { id: string; periodType: string; periodStart: string; summary?: string }) => (
+                        <div key={report.id} className="bg-surface-container-low rounded-xl p-3">
+                          <p className="text-sm font-medium text-on-surface">
+                            {report.periodType === "weekly" ? "周报" : "月报"} · {new Date(report.periodStart).toLocaleDateString("zh-CN")}
+                          </p>
+                          {report.summary && <p className="text-xs text-on-surface-variant mt-1 line-clamp-2">{report.summary}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-on-surface-variant text-center py-8">暂无健康数据</p>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Active Alerts */}
         {family.alerts.length > 0 && (
           <section>
@@ -158,7 +265,7 @@ export default function FamilyDetailPage() {
               邀请
             </button>
           </div>
-          <div className="bg-primary-container rounded-2xl ambient-shadow overflow-hidden">
+          <div className="bg-primary-container rounded-2xl ambient-shadow">
             {family.members.map((member, idx) => (
               <div
                 key={member.id}
@@ -176,12 +283,23 @@ export default function FamilyDetailPage() {
                     {member.nickname || member.user.name}
                     {member.nickname && <span className="text-on-surface-variant font-normal"> ({member.user.name})</span>}
                   </p>
-                  <p className="text-xs text-on-surface-variant">
-                    {ROLE_LABELS[member.role]}
-                    {member.shareHealthData && " · 健康数据共享中"}
-                  </p>
+                  {/* Role selector (owner can change others' roles) */}
+                  {family.myRole === "owner" && member.role !== "owner" ? (
+                    <RoleSelector
+                      currentRole={member.role}
+                      memberId={member.id}
+                      familyId={familyId}
+                      onUpdate={fetchFamily}
+                      shareHealthData={member.shareHealthData}
+                    />
+                  ) : (
+                    <p className="text-xs text-on-surface-variant">
+                      {ROLE_LABELS[member.role]}
+                      {member.shareHealthData && " · 健康数据共享中"}
+                    </p>
+                  )}
                 </div>
-                {member.shareHealthData && member.user.id !== family.members.find(m => m.role === "owner")?.user.id && (
+                {member.shareHealthData && member.role !== "owner" && (
                   <Link
                     href={`/discover/family/${familyId}?view=${member.user.id}`}
                     className="text-xs text-secondary font-medium"
@@ -254,4 +372,64 @@ function formatTime(iso: string) {
   if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`;
   if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`;
   return `${Math.floor(diff / 86400000)}天前`;
+}
+
+function RoleSelector({
+  currentRole,
+  memberId,
+  familyId,
+  onUpdate,
+  shareHealthData,
+}: {
+  currentRole: string;
+  memberId: string;
+  familyId: string;
+  onUpdate: () => void;
+  shareHealthData: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+
+  async function handleSelect(role: string) {
+    setOpen(false);
+    if (role === currentRole) return;
+    const res = await fetch(`/api/family/${familyId}/members/${memberId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role }),
+    });
+    if (res.ok) onUpdate();
+  }
+
+  return (
+    <div className="relative mt-0.5 flex items-center gap-2">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1 text-[11px] bg-surface-container-low text-on-surface-variant rounded-full px-2.5 py-1 hover:bg-surface-variant/30 transition-colors"
+      >
+        {ROLE_LABELS[currentRole]}
+        <Icon name="expand_more" size={12} />
+      </button>
+      {shareHealthData && <span className="text-[10px] text-outline whitespace-nowrap">· 数据共享中</span>}
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-[70]" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-full mt-1 z-[80] bg-surface rounded-lg shadow-lg border border-outline-variant/20 py-1 w-48 animate-[fadeIn_0.15s_ease]">
+            {ROLE_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => handleSelect(opt.value)}
+                className={`w-full text-left px-3 py-2 hover:bg-surface-variant/20 transition-colors ${
+                  currentRole === opt.value ? "bg-secondary-container/30" : ""
+                }`}
+              >
+                <p className="text-xs font-medium text-on-surface">{opt.label}</p>
+                <p className="text-[10px] text-on-surface-variant">{opt.desc}</p>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
 }

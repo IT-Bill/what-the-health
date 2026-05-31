@@ -83,13 +83,22 @@ export async function GET(
     });
   }
 
+  // Fetch recent reports
+  const reports = await prisma.report.findMany({
+    where: { userId: targetUserId },
+    orderBy: [{ periodStart: "desc" }, { version: "desc" }],
+    take: 3,
+    select: { id: true, periodType: true, periodStart: true, summary: true },
+  });
+
   return Response.json({
     user: targetMembership.user,
     nickname: targetMembership.nickname,
     role: targetMembership.role,
     period: { days, since: since.toISOString() },
     summary,
-    records: healthRecords.slice(0, 200), // Limit raw records
+    records: healthRecords.slice(0, 200),
     moodHistory,
+    reports,
   });
 }

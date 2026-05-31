@@ -53,6 +53,17 @@ Pages fall into two categories:
 - Seed: `pnpm exec prisma db seed` — reads `SEED_USERS` from `.env` (format: `"user1:pass1,user2:pass2"`).
 - Local dev DB: Docker `postgres:17-bookworm` on `localhost:5432/postgres`. Rebuild: `prisma migrate deploy` then `prisma db seed`.
 
+## Chat Agent
+
+详见 [`docs/agent-development-guide.md`](docs/agent-development-guide.md)。
+
+- **框架**: `@earendil-works/pi-agent-core` Agent 类 + `@earendil-works/pi-ai` LLM 抽象层
+- **模型**: GLM-5.1 via AI Ping（OpenAI 兼容，reasoning 模型）
+- **工具**: 定义在 `src/app/api/chat/tools.ts`，通过 `createTools(userId)` 创建，Agent 自主决定何时调用
+- **新增工具**: 在 tools.ts 加 AgentTool（name + description + TypeBox parameters + execute），然后在 SYSTEM_PROMPT 中加触发指引
+- **Persona**: 对话后自动提取用户特征→注入下次对话的 system prompt（`src/lib/persona-service.ts`）
+- **直接 LLM 调用**: reasoning 模型通过 `completeSimple` 返回可能为空，需用 `fetch` 直调 API（参见 `src/lib/report/generator.ts`）
+
 ## Voice Input (ASR)
 
 The chat page supports voice input via **Volcano Engine (Doubao) Streaming ASR**.
