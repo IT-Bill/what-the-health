@@ -47,7 +47,12 @@ interface HealthViewData {
   reports: { id: string; periodType: string; periodStart: string; summary?: string }[];
 }
 
-const ROLE_LABELS: Record<string, string> = { owner: "管理员", caregiver: "关怀者", member: "被关怀者" };
+const ROLE_LABELS: Record<string, string> = { owner: "管理员", caregiver: "关怀者", member: "被关怀者", observer: "普通成员" };
+const ROLE_OPTIONS = [
+  { value: "caregiver", label: "关怀者", desc: "收到被关怀者的健康预警" },
+  { value: "member", label: "被关怀者", desc: "出问题时通知关怀者" },
+  { value: "observer", label: "普通成员", desc: "可查看数据，不参与预警" },
+];
 const SEVERITY_COLORS: Record<string, string> = { critical: "text-error", warning: "text-tertiary", info: "text-on-surface-variant" };
 const SEVERITY_ICONS: Record<string, string> = { critical: "error", warning: "warning", info: "health_metrics" };
 const METRIC_LABELS: Record<string, string> = {
@@ -278,12 +283,32 @@ export default function FamilyDetailPage() {
                     {member.nickname || member.user.name}
                     {member.nickname && <span className="text-on-surface-variant font-normal"> ({member.user.name})</span>}
                   </p>
-                  <p className="text-xs text-on-surface-variant">
-                    {ROLE_LABELS[member.role]}
-                    {member.shareHealthData && " · 健康数据共享中"}
-                  </p>
+                  {/* Role selector (owner can change others' roles) */}
+                  {family.myRole === "owner" && member.role !== "owner" ? (
+                    <select
+                      value={member.role}
+                      onChange={async (e) => {
+                        const res = await fetch(`/api/family/${familyId}/members/${member.id}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ role: e.target.value }),
+                        });
+                        if (res.ok) fetchFamily();
+                      }}
+                      className="text-xs bg-transparent text-on-surface-variant border-0 p-0 focus:ring-0 cursor-pointer"
+                    >
+                      {ROLE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label} — {opt.desc}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p className="text-xs text-on-surface-variant">
+                      {ROLE_LABELS[member.role]}
+                      {member.shareHealthData && " · 健康数据共享中"}
+                    </p>
+                  )}
                 </div>
-                {member.shareHealthData && member.user.id !== family.members.find(m => m.role === "owner")?.user.id && (
+                {member.shareHealthData && member.role !== "owner" && (
                   <Link
                     href={`/discover/family/${familyId}?view=${member.user.id}`}
                     className="text-xs text-secondary font-medium"

@@ -796,8 +796,9 @@ model Insight {
 /// 家庭角色
 enum FamilyRole {
   owner     // 创建者/管理员
-  caregiver // 关怀者（子女、配偶等）
-  member    // 被关怀者（老人等）
+  caregiver // 关怀者（子女、配偶等）——收到被关怀者的预警通知
+  member    // 被关怀者（老人等）——出问题时通知关怀者
+  observer  // 普通成员——可查看数据但不参与预警
 }
 
 /// 预警灵敏度级别
