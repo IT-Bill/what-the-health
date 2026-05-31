@@ -62,6 +62,9 @@ export default function HealthConnectionsPage() {
   const [imports, setImports] = useState<ImportRecord[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [needsPassword, setNeedsPassword] = useState(false);
+  const [password, setPassword] = useState("");
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -71,12 +74,13 @@ export default function HealthConnectionsPage() {
       .catch(() => {});
   }, []);
 
-  async function handleUpload(file: File) {
+  async function handleUpload(file: File, pw?: string) {
     setUploading(true);
     setUploadResult(null);
 
     const formData = new FormData();
     formData.append("file", file);
+    if (pw) formData.append("password", pw);
 
     try {
       const res = await fetch("/api/health/import", {
@@ -90,9 +94,19 @@ export default function HealthConnectionsPage() {
           success: true,
           message: `导入成功！共 ${data.recordCount.toLocaleString()} 条记录`,
         });
+        setNeedsPassword(false);
+        setPendingFile(null);
+        setPassword("");
         // Refresh import history
         const historyRes = await fetch("/api/health/import");
         if (historyRes.ok) setImports(await historyRes.json());
+      } else if (data.code === "PASSWORD_REQUIRED" || data.code === "PASSWORD_INCORRECT") {
+        setNeedsPassword(true);
+        setPendingFile(file);
+        setUploadResult({
+          success: false,
+          message: data.code === "PASSWORD_INCORRECT" ? "密码错误，请重新输入" : "该文件需要密码",
+        });
       } else {
         setUploadResult({ success: false, message: data.error || "导入失败" });
       }
@@ -106,6 +120,12 @@ export default function HealthConnectionsPage() {
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (file) handleUpload(file);
+  }
+
+  function handlePasswordSubmit() {
+    if (pendingFile && password) {
+      handleUpload(pendingFile, password);
+    }
   }
 
   async function handleDeleteImport(id: string) {
@@ -216,24 +236,26 @@ export default function HealthConnectionsPage() {
             </div>
 
             {/* Drop zone */}
-            <button
-              onClick={() => fileRef.current?.click()}
-              disabled={uploading}
-              className="border-2 border-dashed border-outline-variant/50 rounded-2xl p-8 flex flex-col items-center gap-3 hover:border-secondary/50 hover:bg-surface-variant/10 transition-colors disabled:opacity-50"
-            >
-              {uploading ? (
-                <>
-                  <div className="w-8 h-8 border-2 border-secondary border-t-transparent rounded-full animate-spin" />
-                  <p className="text-sm text-on-surface-variant">正在解析...</p>
-                </>
-              ) : (
-                <>
-                  <span className="material-symbols-outlined text-3xl text-on-surface-variant">upload_file</span>
-                  <p className="text-sm text-on-surface-variant">点击选择 ZIP 文件</p>
-                  <p className="text-xs text-outline">最大 500MB</p>
-                </>
-              )}
-            </button>
+            {!needsPassword && (
+              <button
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading}
+                className="border-2 border-dashed border-outline-variant/50 rounded-2xl p-8 flex flex-col items-center gap-3 hover:border-secondary/50 hover:bg-surface-variant/10 transition-colors disabled:opacity-50"
+              >
+                {uploading ? (
+                  <>
+                    <div className="w-8 h-8 border-2 border-secondary border-t-transparent rounded-full animate-spin" />
+                    <p className="text-sm text-on-surface-variant">正在解析...</p>
+                  </>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined text-3xl text-on-surface-variant">upload_file</span>
+                    <p className="text-sm text-on-surface-variant">点击选择 ZIP 文件</p>
+                    <p className="text-xs text-outline">最大 500MB</p>
+                  </>
+                )}
+              </button>
+            )}
             <input
               ref={fileRef}
               type="file"
@@ -241,6 +263,30 @@ export default function HealthConnectionsPage() {
               className="hidden"
               onChange={handleFileChange}
             />
+
+            {/* Password input (when ZIP is encrypted) */}
+            {needsPassword && (
+              <div className="flex flex-col gap-3">
+                <p className="text-sm text-on-surface-variant">该文件需要密码才能解压：</p>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handlePasswordSubmit()}
+                    placeholder="输入 ZIP 密码"
+                    className="flex-1 bg-surface-container-low border-0 rounded-xl px-4 py-2.5 text-sm text-on-surface placeholder:text-outline-variant focus:ring-1 focus:ring-secondary"
+                  />
+                  <button
+                    onClick={handlePasswordSubmit}
+                    disabled={uploading || !password}
+                    className="px-4 py-2.5 rounded-xl bg-secondary text-on-secondary text-sm font-medium hover:opacity-90 disabled:opacity-40"
+                  >
+                    {uploading ? "解析中..." : "确认"}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Result */}
             {uploadResult && (
@@ -253,6 +299,14 @@ export default function HealthConnectionsPage() {
                 </div>
               </div>
             )}
+
+            {/* Privacy Notice */}
+            <div className="flex items-start gap-2 pt-2 border-t border-outline-variant/10">
+              <span className="material-symbols-outlined text-sm text-outline mt-0.5">shield</span>
+              <p className="text-[11px] text-outline leading-relaxed">
+                我们将你的隐私放在首位。所有健康数据仅在你的设备和我们的服务器之间传输，解析完成后原始文件立即删除，不会存储或发送给任何第三方。你可以随时在导入记录中删除已导入的数据。
+              </p>
+            </div>
           </div>
         </div>
       )}
