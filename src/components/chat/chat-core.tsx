@@ -15,6 +15,7 @@ import {
   type PendingVoiceText,
   type VoiceSubmitEventDetail,
 } from "@/lib/voice-events";
+import { getAsrWebSocketUrl, getVoiceUnavailableMessage } from "@/lib/voice-client";
 import { Icon } from "@/components/icon";
 
 // ---------------------------------------------------------------------------
@@ -320,6 +321,56 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Long-press for session items (mobile-friendly menu trigger)
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTargetRef = useRef<string | null>(null);
+  const longPressStartPosRef = useRef<{ x: number; y: number } | null>(null);
+
+  const LONG_PRESS_DURATION = 500; // ms
+  const LONG_PRESS_MOVE_THRESHOLD = 10; // px
+
+  const handleSessionPointerDown = useCallback((sessionId: string, e: React.PointerEvent) => {
+    longPressTargetRef.current = sessionId;
+    longPressStartPosRef.current = { x: e.clientX, y: e.clientY };
+    longPressTimerRef.current = setTimeout(() => {
+      if (longPressTargetRef.current === sessionId) {
+        setActiveMenuSessionId(sessionId);
+        // Trigger haptic feedback if available
+        if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+          navigator.vibrate(50);
+        }
+      }
+      longPressTimerRef.current = null;
+    }, LONG_PRESS_DURATION);
+  }, []);
+
+  const clearLongPress = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    longPressTargetRef.current = null;
+    longPressStartPosRef.current = null;
+  }, []);
+
+  const handleSessionPointerMove = useCallback((e: React.PointerEvent) => {
+    if (!longPressStartPosRef.current || !longPressTimerRef.current) return;
+    const dx = Math.abs(e.clientX - longPressStartPosRef.current.x);
+    const dy = Math.abs(e.clientY - longPressStartPosRef.current.y);
+    if (dx > LONG_PRESS_MOVE_THRESHOLD || dy > LONG_PRESS_MOVE_THRESHOLD) {
+      clearLongPress();
+    }
+  }, [clearLongPress]);
+
+  const handleSessionPointerUp = useCallback(() => {
+    clearLongPress();
+  }, [clearLongPress]);
+
+  const handleSessionContextMenu = useCallback((sessionId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    setActiveMenuSessionId(sessionId);
+  }, []);
 
   // Voice recording state
   const [isRecording, setIsRecording] = useState(false);
@@ -1046,6 +1097,12 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
     cleanupRecording();
 
     try {
+      const unavailableMessage = getVoiceUnavailableMessage();
+      if (unavailableMessage) {
+        alert(unavailableMessage);
+        return;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
@@ -1074,9 +1131,7 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
       source.connect(processor);
       processor.connect(audioContext.destination);
 
-      const isDev = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-      const wsUrl = isDev ? `ws://localhost:3001` : `wss://${window.location.host}/api/asr`;
-      const ws = new WebSocket(wsUrl);
+      const ws = new WebSocket(getAsrWebSocketUrl());
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -1128,7 +1183,11 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
       recordingTextRef.current = "";
     } catch (err) {
       console.error("[Voice] Failed to start recording:", err);
-      alert("无法启动录音，请检查麦克风权限");
+      const message =
+        err instanceof DOMException && err.name === "NotAllowedError"
+          ? "无法启动录音，请在浏览器设置中允许麦克风权限。"
+          : "无法启动录音，请检查麦克风权限";
+      alert(message);
     }
   }
 
@@ -1295,6 +1354,12 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
               return (
                 <div
                   key={s.id}
+                  onPointerDown={(e) => handleSessionPointerDown(s.id, e)}
+                  onPointerMove={handleSessionPointerMove}
+                  onPointerUp={handleSessionPointerUp}
+                  onPointerCancel={handleSessionPointerUp}
+                  onPointerLeave={handleSessionPointerUp}
+                  onContextMenu={(e) => handleSessionContextMenu(s.id, e)}
                   className={`relative group flex items-center rounded-2xl transition-colors ${
                     sessionId === s.id
                       ? "bg-secondary-container/60 text-on-secondary-container"
