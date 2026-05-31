@@ -46,7 +46,7 @@ const PERMISSIONS_MAP: Record<string, string> = {
   posts: "文章",
 };
 
-export default function FriendsPage() {
+export function FriendsPanel() {
   const [activeTab, setActiveTab] = useState<Tab>("好友");
   const [data, setData] = useState<FriendsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -67,50 +67,46 @@ export default function FriendsPage() {
   const pendingCount = data ? data.pendingReceived.length : 0;
 
   return (
-    <div className="min-h-screen bg-surface flex flex-col">
-      <Header title="好友" />
+    <div className="flex flex-col gap-6">
+      {/* Tabs */}
+      <div className="flex gap-2">
+        {TABS.map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300 relative ${
+              activeTab === tab
+                ? "bg-secondary-container text-on-secondary-container"
+                : "border border-outline-variant/30 text-on-surface-variant hover:bg-surface-variant/20"
+            }`}
+          >
+            {tab}
+            {tab === "请求" && pendingCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-error text-on-error text-[10px] font-bold rounded-full flex items-center justify-center">
+                {pendingCount}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
 
-      <main className="flex-1 px-6 py-6 max-w-screen-md mx-auto w-full flex flex-col gap-6">
-        {/* Tabs */}
-        <div className="flex gap-2">
-          {TABS.map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300 relative ${
-                activeTab === tab
-                  ? "bg-secondary-container text-on-secondary-container"
-                  : "border border-outline-variant/30 text-on-surface-variant hover:bg-surface-variant/20"
-              }`}
-            >
-              {tab}
-              {tab === "请求" && pendingCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-5 h-5 bg-error text-on-error text-[10px] font-bold rounded-full flex items-center justify-center">
-                  {pendingCount}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-
-        {/* Content */}
-        {activeTab === "好友" && (
-          <FriendsList
-            friends={data?.friends ?? []}
-            loading={loading}
-            onUpdate={fetchFriends}
-          />
-        )}
-        {activeTab === "添加" && <SearchTab onUpdate={fetchFriends} />}
-        {activeTab === "请求" && (
-          <RequestsTab
-            received={data?.pendingReceived ?? []}
-            sent={data?.pendingSent ?? []}
-            loading={loading}
-            onUpdate={fetchFriends}
-          />
-        )}
-      </main>
+      {/* Content */}
+      {activeTab === "好友" && (
+        <FriendsList
+          friends={data?.friends ?? []}
+          loading={loading}
+          onUpdate={fetchFriends}
+        />
+      )}
+      {activeTab === "添加" && <SearchTab onUpdate={fetchFriends} />}
+      {activeTab === "请求" && (
+        <RequestsTab
+          received={data?.pendingReceived ?? []}
+          sent={data?.pendingSent ?? []}
+          loading={loading}
+          onUpdate={fetchFriends}
+        />
+      )}
     </div>
   );
 }
@@ -716,25 +712,3 @@ function Avatar({ user, size = 40 }: { user: FriendUser; size?: number }) {
   );
 }
 
-function Header({ title }: { title: string }) {
-  return (
-    <header className="sticky top-0 z-50 bg-surface/80 backdrop-blur-xl flex items-center justify-between px-6 h-16">
-      <Link
-        href="/profile"
-        className="text-on-surface hover:opacity-70 transition-opacity active:scale-95 duration-300 flex items-center justify-center w-10 h-10 rounded-full"
-      >
-        <Icon name="arrow_back" />
-      </Link>
-      <h1 className="[font-family:var(--font-display)] text-xl font-medium text-on-surface flex-1 text-center px-4">
-        {title}
-      </h1>
-      <Link
-        href="/notifications"
-        aria-label="通知中心"
-        className="text-on-surface hover:opacity-70 transition-opacity active:scale-95 duration-300 flex items-center justify-center w-10 h-10 rounded-full"
-      >
-        <Icon name="notifications" />
-      </Link>
-    </header>
-  );
-}

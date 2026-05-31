@@ -224,6 +224,10 @@ model User {
   friendPermissions      FriendPermission[] @relation("PermissionOwner")
   permissionsGrantedToMe FriendPermission[] @relation("PermissionFriend")
 
+  // Family system
+  familyMemberships FamilyMember[]
+  familyAlerts      FamilyAlert[]
+
   @@map("users")
 }
 
@@ -783,4 +787,89 @@ model Insight {
   @@index([userId, createdAt])
   @@index([reportId])
   @@map("insights")
+}
+
+// ---------------------------------------------------------------------------
+// Family system (远程健康关怀)
+// ---------------------------------------------------------------------------
+
+/// 家庭角色
+enum FamilyRole {
+  owner     // 创建者/管理员
+  caregiver // 关怀者（子女、配偶等）
+  member    // 被关怀者（老人等）
+}
+
+/// 预警灵敏度级别
+enum AlertLevel {
+  low    // 仅严重异常
+  medium // 中等敏感度（默认）
+  high   // 高度关注
+}
+
+/// 家庭
+model Family {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  inviteCode  String   @unique @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members FamilyMember[]
+  alerts  FamilyAlert[]
+
+  @@map("families")
+}
+
+/// 家庭成员
+model FamilyMember {
+  id         String     @id @default(cuid())
+  familyId   String
+  userId     String
+  role       FamilyRole @default(member)
+  nickname   String?    // 家庭中的称呼（如"爷爷"、"小明"）
+  alertLevel AlertLevel @default(medium)
+
+  /// 共享设置
+  shareHealthData  Boolean @default(true)  // 健康数据对家庭可见
+  shareAlerts      Boolean @default(true)  // 异常时通知家庭
+  shareMoodHistory Boolean @default(false) // 情绪记录对家庭可见
+
+  joinedAt  DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([familyId, userId])
+  @@index([userId])
+  @@map("family_members")
+}
+
+/// 家庭健康预警记录
+model FamilyAlert {
+  id           String   @id @default(cuid())
+  familyId     String
+  sourceUserId String
+  /// 预警类型: health-anomaly | chat-concern | device-alert | missed-checkin
+  alertType    String
+  /// 严重程度: info | warning | critical
+  severity     String
+  title        String
+  content      String
+  metadata     Json?
+  resolved     Boolean  @default(false)
+  resolvedBy   String?
+  resolvedAt   DateTime?
+
+  createdAt DateTime @default(now())
+
+  family     Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  sourceUser User   @relation(fields: [sourceUserId], references: [id], onDelete: Cascade)
+
+  @@index([familyId, createdAt])
+  @@index([sourceUserId, createdAt])
+  @@map("family_alerts")
 }
