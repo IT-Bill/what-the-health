@@ -27,6 +27,7 @@ interface ChatSession {
   messageCount: number;
   updatedAt: string;
   lastMessage: string | null;
+  pinned: boolean;
 }
 
 interface Message {
@@ -192,6 +193,12 @@ export default function ChatPage() {
   // UI state
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
 
+  // Session menu state
+  const [activeMenuSessionId, setActiveMenuSessionId] = useState<string | null>(null);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const menuRef = useRef<HTMLDivElement>(null);
+
   // Voice recording state
   const [isRecording, setIsRecording] = useState(false);
 
@@ -223,6 +230,19 @@ export default function ChatPage() {
   useEffect(() => {
     sessionIdRef.current = sessionId;
   }, [sessionId]);
+
+  // Close session menu on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setActiveMenuSessionId(null);
+      }
+    }
+    if (activeMenuSessionId) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [activeMenuSessionId]);
 
   // Auth check
   useEffect(() => {
@@ -395,6 +415,71 @@ export default function ChatPage() {
     setError(null);
     setShowSidebar(false);
   }, []);
+
+  const renameSession = useCallback(async (sid: string, newTitle: string) => {
+    try {
+      const res = await fetch(`/api/chat/sessions/${sid}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: newTitle }),
+      });
+      const data = await res.json();
+      if (data.session) {
+        setSessions((prev) =>
+          prev.map((s) => (s.id === sid ? { ...s, title: data.session.title } : s))
+        );
+      }
+    } catch (err) {
+      console.error("Rename session error:", err);
+    } finally {
+      setEditingSessionId(null);
+      setEditTitle("");
+    }
+  }, []);
+
+  const togglePinSession = useCallback(async (sid: string, currentPinned: boolean) => {
+    try {
+      const res = await fetch(`/api/chat/sessions/${sid}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pinned: !currentPinned }),
+      });
+      const data = await res.json();
+      if (data.session) {
+        setSessions((prev) => {
+          const updated = prev.map((s) =>
+            s.id === sid ? { ...s, pinned: data.session.pinned } : s
+          );
+          // Re-sort: pinned first, then by updatedAt desc
+          return updated.sort((a, b) => {
+            if (a.pinned !== b.pinned) return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
+            return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+          });
+        });
+      }
+    } catch (err) {
+      console.error("Pin session error:", err);
+    } finally {
+      setActiveMenuSessionId(null);
+    }
+  }, []);
+
+  const deleteSession = useCallback(async (sid: string) => {
+    if (!window.confirm("确定要删除这个会话吗？此操作不可撤销。")) return;
+    try {
+      const res = await fetch(`/api/chat/sessions/${sid}`, { method: "DELETE" });
+      if (res.ok) {
+        setSessions((prev) => prev.filter((s) => s.id !== sid));
+        if (sessionId === sid) {
+          startNewSession();
+        }
+      }
+    } catch (err) {
+      console.error("Delete session error:", err);
+    } finally {
+      setActiveMenuSessionId(null);
+    }
+  }, [sessionId, startNewSession]);
 
   const loadSession = useCallback(async (sid: string) => {
     abortRef.current?.abort();
@@ -874,7 +959,15 @@ export default function ChatPage() {
 
     const text = recordingTextRef.current.trim();
     if (text) {
-      queueVoiceText(text);
+      // Chat page mic: fill into input box, let user edit before sending
+      setInput(text);
+      queueMicrotask(() => {
+        const el = textareaRef.current;
+        if (el) {
+          el.style.height = "";
+          el.style.height = el.scrollHeight + "px";
+        }
+      });
     }
 
     recordingTextRef.current = "";
@@ -883,9 +976,9 @@ export default function ChatPage() {
   const hasInput = input.trim().length > 0;
 
   return (
-    <div className="min-h-screen flex flex-col relative overflow-hidden bg-background">
+    <div className="h-[100dvh] min-h-[100dvh] flex flex-col relative overflow-hidden bg-background">
       {/* Mobile TopAppBar */}
-      <header className="bg-surface/80 backdrop-blur-xl sticky top-0 z-50 border-b border-outline-variant/30 flex justify-between items-center w-full px-6 h-16 md:hidden">
+      <header className="fixed inset-x-0 top-0 z-50 bg-surface/80 backdrop-blur-xl border-b border-outline-variant/30 flex justify-between items-center w-full px-6 h-16 md:hidden">
         <button
           onClick={() => setShowSidebar(!showSidebar)}
           className="flex items-center gap-2 text-on-surface-variant"
@@ -906,7 +999,7 @@ export default function ChatPage() {
       </header>
 
       {/* Desktop TopAppBar */}
-      <header className="hidden md:flex bg-surface/80 backdrop-blur-xl sticky top-0 z-50 border-b border-outline-variant/30 justify-between items-center w-full px-16 h-20">
+      <header className="hidden md:flex fixed inset-x-0 top-0 z-50 bg-surface/80 backdrop-blur-xl border-b border-outline-variant/30 justify-between items-center w-full px-16 h-20">
         <div className="flex items-center gap-4">
           <Icon name="spa" />
           <div className="font-[var(--font-display)] text-2xl font-medium text-primary">
@@ -929,7 +1022,7 @@ export default function ChatPage() {
         </a>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 min-h-0 overflow-hidden pt-16 md:pt-20">
         {/* Mobile sidebar overlay */}
         {showSidebar && (
           <div
@@ -965,27 +1058,132 @@ export default function ChatPage() {
               <Icon name="add" />
               <span className="text-sm font-medium">新建对话</span>
             </button>
-            {sessions.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => loadSession(s.id)}
-                className={`w-full text-left px-4 py-3 rounded-2xl transition-colors ${
-                  sessionId === s.id
-                    ? "bg-secondary-container/60 text-on-secondary-container"
-                    : "hover:bg-surface-container-high/60 text-on-surface-variant"
-                }`}
-              >
-                <div className="text-sm font-medium truncate">{s.title}</div>
-                <div className="text-xs mt-0.5 opacity-60 truncate">
-                  {s.lastMessage ?? `${s.messageCount} 条消息`}
+            {sessions.map((s) => {
+              const isEditing = editingSessionId === s.id;
+              const isMenuOpen = activeMenuSessionId === s.id;
+              return (
+                <div
+                  key={s.id}
+                  className={`relative group flex items-center rounded-2xl transition-colors ${
+                    sessionId === s.id
+                      ? "bg-secondary-container/60 text-on-secondary-container"
+                      : "hover:bg-surface-container-high/60 text-on-surface-variant"
+                  }`}
+                >
+                  {isEditing ? (
+                    <div className="flex-1 min-w-0 flex items-center gap-1 px-3 py-2">
+                      <input
+                        type="text"
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            renameSession(s.id, editTitle);
+                          }
+                          if (e.key === "Escape") {
+                            setEditingSessionId(null);
+                            setEditTitle("");
+                          }
+                        }}
+                        autoFocus
+                        className="flex-1 min-w-0 text-sm font-medium bg-transparent border-none focus:ring-0 focus:outline-none text-on-secondary-container"
+                      />
+                      <button
+                        onClick={() => renameSession(s.id, editTitle)}
+                        className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-primary hover:bg-primary-container/40 transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-lg">check</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditingSessionId(null);
+                          setEditTitle("");
+                        }}
+                        className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-lg">close</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div
+                        onClick={() => loadSession(s.id)}
+                        className="flex-1 min-w-0 text-left px-4 py-3 cursor-pointer"
+                      >
+                        <div className="text-sm font-medium truncate flex items-center gap-1">
+                          {s.pinned && (
+                            <span
+                              className="material-symbols-outlined text-xs"
+                              style={{ fontVariationSettings: "'FILL' 1" }}
+                            >
+                              push_pin
+                            </span>
+                          )}
+                          {s.title}
+                        </div>
+                        <div className="text-xs mt-0.5 opacity-60 truncate">
+                          {s.lastMessage ?? `${s.messageCount} 条消息`}
+                        </div>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveMenuSessionId(isMenuOpen ? null : s.id);
+                        }}
+                        className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mr-1 transition-colors ${
+                          isMenuOpen
+                            ? "bg-surface-container-high text-on-surface opacity-100"
+                            : "text-on-surface-variant hover:bg-surface-container-high/60 opacity-0 group-hover:opacity-100"
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-lg">more_vert</span>
+                      </button>
+                    </>
+                  )}
+                  {isMenuOpen && !isEditing && (
+                    <div
+                      ref={menuRef}
+                      className="absolute right-2 top-10 z-50 bg-surface rounded-2xl shadow-2xl border border-outline-variant/20 py-1.5 w-44"
+                    >
+                      <button
+                        onClick={() => {
+                          setEditingSessionId(s.id);
+                          setEditTitle(s.title);
+                          setActiveMenuSessionId(null);
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-on-surface hover:bg-surface-container-high transition-colors text-left"
+                      >
+                        <span className="material-symbols-outlined text-lg">edit</span>
+                        重命名
+                      </button>
+                      <button
+                        onClick={() => togglePinSession(s.id, s.pinned)}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-on-surface hover:bg-surface-container-high transition-colors text-left"
+                      >
+                        <span className="material-symbols-outlined text-lg">
+                          {s.pinned ? "keep_off" : "keep"}
+                        </span>
+                        {s.pinned ? "取消置顶" : "置顶"}
+                      </button>
+                      <div className="mx-3 my-1 h-px bg-outline-variant/30" />
+                      <button
+                        onClick={() => deleteSession(s.id)}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-error hover:bg-error-container/30 transition-colors text-left"
+                      >
+                        <span className="material-symbols-outlined text-lg">delete</span>
+                        删除
+                      </button>
+                    </div>
+                  )}
                 </div>
-              </button>
-            ))}
+              );
+            })}
           </div>
         </aside>
 
         {/* Main Chat Area */}
-        <main className="flex-1 flex flex-col max-w-[800px] mx-auto w-full overflow-hidden relative z-10 pb-40 md:pb-8">
+        <main className="flex-1 min-h-0 flex flex-col max-w-[800px] mx-auto w-full overflow-hidden relative z-10 pb-40 md:pb-8">
           {/* Chat History */}
           <div
             ref={chatContainerRef}

@@ -47,6 +47,12 @@ export default function PostDetailPage() {
       body: commentText.trim(),
       createdAt: new Date().toISOString(),
       parentId: null,
+      liked: false,
+      favorited: false,
+      _count: {
+        likes: 0,
+        favorites: 0,
+      },
       author: { id: "", name: "你", avatarUrl: null },
     };
     setPost({

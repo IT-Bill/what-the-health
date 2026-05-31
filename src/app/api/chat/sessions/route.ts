@@ -25,7 +25,7 @@ export async function GET() {
 
     const sessions = await prisma.chatSession.findMany({
       where: { userId: payload.userId },
-      orderBy: { updatedAt: "desc" },
+      orderBy: [{ pinned: "desc" }, { updatedAt: "desc" }],
       take: 50,
       include: {
         _count: { select: { messages: true } },
@@ -41,6 +41,7 @@ export async function GET() {
       sessions: sessions.map((s) => ({
         id: s.id,
         title: s.title ?? "新对话",
+        pinned: s.pinned,
         messageCount: s._count.messages,
         updatedAt: s.updatedAt.toISOString(),
         lastMessage: s.messages[0]?.content.slice(0, 60) ?? null,

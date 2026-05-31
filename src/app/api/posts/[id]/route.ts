@@ -25,7 +25,16 @@ type LoadedComment = {
   };
 };
 
-function buildCommentTree(comments: LoadedComment[], parentId: string | null) {
+type CommentNode = Omit<LoadedComment, "likes" | "favorites"> & {
+  liked: boolean;
+  favorited: boolean;
+  replies: CommentNode[];
+};
+
+function buildCommentTree(
+  comments: LoadedComment[],
+  parentId: string | null
+): CommentNode[] {
   return comments
     .filter((comment) => comment.parentId === parentId)
     .map(({ likes, favorites, ...comment }) => ({
