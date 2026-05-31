@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import Image from "next/image";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Camera, Image, FileText } from "lucide-react";
 import { BottomNavBar } from "@/components/bottom-nav-bar";
 
 // ---------------------------------------------------------------------------
@@ -22,6 +22,8 @@ interface Message {
   id: string;
   role: "user" | "agent";
   content: string;
+  reasoning?: string;
+  thinkingDuration?: number;
   isStreaming?: boolean;
   toolCalls?: ToolCallInfo[];
 }
@@ -140,12 +142,33 @@ export default function ChatPage() {
   >("idle");
   const [error, setError] = useState<string | null>(null);
 
+  // UI state
+  const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
+  const [expandedThinking, setExpandedThinking] = useState<Set<string>>(new Set());
+
+  // Voice recording state
+  const [isRecording, setIsRecording] = useState(false);
+
+
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const assistantAccRef = useRef("");
+  const reasoningAccRef = useRef("");
+  const thinkingStartRef = useRef<number>(0);
 
-  // Auth check — redirect to login if not authenticated
+  // Voice recording refs
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const audioChunksRef = useRef<Float32Array[]>([]);
+  const sendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordingTextRef = useRef("");
+  const [volumeBars, setVolumeBars] = useState<number[]>(Array(20).fill(0.15));
+
+  // Auth check
   useEffect(() => {
     fetch("/api/me")
       .then((r) => {
@@ -200,37 +223,34 @@ export default function ChatPage() {
     setShowSidebar(false);
   }, []);
 
-  const loadSession = useCallback(
-    async (sid: string) => {
-      abortRef.current?.abort();
-      setSessionId(sid);
-      setShowSidebar(false);
-      setError(null);
-      setIsStreaming(true);
+  const loadSession = useCallback(async (sid: string) => {
+    abortRef.current?.abort();
+    setSessionId(sid);
+    setShowSidebar(false);
+    setError(null);
+    setIsStreaming(true);
 
-      try {
-        const res = await fetch(`/api/chat/sessions/${sid}/messages`);
-        const data = await res.json();
-        if (data.session?.messages) {
-          setMessages(
-            data.session.messages.map((m: { id: string; role: string; content: string }) => ({
-              id: m.id,
-              role: m.role === "user" ? "user" : "agent",
-              content: m.content,
-            }))
-          );
-        }
-      } catch (err) {
-        console.error("Load session error:", err);
-      } finally {
-        setIsStreaming(false);
+    try {
+      const res = await fetch(`/api/chat/sessions/${sid}/messages`);
+      const data = await res.json();
+      if (data.session?.messages) {
+        setMessages(
+          data.session.messages.map((m: { id: string; role: string; content: string }) => ({
+            id: m.id,
+            role: m.role === "user" ? "user" : "agent",
+            content: m.content,
+          }))
+        );
       }
-    },
-    []
-  );
+    } catch (err) {
+      console.error("Load session error:", err);
+    } finally {
+      setIsStreaming(false);
+    }
+  }, []);
 
-  async function handleSend() {
-    const text = input.trim();
+  async function handleSend(overrideText?: string) {
+    const text = (overrideText ?? input).trim();
     if (!text || isStreaming) return;
 
     const userMsg: Message = {
@@ -257,6 +277,8 @@ export default function ChatPage() {
     setCurrentAgentState("thinking");
     setError(null);
     assistantAccRef.current = "";
+    reasoningAccRef.current = "";
+    thinkingStartRef.current = Date.now();
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -338,6 +360,7 @@ export default function ChatPage() {
       }
       case "agent_start": {
         setCurrentAgentState("thinking");
+        thinkingStartRef.current = Date.now();
         break;
       }
       case "turn_start": {
@@ -351,6 +374,21 @@ export default function ChatPage() {
           prev.map((m) =>
             m.id === assistantId
               ? { ...m, content: assistantAccRef.current }
+              : m
+          )
+        );
+        break;
+      }
+      case "reasoning_delta": {
+        const delta = (event.delta as string) ?? "";
+        reasoningAccRef.current += delta;
+        const duration = thinkingStartRef.current
+          ? Math.round((Date.now() - thinkingStartRef.current) / 1000)
+          : 0;
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? { ...m, reasoning: reasoningAccRef.current, thinkingDuration: duration }
               : m
           )
         );
@@ -433,13 +471,181 @@ export default function ChatPage() {
     }
   }
 
-  const lastMessage = messages[messages.length - 1];
-  const lastAssistantEmpty =
-    lastMessage?.role === "agent" &&
-    lastMessage.content.trim().length === 0;
+  function toggleThinking(msgId: string) {
+    setExpandedThinking((prev) => {
+      const next = new Set(prev);
+      if (next.has(msgId)) {
+        next.delete(msgId);
+      } else {
+        next.add(msgId);
+      }
+      return next;
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Voice Recording
+  // ---------------------------------------------------------------------------
+
+  async function startVoiceRecording() {
+    if (isRecording) return;
+    cleanupRecording();
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+
+      const audioContext = new AudioContext({ sampleRate: 16000 });
+      audioContextRef.current = audioContext;
+
+      const source = audioContext.createMediaStreamSource(stream);
+      sourceRef.current = source;
+
+      const processor = audioContext.createScriptProcessor(4096, 1, 1);
+      processorRef.current = processor;
+
+      audioChunksRef.current = [];
+
+      processor.onaudioprocess = (e) => {
+        const data = e.inputBuffer.getChannelData(0);
+        audioChunksRef.current.push(new Float32Array(data));
+        // Update waveform bars
+        const rms = Math.sqrt(data.reduce((s, v) => s + v * v, 0) / data.length);
+        setVolumeBars(prev => {
+          const next = [...prev.slice(1), Math.min(1, rms * 8 + 0.05)];
+          return next;
+        });
+      };
+
+      source.connect(processor);
+      processor.connect(audioContext.destination);
+
+      const isDev = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+      const wsUrl = isDev ? `ws://localhost:3001` : `wss://${window.location.host}/api/asr`;
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ type: "start", language: "zh-CN" }));
+
+        // Only start sending audio after the session is started
+        sendIntervalRef.current = setInterval(() => {
+          const chunks = audioChunksRef.current.splice(0);
+          if (chunks.length === 0 || ws.readyState !== WebSocket.OPEN) return;
+
+          const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
+          const merged = new Float32Array(totalLength);
+          let offset = 0;
+          for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.length; }
+
+          const int16Data = new Int16Array(merged.length);
+          for (let i = 0; i < merged.length; i++) {
+            int16Data[i] = Math.max(-32768, Math.min(32767, merged[i] * 32767));
+          }
+          ws.send(int16Data.buffer);
+        }, 200);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === "result" && msg.text) {
+            recordingTextRef.current = msg.text;
+          } else if (msg.type === "error") {
+            console.error("[ASR] Error:", msg.message);
+          }
+        } catch {
+          // ignore non-JSON
+        }
+      };
+
+      ws.onerror = () => {
+        console.error("[ASR] WebSocket connection failed — is the proxy running? (pnpm asr-proxy)");
+        cleanupRecording();
+        setIsRecording(false);
+        alert("语音服务连接失败，请确保已运行 pnpm asr-proxy");
+      };
+
+      ws.onclose = () => {
+        cleanupRecording();
+      };
+
+      setIsRecording(true);
+      recordingTextRef.current = "";
+    } catch (err) {
+      console.error("[Voice] Failed to start recording:", err);
+      alert("无法启动录音，请检查麦克风权限");
+    }
+  }
+
+  function cleanupRecording() {
+    if (sendIntervalRef.current) {
+      clearInterval(sendIntervalRef.current);
+      sendIntervalRef.current = null;
+    }
+    if (processorRef.current) {
+      processorRef.current.disconnect();
+      processorRef.current = null;
+    }
+    if (sourceRef.current) {
+      sourceRef.current.disconnect();
+      sourceRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    const ws = wsRef.current;
+    if (ws) {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+      wsRef.current = null;
+    }
+  }
+
+  function stopVoiceRecording() {
+    if (!isRecording) return;
+
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      const chunks = audioChunksRef.current.splice(0);
+      if (chunks.length > 0) {
+        const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
+        const merged = new Float32Array(totalLength);
+        let offset = 0;
+        for (const chunk of chunks) {
+          merged.set(chunk, offset);
+          offset += chunk.length;
+        }
+        const int16Data = new Int16Array(merged.length);
+        for (let i = 0; i < merged.length; i++) {
+          int16Data[i] = Math.max(-32768, Math.min(32767, merged[i] * 32767));
+        }
+        ws.send(int16Data.buffer);
+      }
+      ws.send(JSON.stringify({ type: "end" }));
+    }
+
+    cleanupRecording();
+    setIsRecording(false);
+
+    const text = recordingTextRef.current.trim();
+    if (text) {
+      setInput(text);
+    }
+
+    recordingTextRef.current = "";
+  }
+
+  const hasInput = input.trim().length > 0;
 
   return (
-    <div className="min-h-screen flex flex-col relative overflow-hidden">
+    <div className="min-h-screen flex flex-col relative overflow-hidden bg-background">
       {/* Mobile TopAppBar */}
       <header className="bg-surface/80 backdrop-blur-xl sticky top-0 z-50 border-b border-outline-variant/30 flex justify-between items-center w-full px-6 h-16 md:hidden">
         <button
@@ -471,30 +677,10 @@ export default function ChatPage() {
           </div>
         </div>
         <nav className="flex gap-8 items-center h-full">
-          <a
-            href="/chat"
-            className="text-primary font-bold h-full flex items-center border-b-2 border-primary"
-          >
-            Chat
-          </a>
-          <a
-            href="/discover"
-            className="text-on-surface-variant hover:opacity-80 transition-opacity h-full flex items-center border-b-2 border-transparent"
-          >
-            Discover
-          </a>
-          <a
-            href="/memory"
-            className="text-on-surface-variant hover:opacity-80 transition-opacity h-full flex items-center border-b-2 border-transparent"
-          >
-            Memory
-          </a>
-          <a
-            href="/profile"
-            className="text-on-surface-variant hover:opacity-80 transition-opacity h-full flex items-center border-b-2 border-transparent"
-          >
-            Profile
-          </a>
+          <a href="/chat" className="text-primary font-bold h-full flex items-center border-b-2 border-primary">Chat</a>
+          <a href="/discover" className="text-on-surface-variant hover:opacity-80 transition-opacity h-full flex items-center border-b-2 border-transparent">Discover</a>
+          <a href="/memory" className="text-on-surface-variant hover:opacity-80 transition-opacity h-full flex items-center border-b-2 border-transparent">Memory</a>
+          <a href="/profile" className="text-on-surface-variant hover:opacity-80 transition-opacity h-full flex items-center border-b-2 border-transparent">Profile</a>
         </nav>
       </header>
 
@@ -544,9 +730,7 @@ export default function ChatPage() {
                     : "hover:bg-surface-container-high/60 text-on-surface-variant"
                 }`}
               >
-                <div className="text-sm font-medium truncate">
-                  {s.title}
-                </div>
+                <div className="text-sm font-medium truncate">{s.title}</div>
                 <div className="text-xs mt-0.5 opacity-60 truncate">
                   {s.lastMessage ?? `${s.messageCount} 条消息`}
                 </div>
@@ -556,41 +740,64 @@ export default function ChatPage() {
         </aside>
 
         {/* Main Chat Area */}
-        <main className="flex-1 flex flex-col max-w-[800px] mx-auto w-full overflow-hidden relative z-10 pb-24 md:pb-8 pt-6">
-          {/* Date Header */}
-          <div className="text-center mb-8">
-            <span className="text-on-surface-variant/70 text-xs uppercase tracking-widest">
-              今天
-            </span>
-          </div>
-
+        <main className="flex-1 flex flex-col max-w-[800px] mx-auto w-full overflow-hidden relative z-10 pb-40 md:pb-8">
           {/* Chat History */}
           <div
             ref={chatContainerRef}
-            className="flex-1 w-full px-6 md:px-6 overflow-y-auto no-scrollbar flex flex-col gap-6"
+            className="flex-1 w-full px-4 md:px-6 overflow-y-auto no-scrollbar flex flex-col gap-1 pt-4"
           >
-            {messages.map((msg, index) =>
+            {/* Welcome screen — only when no conversation has started */}
+            {messages.length === 1 && messages[0].id === "init" && !isStreaming && (
+              <div className="flex-1 flex flex-col items-center justify-center text-center px-4 py-16 gap-6">
+                <h1 className="text-3xl font-medium text-on-surface tracking-tight">
+                  在这个当下，你感觉如何？
+                </h1>
+                <div className="flex justify-center gap-2">
+                  {[
+                    { icon: "self_improvement", label: "帮我放松" },
+                    { icon: "edit_note", label: "写日记" },
+                    { icon: "psychology", label: "倾诉烦恼" },
+                  ].map((s) => (
+                    <button
+                      key={s.label}
+                      onClick={() => handleSend(s.label)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-outline-variant/40 bg-surface-container-low hover:bg-surface-container-high transition-colors text-xs text-on-surface-variant"
+                    >
+                      <span className="material-symbols-outlined text-sm">{s.icon}</span>
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Hide the lone init message when showing welcome screen */}
+            {(messages.length > 1 || messages[0]?.id !== "init" || isStreaming) && messages.map((msg) =>
               msg.role === "agent" ? (
                 msg.content.trim().length === 0 && msg.isStreaming ? (
-                  <AgentThinkingBubble
+                  <AgentThinkingState
                     key={msg.id}
                     state={currentAgentState}
-                    toolCalls={msg.toolCalls}
+                    reasoning={msg.reasoning}
+                    thinkingDuration={msg.thinkingDuration}
+                    isExpanded={expandedThinking.has(msg.id)}
+                    onToggle={() => toggleThinking(msg.id)}
                   />
                 ) : (
-                  <AgentBubble
+                  <AgentMessage
                     key={msg.id}
                     message={msg}
-                    index={index}
+                    isExpanded={expandedThinking.has(msg.id)}
+                    onToggle={() => toggleThinking(msg.id)}
                   />
                 )
               ) : (
-                <UserBubble key={msg.id} message={msg} index={index} />
+                <UserBubble key={msg.id} message={msg} />
               )
             )}
 
             {error && (
-              <div className="flex w-full justify-center">
+              <div className="flex w-full justify-center py-2">
                 <div className="bg-error-container text-on-error-container rounded-2xl px-4 py-2 text-sm">
                   {error}
                 </div>
@@ -599,36 +806,102 @@ export default function ChatPage() {
           </div>
 
           {/* Input Area */}
-          <div className="w-full px-6 md:px-6 mt-auto pt-6 bg-gradient-to-t from-background via-background to-transparent sticky bottom-0 z-20">
-            <div className="relative bg-surface/60 backdrop-blur-xl border border-outline-variant/30 rounded-[32px] shadow-[0_20px_40px_rgba(45,45,45,0.04)] flex items-end p-2 transition-all focus-within:border-secondary/50 focus-within:bg-surface/80">
-              <button
-                className="w-12 h-12 flex-shrink-0 rounded-full flex items-center justify-center text-on-surface-variant hover:text-secondary transition-colors hover:bg-surface-container-low"
-              >
-                <span className="material-symbols-outlined">add</span>
-              </button>
-              <textarea
-                ref={textareaRef}
-                value={input}
-                onChange={handleTextareaInput}
-                onKeyDown={handleKeyDown}
-                placeholder="分享你的感受..."
-                rows={1}
-                className="w-full bg-transparent border-none focus:ring-0 resize-none py-3 px-2 text-on-surface text-base placeholder-on-surface-variant/50 max-h-[120px] overflow-y-auto no-scrollbar"
-                style={{ minHeight: "48px" }}
-              />
-              <button
-                onClick={handleSend}
-                disabled={isStreaming || input.trim().length === 0}
-                className="w-12 h-12 flex-shrink-0 rounded-full flex items-center justify-center bg-secondary text-on-secondary hover:opacity-90 transition-opacity ml-2 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <span className="material-symbols-outlined">
-                  {isStreaming ? "more_horiz" : "send"}
-                </span>
-              </button>
+          <div className="fixed bottom-[84px] left-0 right-0 z-[55] bg-gradient-to-t from-background via-background/95 to-transparent pt-4 pb-2 px-4 md:sticky md:bottom-0">
+            <div className="max-w-[800px] mx-auto">
+              <div className="relative flex items-end gap-2 bg-surface/60 backdrop-blur-xl border border-outline-variant/30 rounded-[28px] shadow-[0_12px_32px_rgba(45,45,45,0.04)] px-2 py-1.5">
+                {/* Attachment / Cancel Button */}
+                <button
+                  onClick={isRecording ? () => { cleanupRecording(); setIsRecording(false); recordingTextRef.current = ""; } : () => setShowAttachmentMenu(!showAttachmentMenu)}
+                  className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-colors"
+                >
+                  <span
+                    className="material-symbols-outlined text-2xl transition-transform duration-300"
+                    style={{ transform: (isRecording || showAttachmentMenu) ? "rotate(45deg)" : "rotate(0deg)" }}
+                  >
+                    add
+                  </span>
+                </button>
+
+                {/* Textarea or Waveform */}
+                {isRecording ? (
+                  <div className="flex-1 flex items-center justify-center gap-[3px] h-10 px-2">
+                    {volumeBars.map((v, i) => (
+                      <div
+                        key={i}
+                        className="w-[3px] rounded-full bg-error transition-all duration-75"
+                        style={{ height: `${Math.max(4, v * 32)}px` }}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <textarea
+                    ref={textareaRef}
+                    value={input}
+                    onChange={handleTextareaInput}
+                    onKeyDown={handleKeyDown}
+                    placeholder="分享你的感受..."
+                    rows={1}
+                    className="w-full bg-transparent border-none focus:ring-0 focus:outline-none resize-none py-2.5 px-1 text-on-surface text-base placeholder-on-surface-variant/50 max-h-[120px] overflow-y-auto no-scrollbar"
+                    style={{ minHeight: "40px" }}
+                  />
+                )}
+
+                {/* Voice / Send Button */}
+                {hasInput && !isRecording ? (
+                  <button
+                    onClick={() => handleSend()}
+                    disabled={isStreaming}
+                    className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-on-surface text-surface hover:opacity-90 transition-all disabled:opacity-40"
+                  >
+                    <span className="material-symbols-outlined text-xl">arrow_upward</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={isRecording ? stopVoiceRecording : startVoiceRecording}
+                    disabled={isStreaming}
+                    className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                      isRecording ? "bg-error text-on-error" : "text-on-surface-variant hover:bg-surface-container-low"
+                    } disabled:opacity-40`}
+                  >
+                    <span className="material-symbols-outlined text-xl">
+                      {isRecording ? "stop" : "mic_none"}
+                    </span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </main>
       </div>
+
+      {/* Attachment Menu */}
+      {showAttachmentMenu && (
+        <div
+          className="fixed inset-0 z-[55]"
+          onClick={() => setShowAttachmentMenu(false)}
+        >
+          <div
+            className="absolute bottom-24 left-4 md:left-[calc(50%-400px+16px)] bg-surface rounded-[24px] shadow-2xl border border-outline-variant/20 p-3 w-[280px]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex flex-col gap-1 p-1">
+              {[
+                { icon: Camera, label: "相机" },
+                { icon: Image, label: "照片" },
+                { icon: FileText, label: "文件" },
+              ].map((item) => (
+                <button
+                  key={item.label}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface-container-high transition-colors text-left"
+                >
+                  <item.icon className="w-5 h-5 text-on-surface-variant" />
+                  <span className="text-sm text-on-surface">{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <BottomNavBar />
     </div>
@@ -636,127 +909,137 @@ export default function ChatPage() {
 }
 
 // ---------------------------------------------------------------------------
-// Bubble Components
+// Message Components
 // ---------------------------------------------------------------------------
 
-function AgentBubble({
+function AgentMessage({
   message,
-  index,
+  isExpanded,
+  onToggle,
 }: {
   message: Message;
-  index: number;
+  isExpanded: boolean;
+  onToggle: () => void;
 }) {
   return (
-    <div
-      className="flex w-full justify-start chat-bubble-enter"
-      style={{ animationDelay: `${index * 0.1}s` }}
-    >
-      <div className="flex gap-4 max-w-[85%] md:max-w-[70%]">
-        <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center flex-shrink-0 border border-outline-variant/20 shadow-[0_4px_12px_rgba(45,45,45,0.02)]">
-          <span
-            className="material-symbols-outlined text-tertiary"
-            style={{ fontVariationSettings: "'FILL' 1" }}
+    <div className="w-full py-3">
+      {/* Thinking Section */}
+      {message.reasoning && (
+        <div className="mb-3">
+          <button
+            onClick={onToggle}
+            className="flex items-center gap-2 text-on-surface-variant/60 hover:text-on-surface-variant transition-colors text-sm"
           >
-            spa
-          </span>
-        </div>
-        <div className="flex flex-col gap-2 min-w-0">
-          <div className="bg-surface-container-low rounded-t-[24px] rounded-br-[24px] rounded-bl-[4px] p-5 shadow-[0_8px_24px_rgba(45,45,45,0.03)] border border-outline-variant/10 text-on-surface text-base">
-            {message.content ? (
-              <MarkdownContent text={message.content} />
-            ) : (
-              <span className="text-on-surface-variant/50 italic">
-                正在思考...
-              </span>
-            )}
-          </div>
-          {message.toolCalls && message.toolCalls.length > 0 && (
-            <ToolCallIndicators tools={message.toolCalls} />
+            <span className="material-symbols-outlined text-lg">
+              {isExpanded ? "expand_less" : "expand_more"}
+            </span>
+            <span>
+              {message.thinkingDuration
+                ? `已思考 ${message.thinkingDuration} 秒`
+                : "思考中..."}
+            </span>
+            <span className="text-xs opacity-50">
+              {isExpanded ? "收起" : "展开"}
+            </span>
+          </button>
+          {isExpanded && (
+            <div className="mt-2 pl-6 border-l-2 border-outline-variant/30 text-on-surface-variant/70 text-sm leading-relaxed">
+              {message.reasoning}
+            </div>
           )}
         </div>
-      </div>
-    </div>
-  );
-}
+      )}
 
-function UserBubble({
-  message,
-  index,
-}: {
-  message: Message;
-  index: number;
-}) {
-  return (
-    <div
-      className="flex w-full justify-end chat-bubble-enter"
-      style={{ animationDelay: `${index * 0.1}s` }}
-    >
-      <div className="flex gap-4 max-w-[85%] md:max-w-[70%] flex-row-reverse">
-        <div className="bg-primary-container rounded-t-[24px] rounded-bl-[24px] rounded-br-[4px] p-5 shadow-[0_8px_24px_rgba(45,45,45,0.03)] border border-outline-variant/10 text-on-surface text-base">
+      {/* Content - No bubble, direct markdown */}
+      <div className="text-on-surface text-base leading-relaxed">
+        {message.content ? (
           <MarkdownContent text={message.content} />
-        </div>
+        ) : (
+          <span className="text-on-surface-variant/50 italic">正在思考...</span>
+        )}
       </div>
+
     </div>
   );
 }
 
-function AgentThinkingBubble({
+function AgentThinkingState({
   state,
+  reasoning,
+  thinkingDuration,
+  isExpanded,
+  onToggle,
   toolCalls,
 }: {
   state: "idle" | "thinking" | "tools";
+  reasoning?: string;
+  thinkingDuration?: number;
+  isExpanded: boolean;
+  onToggle: () => void;
   toolCalls?: ToolCallInfo[];
 }) {
   const runningTools = toolCalls?.filter((t) => t.status === "running") ?? [];
 
   return (
-    <div className="flex w-full justify-start chat-bubble-enter">
-      <div className="flex gap-4 max-w-[85%] md:max-w-[70%]">
-        <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center flex-shrink-0 border border-outline-variant/20 shadow-[0_4px_12px_rgba(45,45,45,0.02)]">
-          <span
-            className="material-symbols-outlined text-tertiary"
-            style={{ fontVariationSettings: "'FILL' 1" }}
+    <div className="w-full py-3">
+      {/* Thinking indicator */}
+      {(state === "thinking" || reasoning) && (
+        <div className="mb-2">
+          <button
+            onClick={onToggle}
+            className="flex items-center gap-2 text-on-surface-variant/60 hover:text-on-surface-variant transition-colors text-sm"
           >
-            spa
-          </span>
-        </div>
-        <div className="bg-surface-container-low rounded-[24px] px-5 py-4 shadow-[0_8px_24px_rgba(45,45,45,0.03)] border border-outline-variant/10 flex flex-col gap-2">
-          {state === "thinking" && (
-            <div className="flex items-center gap-2 text-on-surface-variant text-sm">
-              <div className="w-4 h-4 border-2 border-secondary/30 border-t-secondary rounded-full animate-spin" />
-              <span>正在思考...</span>
-            </div>
-          )}
-          {state === "tools" && runningTools.length > 0 && (
-            <div className="flex flex-col gap-1.5">
-              {runningTools.map((tool) => (
-                <div
-                  key={tool.id}
-                  className="flex items-center gap-2 text-on-surface-variant text-sm"
-                >
-                  <div className="w-4 h-4 border-2 border-tertiary/30 border-t-tertiary rounded-full animate-spin" />
-                  <span>正在使用 {tool.label}...</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {state === "idle" && (
-            <div className="flex items-center gap-1">
-              <div
-                className="w-2 h-2 rounded-full bg-outline-variant animate-bounce"
-                style={{ animationDelay: "0s" }}
-              />
-              <div
-                className="w-2 h-2 rounded-full bg-outline-variant animate-bounce"
-                style={{ animationDelay: "0.2s" }}
-              />
-              <div
-                className="w-2 h-2 rounded-full bg-outline-variant animate-bounce"
-                style={{ animationDelay: "0.4s" }}
-              />
+            <div className="w-4 h-4 border-2 border-secondary/30 border-t-secondary rounded-full animate-spin" />
+            <span>
+              {reasoning
+                ? `已思考 ${thinkingDuration ?? 0} 秒`
+                : "思考中..."}
+            </span>
+            {reasoning && (
+              <span className="material-symbols-outlined text-lg">
+                {isExpanded ? "expand_less" : "expand_more"}
+              </span>
+            )}
+          </button>
+          {isExpanded && reasoning && (
+            <div className="mt-2 pl-6 border-l-2 border-outline-variant/30 text-on-surface-variant/70 text-sm leading-relaxed">
+              {reasoning}
             </div>
           )}
         </div>
+      )}
+
+      {/* Tool calls */}
+      {state === "tools" && runningTools.length > 0 && (
+        <div className="flex flex-col gap-1.5 mb-2">
+          {runningTools.map((tool) => (
+            <div
+              key={tool.id}
+              className="flex items-center gap-2 text-on-surface-variant text-sm"
+            >
+              <div className="w-4 h-4 border-2 border-tertiary/30 border-t-tertiary rounded-full animate-spin" />
+              <span>正在使用 {tool.label}...</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {state === "idle" && (
+        <div className="flex items-center gap-1 py-2">
+          <div className="w-2 h-2 rounded-full bg-outline-variant animate-bounce" style={{ animationDelay: "0s" }} />
+          <div className="w-2 h-2 rounded-full bg-outline-variant animate-bounce" style={{ animationDelay: "0.2s" }} />
+          <div className="w-2 h-2 rounded-full bg-outline-variant animate-bounce" style={{ animationDelay: "0.4s" }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function UserBubble({ message }: { message: Message }) {
+  return (
+    <div className="flex w-full justify-end py-2">
+      <div className="bg-surface-container-high rounded-[20px] rounded-tr-[4px] px-4 py-2.5 max-w-[85%] md:max-w-[70%]">
+        <p className="text-on-surface text-base leading-relaxed">{message.content}</p>
       </div>
     </div>
   );
@@ -764,7 +1047,7 @@ function AgentThinkingBubble({
 
 function ToolCallIndicators({ tools }: { tools: ToolCallInfo[] }) {
   return (
-    <div className="flex flex-wrap gap-1.5 ml-14">
+    <div className="flex flex-wrap gap-1.5 mt-3">
       {tools.map((tool) => (
         <span
           key={tool.id}
