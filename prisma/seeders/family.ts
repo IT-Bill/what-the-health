@@ -33,16 +33,12 @@ export async function seedFamily(prisma: PrismaClient, users: SeededUser[]) {
           {
             userId: owner.id,
             role: "owner",
-            nickname: null,
-            alertLevel: "medium",
             shareHealthData: true,
             shareAlerts: true,
           },
           ...members.map((m) => ({
             userId: m.id,
             role: "caregiver" as const,
-            nickname: null,
-            alertLevel: "medium",
             shareHealthData: true,
             shareAlerts: true,
           })),

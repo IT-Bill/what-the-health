@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { Icon } from "@/components/icon";
 
 interface FamilyMember {
@@ -38,21 +38,51 @@ interface FamilyDetail {
   myRole: string;
 }
 
+interface HealthViewData {
+  user: { id: string; name: string; avatarUrl: string | null };
+  nickname: string | null;
+  period: { days: number; since: string };
+  summary: Record<string, { count: number; avg: number; min: number; max: number; latest: number; unit: string }>;
+  moodHistory: { mood: string; note: string | null; createdAt: string }[];
+}
+
 const ROLE_LABELS: Record<string, string> = { owner: "管理员", caregiver: "关怀者", member: "被关怀者" };
 const SEVERITY_COLORS: Record<string, string> = { critical: "text-error", warning: "text-tertiary", info: "text-on-surface-variant" };
 const SEVERITY_ICONS: Record<string, string> = { critical: "error", warning: "warning", info: "health_metrics" };
+const METRIC_LABELS: Record<string, string> = {
+  steps: "步数", heartRate: "心率", restingHR: "静息心率", sleepAnalysis: "睡眠",
+  workout: "运动", weight: "体重", bloodPressure: "血压", bloodOxygen: "血氧",
+  calories: "卡路里", distance: "距离", hrv: "HRV", stress: "压力",
+};
 
 export default function FamilyDetailPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const familyId = params.id as string;
+  const viewUserId = searchParams.get("view");
   const [family, setFamily] = useState<FamilyDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [showInvite, setShowInvite] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [healthData, setHealthData] = useState<HealthViewData | null>(null);
+  const [healthLoading, setHealthLoading] = useState(false);
 
   useEffect(() => {
     fetchFamily();
   }, [familyId]);
+
+  useEffect(() => {
+    if (viewUserId && familyId) {
+      setHealthLoading(true);
+      fetch(`/api/family/${familyId}/health/${viewUserId}?days=7`)
+        .then((r) => r.ok ? r.json() : null)
+        .then((d) => setHealthData(d))
+        .catch(() => setHealthData(null))
+        .finally(() => setHealthLoading(false));
+    } else {
+      setHealthData(null);
+    }
+  }, [viewUserId, familyId]);
 
   async function fetchFamily() {
     try {
@@ -102,6 +132,52 @@ export default function FamilyDetailPage() {
       </header>
 
       <main className="flex-1 px-6 py-6 max-w-screen-md mx-auto w-full flex flex-col gap-6">
+        {/* Health Data View */}
+        {viewUserId && (
+          <section className="bg-primary-container rounded-2xl p-5 ambient-shadow">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium text-on-surface flex items-center gap-2">
+                <Icon name="health_metrics" size={18} className="text-secondary" />
+                {healthData?.nickname || healthData?.user?.name || "成员"}的健康数据（近7天）
+              </h3>
+              <Link href={`/discover/family/${familyId}`} className="text-xs text-on-surface-variant">
+                关闭
+              </Link>
+            </div>
+            {healthLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="w-6 h-6 border-2 border-secondary border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : healthData && Object.keys(healthData.summary).length > 0 ? (
+              <div className="flex flex-col gap-3">
+                <div className="grid grid-cols-2 gap-3">
+                  {Object.entries(healthData.summary).map(([metric, data]) => (
+                    <div key={metric} className="bg-surface rounded-xl p-3">
+                      <p className="text-[10px] text-on-surface-variant uppercase tracking-wider">{METRIC_LABELS[metric] || metric}</p>
+                      <p className="text-lg font-medium text-on-surface mt-1">{data.avg} <span className="text-xs text-on-surface-variant">{data.unit}</span></p>
+                      <p className="text-[10px] text-outline">范围 {data.min}–{data.max}</p>
+                    </div>
+                  ))}
+                </div>
+                {healthData.moodHistory.length > 0 && (
+                  <div className="bg-surface rounded-xl p-3">
+                    <p className="text-[10px] text-on-surface-variant uppercase tracking-wider mb-2">情绪记录</p>
+                    <div className="flex gap-1 flex-wrap">
+                      {healthData.moodHistory.slice(0, 7).map((m, i) => (
+                        <span key={i} className="text-lg" title={m.note || undefined}>
+                          {m.mood === "calm" ? "😊" : m.mood === "anxious" ? "😰" : "😴"}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-on-surface-variant text-center py-4">暂无健康数据</p>
+            )}
+          </section>
+        )}
+
         {/* Active Alerts */}
         {family.alerts.length > 0 && (
           <section>
