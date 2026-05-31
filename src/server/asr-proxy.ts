@@ -159,6 +159,9 @@ function handleClientConnection(clientWs: WebSocket) {
   let bufferedAudio: Buffer[] = [];
   let asrConnected = false;
   let seq = 1;
+  let ending = false;
+  let finalFrameSent = false;
+  let finalCloseTimer: ReturnType<typeof setTimeout> | null = null;
 
   function sendToClient(data: unknown) {
     if (clientWs.readyState === WebSocket.OPEN) {
@@ -168,6 +171,20 @@ function handleClientConnection(clientWs: WebSocket) {
 
   function sendError(message: string) {
     sendToClient({ type: "error", message });
+  }
+
+  function clearFinalCloseTimer() {
+    if (finalCloseTimer) {
+      clearTimeout(finalCloseTimer);
+      finalCloseTimer = null;
+    }
+  }
+
+  function closeClient() {
+    clearFinalCloseTimer();
+    if (clientWs.readyState === WebSocket.OPEN) {
+      clientWs.close();
+    }
   }
 
   function buildAuthHeaders(): Record<string, string> {
@@ -223,6 +240,55 @@ function handleClientConnection(clientWs: WebSocket) {
     return encodeDoubaoFrame(MessageType.CLIENT_AUDIO_ONLY_REQUEST, effectiveSeq, segment, flags);
   }
 
+  function sendFinalAudioFrame() {
+    if (finalFrameSent) return true;
+    if (!asrWs || asrWs.readyState !== WebSocket.OPEN) return false;
+
+    const closeFrame = buildAudioRequest(seq, Buffer.alloc(0), true);
+    seq++;
+    finalFrameSent = true;
+    asrWs.send(closeFrame);
+    console.log("[ASR] Sent close frame, seq:", seq - 1);
+    return true;
+  }
+
+  function startFinalCloseTimer() {
+    clearFinalCloseTimer();
+    finalCloseTimer = setTimeout(() => {
+      console.warn("[ASR] Timed out waiting for final transcript; closing client");
+      if (asrWs && asrWs.readyState === WebSocket.OPEN) {
+        asrWs.close();
+      }
+      closeClient();
+    }, 3000);
+  }
+
+  function requestAsrEnd() {
+    if (ending) return;
+    ending = true;
+
+    if (sendFinalAudioFrame()) {
+      startFinalCloseTimer();
+      return;
+    }
+
+    if (asrWs && asrWs.readyState === WebSocket.CONNECTING) {
+      startFinalCloseTimer();
+      return;
+    }
+
+    closeClient();
+  }
+
+  function closeAsrImmediately() {
+    clearFinalCloseTimer();
+    bufferedAudio = [];
+    if (asrWs && asrWs.readyState === WebSocket.OPEN) {
+      asrWs.close();
+    }
+    asrWs = null;
+  }
+
   function connectToAsr() {
     if (asrWs) return;
 
@@ -257,6 +323,10 @@ function handleClientConnection(clientWs: WebSocket) {
         ws.send(audioFrame);
       }
       bufferedAudio = [];
+
+      if (ending && sendFinalAudioFrame()) {
+        startFinalCloseTimer();
+      }
     });
 
     ws.on("message", (data: Buffer) => {
@@ -275,11 +345,16 @@ function handleClientConnection(clientWs: WebSocket) {
           const utterances: { text: string; definite: boolean }[] = result.result?.utterances ?? [];
           const lastWithText = [...utterances].reverse().find(u => u.text);
           if (fullText || lastWithText) {
+            const isFinal = frame.isLast || lastWithText?.definite === true;
             sendToClient({
               type: "result",
-              text: fullText,
-              isFinal: lastWithText?.definite === true,
+              text: fullText || lastWithText?.text || "",
+              isFinal,
             });
+            if (ending && isFinal) {
+              closeClient();
+              if (ws.readyState === WebSocket.OPEN) ws.close();
+            }
           }
         } catch {
           // ignore malformed response
@@ -288,21 +363,25 @@ function handleClientConnection(clientWs: WebSocket) {
         const text = frame.payload.toString("utf-8");
         console.error("[ASR] Server error:", frame.code, text);
         sendError(`ASR server error: ${text}`);
+        if (ending) closeClient();
       }
     });
 
     ws.on("error", (err: Error & { response?: { statusCode?: number; headers?: Record<string, string> } }) => {
       console.error("[ASR] WebSocket error:", err.message, err.response?.statusCode, err.response?.headers);
       sendError("ASR connection error");
+      if (ending) closeClient();
     });
 
     ws.on("close", () => {
       asrConnected = false;
       asrWs = null;
+      if (ending) closeClient();
     });
   }
 
   function sendAudioChunk(chunk: Buffer) {
+    if (ending) return;
     if (!asrConnected || !asrWs) {
       bufferedAudio.push(chunk);
       return;
@@ -310,17 +389,6 @@ function handleClientConnection(clientWs: WebSocket) {
     const frame = buildAudioRequest(seq, chunk, false);
     seq++;
     asrWs.send(frame);
-  }
-
-  function closeAsr() {
-    if (asrWs && asrWs.readyState === WebSocket.OPEN) {
-      // Send last audio frame with NEG_WITH_SEQUENCE flag
-      const closeFrame = buildAudioRequest(seq, Buffer.alloc(0), true);
-      asrWs.send(closeFrame);
-      console.log("[ASR] Sent close frame, seq:", seq);
-      asrWs.close();
-    }
-    asrWs = null;
   }
 
   clientWs.on("message", (data: Buffer | ArrayBuffer | string) => {
@@ -335,8 +403,7 @@ function handleClientConnection(clientWs: WebSocket) {
           language = msg.language ?? "zh-CN";
           connectToAsr();
         } else if (msg.type === "end") {
-          closeAsr();
-          clientWs.close();
+          requestAsrEnd();
         }
         return;
       } catch { /* not JSON, fall through to audio */ }
@@ -347,12 +414,12 @@ function handleClientConnection(clientWs: WebSocket) {
   });
 
   clientWs.on("close", () => {
-    closeAsr();
+    closeAsrImmediately();
   });
 
   clientWs.on("error", (err) => {
     console.error("[ASR] Client error:", err);
-    closeAsr();
+    closeAsrImmediately();
   });
 }
 
