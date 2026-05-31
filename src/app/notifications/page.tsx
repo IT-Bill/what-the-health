@@ -10,14 +10,19 @@ import {
   type NotificationMutationResponse,
 } from "@/lib/notifications";
 
+const REFRESH_INTERVAL_MS = 5 * 1000;
+
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const unreadCount = notifications.filter((item) => item.unread).length;
 
-  const loadNotifications = useCallback(async () => {
-    setLoading(true);
+  const loadNotifications = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setLoading(true);
+    }
+
     try {
       const response = await fetch("/api/notifications", { cache: "no-store" });
       if (response.status === 401) {
@@ -35,12 +40,42 @@ export default function NotificationsPage() {
     } catch {
       setError("加载通知失败，请稍后重试。");
     } finally {
-      setLoading(false);
+      if (!options?.silent) {
+        setLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    void loadNotifications();
+    const timer = window.setTimeout(() => {
+      void loadNotifications();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [loadNotifications]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const refresh = () => {
+      if (document.visibilityState === "visible") {
+        void loadNotifications({ silent: true });
+      }
+    };
+
+    const timer = window.setInterval(refresh, REFRESH_INTERVAL_MS);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, [loadNotifications]);
 
   async function handleMarkRead(id: string) {
