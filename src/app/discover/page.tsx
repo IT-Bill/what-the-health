@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import type { PostCard } from "@/lib/post-types";
@@ -132,11 +131,10 @@ function PostCardComponent({ post }: { post: PostCard }) {
       <article className="bg-primary-container rounded-2xl overflow-hidden ambient-shadow transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_24px_48px_rgba(45,45,45,0.06)] flex flex-col h-full">
         {post.coverImage && (
           <div className="relative h-32 md:h-48 overflow-hidden bg-surface-variant">
-            <Image
+            <img
               src={post.coverImage}
               alt={post.title}
-              fill
-              className="object-cover transition-transform duration-700 group-hover:scale-105"
+              className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
             />
             <div className="absolute top-2 left-2 glass-panel px-2 py-0.5 rounded-lg flex items-center gap-1">
               {post.categoryIcon && (
@@ -163,7 +161,7 @@ function PostCardComponent({ post }: { post: PostCard }) {
             <div className="flex items-center gap-1.5">
               <div className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-surface-container-high overflow-hidden relative">
                 {post.author.avatarUrl ? (
-                  <Image src={post.author.avatarUrl} alt={post.author.name} fill className="object-cover" />
+                  <img src={post.author.avatarUrl} alt={post.author.name} className="absolute inset-0 w-full h-full object-cover" />
                 ) : (
                   <span className="material-symbols-outlined text-xs text-on-surface-variant absolute inset-0 flex items-center justify-center">person</span>
                 )}
@@ -370,11 +368,10 @@ function ProductCard({ product, balance }: { product: ShopApiResponse["products"
     <article className="flex flex-col group cursor-pointer transition-all duration-500 hover:opacity-90">
       <div className="aspect-[4/5] w-full rounded-2xl overflow-hidden bg-surface-container-low mb-3 relative">
         {product.image && (
-          <Image
+          <img
             src={product.image}
             alt={product.name}
-            fill
-            className="object-cover transition-transform duration-1000 group-hover:scale-105"
+            className="absolute inset-0 w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
           />
         )}
         {!canAfford && (

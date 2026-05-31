@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Camera, Image, FileText } from "lucide-react";
+import { Camera, Image, FileText, CircleCheck, CircleX } from "lucide-react";
 import { BottomNavBar } from "@/components/bottom-nav-bar";
 
 // ---------------------------------------------------------------------------
@@ -26,6 +26,8 @@ interface Message {
   thinkingDuration?: number;
   isStreaming?: boolean;
   toolCalls?: ToolCallInfo[];
+  preToolText?: string;
+  turnCount?: number;
 }
 
 interface ToolCallInfo {
@@ -144,7 +146,6 @@ export default function ChatPage() {
 
   // UI state
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
-  const [expandedThinking, setExpandedThinking] = useState<Set<string>>(new Set());
 
   // Voice recording state
   const [isRecording, setIsRecording] = useState(false);
@@ -181,33 +182,6 @@ export default function ChatPage() {
       });
   }, []);
 
-  // Load sessions on mount
-  useEffect(() => {
-    fetch("/api/chat/sessions")
-      .then((r) => {
-        if (r.status === 401) {
-          window.location.href = "/login";
-          return null;
-        }
-        return r.json();
-      })
-      .then((data) => {
-        if (data?.sessions) setSessions(data.sessions);
-      })
-      .catch(console.error);
-  }, []);
-
-  // Auto-scroll
-  useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop =
-        chatContainerRef.current.scrollHeight;
-    }
-  }, [messages]);
-
-  // Abort on unmount
-  useEffect(() => () => abortRef.current?.abort(), []);
-
   const startNewSession = useCallback(async () => {
     abortRef.current?.abort();
     setMessages([
@@ -235,10 +209,11 @@ export default function ChatPage() {
       const data = await res.json();
       if (data.session?.messages) {
         setMessages(
-          data.session.messages.map((m: { id: string; role: string; content: string }) => ({
+          data.session.messages.map((m: { id: string; role: string; content: string; toolCallsJson?: string }) => ({
             id: m.id,
             role: m.role === "user" ? "user" : "agent",
             content: m.content,
+            toolCalls: m.toolCallsJson ? JSON.parse(m.toolCallsJson) : undefined,
           }))
         );
       }
@@ -247,6 +222,28 @@ export default function ChatPage() {
     } finally {
       setIsStreaming(false);
     }
+  }, []);
+
+  // Load sessions on mount
+  useEffect(() => {
+    fetch("/api/chat/sessions")
+      .then((r) => {
+        if (r.status === 401) {
+          window.location.href = "/login";
+          return null;
+        }
+        return r.json();
+      })
+      .then((data) => {
+        if (data?.sessions) {
+          setSessions(data.sessions);
+          if (data.sessions.length > 0) {
+            loadSession(data.sessions[0].id);
+          }
+        }
+      })
+      .catch(console.error);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function handleSend(overrideText?: string) {
@@ -363,8 +360,11 @@ export default function ChatPage() {
         thinkingStartRef.current = Date.now();
         break;
       }
-      case "turn_start": {
-        setCurrentAgentState("thinking");
+      case "turn_end": {
+        const tc = (event.turnCount as number) ?? 0;
+        setMessages((prev) =>
+          prev.map((m) => m.id === assistantId ? { ...m, turnCount: tc } : m)
+        );
         break;
       }
       case "text_delta": {
@@ -372,9 +372,7 @@ export default function ChatPage() {
         assistantAccRef.current += delta;
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === assistantId
-              ? { ...m, content: assistantAccRef.current }
-              : m
+            m.id === assistantId ? { ...m, content: assistantAccRef.current } : m
           )
         );
         break;
@@ -402,7 +400,10 @@ export default function ChatPage() {
             if (m.id !== assistantId) return m;
             const existing = m.toolCalls ?? [];
             if (existing.find((t) => t.id === tool.id)) return m;
-            return { ...m, toolCalls: [...existing, tool] };
+            // Move any pre-tool text into preToolText and clear content
+            const preToolText = (m.preToolText ?? "") + (assistantAccRef.current.trim() ? assistantAccRef.current : "");
+            assistantAccRef.current = "";
+            return { ...m, toolCalls: [...existing, tool], preToolText, content: "" };
           })
         );
         break;
@@ -421,16 +422,10 @@ export default function ChatPage() {
         break;
       }
       case "message_end": {
+        // Don't update content here — wait for agent_end to show everything at once
         const msg = event.message as { role: string; text: string };
         if (msg.role === "assistant") {
           setCurrentAgentState("idle");
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantId
-                ? { ...m, content: msg.text, isStreaming: false }
-                : m
-            )
-          );
         }
         break;
       }
@@ -438,7 +433,9 @@ export default function ChatPage() {
         setCurrentAgentState("idle");
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === assistantId ? { ...m, isStreaming: false } : m
+            m.id === assistantId
+              ? { ...m, content: assistantAccRef.current, isStreaming: false }
+              : m
           )
         );
         break;
@@ -469,18 +466,6 @@ export default function ChatPage() {
       e.preventDefault();
       handleSend();
     }
-  }
-
-  function toggleThinking(msgId: string) {
-    setExpandedThinking((prev) => {
-      const next = new Set(prev);
-      if (next.has(msgId)) {
-        next.delete(msgId);
-      } else {
-        next.add(msgId);
-      }
-      return next;
-    });
   }
 
   // ---------------------------------------------------------------------------
@@ -755,8 +740,8 @@ export default function ChatPage() {
             ref={chatContainerRef}
             className="flex-1 w-full px-4 md:px-6 overflow-y-auto no-scrollbar flex flex-col gap-1 pt-4"
           >
-            {/* Welcome screen — only when no conversation has started */}
-            {messages.length === 1 && messages[0].id === "init" && !isStreaming && (
+            {/* Welcome screen — only when explicitly in new session state */}
+            {sessionId === undefined && messages[0]?.id === "init" && !isStreaming && (
               <div className="flex-1 flex flex-col items-center justify-center text-center px-4 py-16 gap-6">
                 <h1 className="text-3xl font-medium text-on-surface tracking-tight">
                   在这个当下，你感觉如何？
@@ -780,29 +765,28 @@ export default function ChatPage() {
               </div>
             )}
 
-            {/* Hide the lone init message when showing welcome screen */}
-            {(messages.length > 1 || messages[0]?.id !== "init" || isStreaming) && messages.map((msg) =>
-              msg.role === "agent" ? (
-                msg.content.trim().length === 0 && msg.isStreaming ? (
-                  <AgentThinkingState
-                    key={msg.id}
-                    state={currentAgentState}
-                    reasoning={msg.reasoning}
-                    thinkingDuration={msg.thinkingDuration}
-                    isExpanded={expandedThinking.has(msg.id)}
-                    onToggle={() => toggleThinking(msg.id)}
-                  />
-                ) : (
-                  <AgentMessage
-                    key={msg.id}
-                    message={msg}
-                    isExpanded={expandedThinking.has(msg.id)}
-                    onToggle={() => toggleThinking(msg.id)}
-                  />
-                )
-              ) : (
-                <UserBubble key={msg.id} message={msg} />
-              )
+            {/* Messages */}
+            {(sessionId !== undefined || messages[0]?.id !== "init" || isStreaming) && (
+              <>
+                {messages.map((msg) =>
+                  msg.role === "agent" ? (
+                    msg.isStreaming && (!msg.content || (msg.toolCalls ?? []).some((t) => t.status === "running")) ? (
+                      <AgentThinkingState
+                        key={msg.id}
+                        state={currentAgentState}
+                        toolCalls={msg.toolCalls}
+                      />
+                    ) : (
+                      <AgentMessage
+                        key={msg.id}
+                        message={msg}
+                      />
+                    )
+                  ) : (
+                    <UserBubble key={msg.id} message={msg} />
+                  )
+                )}
+              </>
             )}
 
             {error && (
@@ -921,125 +905,131 @@ export default function ChatPage() {
 // Message Components
 // ---------------------------------------------------------------------------
 
-function AgentMessage({
-  message,
-  isExpanded,
-  onToggle,
-}: {
-  message: Message;
-  isExpanded: boolean;
-  onToggle: () => void;
-}) {
+function AgentMessage({ message }: { message: Message }) {
+  const [expanded, setExpanded] = useState(false);
+  const toolCount = message.toolCalls?.length ?? 0;
+  const turns = message.turnCount ?? 0;
+  const hasThinking = toolCount > 0 || turns > 0 || !!message.preToolText || !!message.reasoning;
+
+  const summaryParts: string[] = [];
+  if (toolCount > 0) summaryParts.push(`${toolCount} 次工具调用`);
+  if (turns > 0) summaryParts.push(`思考 ${turns} 轮`);
+  const summary = summaryParts.length > 0 ? summaryParts.join(" · ") : "思考已完成";
+
   return (
     <div className="w-full py-3">
-      {/* Thinking Section */}
-      {message.reasoning && (
+      {hasThinking && (
         <div className="mb-3">
           <button
-            onClick={onToggle}
-            className="flex items-center gap-2 text-on-surface-variant/60 hover:text-on-surface-variant transition-colors text-sm"
+            onClick={() => setExpanded(e => !e)}
+            className="flex items-center gap-1.5 text-on-surface-variant/60 hover:text-on-surface-variant transition-colors text-sm"
           >
-            <span className="material-symbols-outlined text-lg">
-              {isExpanded ? "expand_less" : "expand_more"}
-            </span>
-            <span>
-              {message.thinkingDuration
-                ? `已思考 ${message.thinkingDuration} 秒`
-                : "思考中..."}
-            </span>
-            <span className="text-xs opacity-50">
-              {isExpanded ? "收起" : "展开"}
+            <span className="material-symbols-outlined text-base">key</span>
+            <span>{summary}</span>
+            <span
+              className="material-symbols-outlined text-base"
+              style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.12s" }}
+            >
+              expand_more
             </span>
           </button>
-          {isExpanded && (
-            <div className="mt-2 pl-6 border-l-2 border-outline-variant/30 text-on-surface-variant/70 text-sm leading-relaxed">
-              {message.reasoning}
+          {expanded && (
+            <div className="mt-2 pl-5 border-l-2 border-outline-variant/30 text-on-surface-variant/70 text-sm leading-relaxed space-y-2">
+              {(message.preToolText || message.reasoning) && (
+                <p className="italic">{message.preToolText ?? message.reasoning}</p>
+              )}
+              {message.toolCalls?.map((t) => (
+                <div key={t.id} className="flex items-center gap-1.5">
+                  {t.status === "error"
+                    ? <CircleX className="w-3.5 h-3.5 shrink-0 text-error" />
+                    : <CircleCheck className="w-3.5 h-3.5 shrink-0 text-on-surface-variant/70" />
+                  }
+                  <span>{t.label}</span>
+                </div>
+              ))}
             </div>
           )}
         </div>
       )}
-
-      {/* Content - No bubble, direct markdown */}
       <div className="text-on-surface text-base leading-relaxed">
-        {message.content ? (
-          <MarkdownContent text={message.content} />
-        ) : (
-          <span className="text-on-surface-variant/50 italic">正在思考...</span>
-        )}
+        <MarkdownContent text={message.content} />
       </div>
+    </div>
+  );
+}
 
+function ThinkingDots() {
+  return (
+    <div className="flex items-center gap-1 py-1">
+      {[0, 1, 2].map((i) => (
+        <div
+          key={i}
+          className="w-1.5 h-1.5 rounded-full bg-on-surface-variant/40"
+          style={{
+            animation: "thinking-bounce 1.2s ease-in-out infinite",
+            animationDelay: `${i * 0.2}s`,
+          }}
+        />
+      ))}
     </div>
   );
 }
 
 function AgentThinkingState({
   state,
-  reasoning,
-  thinkingDuration,
-  isExpanded,
-  onToggle,
   toolCalls,
 }: {
   state: "idle" | "thinking" | "tools";
-  reasoning?: string;
-  thinkingDuration?: number;
-  isExpanded: boolean;
-  onToggle: () => void;
   toolCalls?: ToolCallInfo[];
 }) {
-  const runningTools = toolCalls?.filter((t) => t.status === "running") ?? [];
+  const [expanded, setExpanded] = useState(false);
+  const doneTools = toolCalls?.filter((t) => t.status !== "running") ?? [];
+  const runningTool = toolCalls?.find((t) => t.status === "running");
+  const isWorking = state === "thinking" || state === "tools" || !!runningTool;
 
   return (
     <div className="w-full py-3">
-      {/* Thinking indicator */}
-      {(state === "thinking" || reasoning) && (
+      {/* Collapsible thinking/tool section */}
+      {doneTools.length > 0 && (
         <div className="mb-2">
           <button
-            onClick={onToggle}
-            className="flex items-center gap-2 text-on-surface-variant/60 hover:text-on-surface-variant transition-colors text-sm"
+            onClick={() => setExpanded(e => !e)}
+            className="flex items-center gap-1.5 text-on-surface-variant/60 hover:text-on-surface-variant transition-colors text-sm"
           >
-            <div className="w-4 h-4 border-2 border-secondary/30 border-t-secondary rounded-full animate-spin" />
-            <span>
-              {reasoning
-                ? `已思考 ${thinkingDuration ?? 0} 秒`
-                : "思考中..."}
+            <span className="material-symbols-outlined text-base">key</span>
+            <span>{doneTools.length} 次工具调用</span>
+            <span
+              className="material-symbols-outlined text-base"
+              style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.12s" }}
+            >
+              expand_more
             </span>
-            {reasoning && (
-              <span className="material-symbols-outlined text-lg">
-                {isExpanded ? "expand_less" : "expand_more"}
-              </span>
-            )}
           </button>
-          {isExpanded && reasoning && (
-            <div className="mt-2 pl-6 border-l-2 border-outline-variant/30 text-on-surface-variant/70 text-sm leading-relaxed">
-              {reasoning}
+          {expanded && (
+            <div className="mt-2 pl-5 border-l-2 border-outline-variant/30 text-on-surface-variant/70 text-sm space-y-1.5">
+              {doneTools.map((t) => (
+                <div key={t.id} className="flex items-center gap-1.5">
+                  {t.status === "error"
+                    ? <CircleX className="w-3.5 h-3.5 shrink-0 text-error" />
+                    : <CircleCheck className="w-3.5 h-3.5 shrink-0 text-on-surface-variant/70" />
+                  }
+                  <span>{t.label}</span>
+                </div>
+              ))}
             </div>
           )}
         </div>
       )}
 
-      {/* Tool calls */}
-      {state === "tools" && runningTools.length > 0 && (
-        <div className="flex flex-col gap-1.5 mb-2">
-          {runningTools.map((tool) => (
-            <div
-              key={tool.id}
-              className="flex items-center gap-2 text-on-surface-variant text-sm"
-            >
-              <div className="w-4 h-4 border-2 border-tertiary/30 border-t-tertiary rounded-full animate-spin" />
-              <span>正在使用 {tool.label}...</span>
-            </div>
-          ))}
+      {/* Running tool label */}
+      {runningTool && (
+        <div className="text-on-surface-variant/50 text-xs mb-1.5">
+          正在使用 {runningTool.label}...
         </div>
       )}
 
-      {state === "idle" && (
-        <div className="flex items-center gap-1 py-2">
-          <div className="w-2 h-2 rounded-full bg-outline-variant animate-bounce" style={{ animationDelay: "0s" }} />
-          <div className="w-2 h-2 rounded-full bg-outline-variant animate-bounce" style={{ animationDelay: "0.2s" }} />
-          <div className="w-2 h-2 rounded-full bg-outline-variant animate-bounce" style={{ animationDelay: "0.4s" }} />
-        </div>
-      )}
+      {/* Dots — shown whenever agent is still working */}
+      {isWorking && <ThinkingDots />}
     </div>
   );
 }

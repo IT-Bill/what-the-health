@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"tsx src/server/asr-proxy.ts\" \"next dev\"",
+    "dev": "concurrently \"tsx src/server/asr-proxy.ts\" \"next dev --hostname 0.0.0.0\"",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -27,12 +27,13 @@
     ]
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1057.0",
     "@earendil-works/pi-agent-core": "^0.78.0",
     "@earendil-works/pi-ai": "^0.78.0",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "@sinclair/typebox": "^0.34.49",
-    "adm-zip": "^0.5.17",
+    "@zip.js/zip.js": "^2.8.26",
     "bcryptjs": "^3.0.3",
     "jose": "^6.2.3",
     "lucide-react": "^1.17.0",
@@ -43,17 +44,18 @@
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "sax": "^1.6.0",
+    "tailwindcss-animate": "^1.0.7",
     "ws": "^8.21.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/adm-zip": "^0.5.8",
     "@types/bcryptjs": "^3.0.0",
     "@types/node": "^20",
     "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/sax": "^1.2.7",
+    "@types/unzipper": "^0.10.11",
     "@types/ws": "^8.18.1",
     "concurrently": "^10.0.0",
     "dotenv": "^17.4.2",

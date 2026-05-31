@@ -38,7 +38,7 @@ export async function seedUsers(prisma: PrismaClient, configs: SeedUserConfig[])
     // All seeded users are marked as showcase (demo for unauthenticated visitors)
     const user = await prisma.user.upsert({
       where: { username: config.username },
-      update: { passwordHash, isShowcase: true },
+      update: { passwordHash, isShowcase: true, avatarUrl: "/api/assets/static/avatars/default.webp" },
       create: {
         username: config.username,
         passwordHash,
@@ -47,6 +47,7 @@ export async function seedUsers(prisma: PrismaClient, configs: SeedUserConfig[])
         credits: 2450,
         primaryGoal: "healthyHabits",
         isShowcase: true,
+        avatarUrl: "/api/assets/static/avatars/default.webp",
       },
     });
     users.push({ id: user.id, username: user.username });

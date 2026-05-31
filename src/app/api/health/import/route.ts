@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getAuthCookie, verifyToken } from "@/lib/auth";
-import { parseHealthExport } from "@/lib/health-parsers";
+import { parseHealthExport, PasswordRequiredError, PasswordIncorrectError } from "@/lib/health-parsers";
 import type { HealthDataSource, HealthMetricType, Prisma } from "@/generated/prisma/client";
 
 export const runtime = "nodejs";
@@ -37,6 +37,9 @@ export async function POST(request: Request) {
     return Response.json({ error: "请上传 ZIP 格式的文件" }, { status: 400 });
   }
 
+  // Optional password for encrypted ZIPs
+  const password = formData.get("password") as string | null;
+
   // Create import record
   const importRecord = await prisma.healthImport.create({
     data: {
@@ -54,7 +57,7 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(arrayBuffer);
 
     // Parse (auto-detects format)
-    const result = await parseHealthExport(buffer);
+    const result = await parseHealthExport(buffer, password || undefined);
 
     // Update import record with detected source
     await prisma.healthImport.update({
@@ -108,7 +111,17 @@ export async function POST(request: Request) {
       summary: result.summary,
     });
   } catch (err) {
-    // Mark import as failed
+    // Handle password-related errors without marking import as failed
+    if (err instanceof PasswordRequiredError) {
+      await prisma.healthImport.delete({ where: { id: importRecord.id } });
+      return Response.json({ code: "PASSWORD_REQUIRED", error: err.message }, { status: 422 });
+    }
+    if (err instanceof PasswordIncorrectError) {
+      await prisma.healthImport.delete({ where: { id: importRecord.id } });
+      return Response.json({ code: "PASSWORD_INCORRECT", error: err.message }, { status: 422 });
+    }
+
+    // Mark import as failed for other errors
     const message = err instanceof Error ? err.message : "解析失败";
     await prisma.healthImport.update({
       where: { id: importRecord.id },

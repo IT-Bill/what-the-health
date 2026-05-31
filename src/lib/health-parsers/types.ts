@@ -47,12 +47,14 @@ export interface ParseResult {
   dataTo: Date | null;
 }
 
+import type { ZipDirectory } from "./index";
+
 /** Interface all health parsers must implement. */
 export interface HealthParser {
   /** The source this parser handles. */
   source: HealthSource;
   /** Check if the given ZIP file names indicate this source. */
   detect(fileNames: string[]): boolean;
-  /** Parse the ZIP buffer and return all records. */
-  parse(zipBuffer: Buffer): Promise<ParseResult>;
+  /** Parse the opened ZIP directory and return all records. */
+  parse(directory: ZipDirectory): Promise<ParseResult>;
 }

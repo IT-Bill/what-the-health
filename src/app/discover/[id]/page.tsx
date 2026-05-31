@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import Image from "next/image";
 import type { PostDetail, PostComment } from "@/lib/post-types";
 
 export default function PostDetailPage() {
@@ -87,12 +86,10 @@ export default function PostDetailPage() {
       {/* Cover Image */}
       {post.coverImage && (
         <div className="relative w-full h-56 md:h-72 overflow-hidden">
-          <Image
+          <img
             src={post.coverImage}
             alt={post.title}
-            fill
-            className="object-cover"
-            priority
+            className="absolute inset-0 w-full h-full object-cover"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-surface via-transparent to-transparent" />
         </div>
@@ -124,7 +121,7 @@ export default function PostDetailPage() {
         <div className="flex items-center gap-3 mb-8 pb-6 border-b border-outline-variant/20">
           <div className="w-10 h-10 rounded-full bg-surface-container-high overflow-hidden relative">
             {post.author.avatarUrl ? (
-              <Image src={post.author.avatarUrl} alt={post.author.name} fill className="object-cover" />
+              <img src={post.author.avatarUrl} alt={post.author.name} className="absolute inset-0 w-full h-full object-cover" />
             ) : (
               <span className="material-symbols-outlined text-on-surface-variant absolute inset-0 flex items-center justify-center">person</span>
             )}
@@ -248,7 +245,7 @@ function CommentItem({ comment }: { comment: PostComment }) {
     <div className="flex gap-3">
       <div className="w-8 h-8 rounded-full bg-surface-container-high overflow-hidden relative flex-shrink-0">
         {comment.author.avatarUrl ? (
-          <Image src={comment.author.avatarUrl} alt={comment.author.name} fill className="object-cover" />
+          <img src={comment.author.avatarUrl} alt={comment.author.name} className="absolute inset-0 w-full h-full object-cover" />
         ) : (
           <span className="material-symbols-outlined text-sm text-on-surface-variant absolute inset-0 flex items-center justify-center">person</span>
         )}
