@@ -15,7 +15,8 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
-    "vector:backfill-posts": "tsx scripts/backfill-post-vectors.ts"
+    "vector:backfill-posts": "tsx scripts/backfill-post-vectors.ts",
+    "vector:backfill-chats": "tsx scripts/backfill-chat-vectors.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
