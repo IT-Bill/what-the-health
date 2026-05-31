@@ -409,6 +409,89 @@ export function createTools(userId: string): AgentTool[] {
     },
   };
 
+  const notifyFamilyConcernTool: AgentTool = {
+    name: "notify_family_concern",
+    label: "通知家人健康关注",
+    description:
+      "当用户在对话中表达了自身的健康问题、身体不适、或严重情绪问题时，调用此工具通知其家庭成员。" +
+      "只在用户确实在描述自己当前的健康状况时使用（不是讨论别人、不是询问知识）。" +
+      "severity: info=轻微不适, warning=明确症状, critical=紧急/自伤",
+    parameters: Type.Object({
+      title: Type.String({ description: "15字以内的简短标题，概括健康关注点" }),
+      content: Type.String({ description: "50字以内的说明，给家人看的" }),
+      severity: Type.Union([
+        Type.Literal("info"),
+        Type.Literal("warning"),
+        Type.Literal("critical"),
+      ], { description: "严重程度" }),
+    }),
+    execute: async (_toolCallId, params) => {
+      const { title, content, severity } = p(params) as { title: string; content: string; severity: "info" | "warning" | "critical" };
+
+      // Check if user is in any family with alerts enabled
+      const memberships = await prisma.familyMember.findMany({
+        where: { userId, shareAlerts: true },
+        include: { family: { include: { members: true } } },
+      });
+
+      if (memberships.length === 0) {
+        return {
+          content: [{ type: "text" as const, text: "用户未加入任何家庭或未开启预警，无需通知。" }],
+          details: { notified: false, reason: "no_family" },
+        };
+      }
+
+      const sourceUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true },
+      });
+
+      let notifiedCount = 0;
+      for (const membership of memberships) {
+        // Create family alert
+        const alert = await prisma.familyAlert.create({
+          data: {
+            familyId: membership.familyId,
+            sourceUserId: userId,
+            alertType: "chat-concern",
+            severity,
+            title,
+            content,
+          },
+        });
+
+        // Notify caregivers and owners (not the user themselves)
+        const caregivers = membership.family.members.filter(
+          (m) => m.userId !== userId && (m.role === "owner" || m.role === "caregiver")
+        );
+
+        for (const caregiver of caregivers) {
+          await prisma.notification.create({
+            data: {
+              userId: caregiver.userId,
+              title: `🔔 ${membership.nickname || sourceUser?.name || "家人"}的健康关注`,
+              body: content,
+              source: "family-chat-concern",
+              actionUrl: `/discover/family/${membership.familyId}`,
+              metadata: {
+                alertId: alert.id,
+                familyId: membership.familyId,
+                sourceUserId: userId,
+                severity,
+              },
+            },
+          });
+          notifiedCount++;
+        }
+      }
+
+      return {
+        content: [{ type: "text" as const, text: `已通知 ${notifiedCount} 位家庭成员关注。` }],
+        details: { notified: true, count: notifiedCount },
+      };
+    },
+  };
+
   return [
     getUserPersonaTool,
     getUserProfileTool,
@@ -421,5 +504,6 @@ export function createTools(userId: string): AgentTool[] {
     getHabitCompletionsTool,
     searchPostsTool,
     getPostDetailTool,
+    notifyFamilyConcernTool,
   ];
 }
