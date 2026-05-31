@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 interface TopAppBarProps {
   title?: string;
@@ -6,20 +9,36 @@ interface TopAppBarProps {
   rightIcon?: string;
   leftHref?: string;
   rightHref?: string;
+  rightAction?: "link" | "back";
+  rightAriaLabel?: string;
+  backFallbackHref?: string;
   transparent?: boolean;
 }
 
 export function TopAppBar({
   title = "Mindful",
   leftIcon = "self_care",
-  rightIcon = "face_5",
+  rightIcon = "notifications",
   leftHref,
-  rightHref,
+  rightHref = "/notifications",
+  rightAction = "link",
+  rightAriaLabel = "通知中心",
+  backFallbackHref = "/",
   transparent = false,
 }: TopAppBarProps) {
+  const router = useRouter();
   const bgClass = transparent
     ? "bg-transparent"
     : "bg-surface/80 backdrop-blur-xl";
+
+  function handleBack() {
+    if (window.history.length > 1) {
+      router.back();
+      return;
+    }
+
+    router.push(backFallbackHref);
+  }
 
   return (
     <header
@@ -45,16 +64,27 @@ export function TopAppBar({
         {title}
       </h1>
 
-      {rightHref ? (
+      {rightAction === "back" ? (
+        <button
+          type="button"
+          aria-label={rightAriaLabel}
+          onClick={handleBack}
+          className="text-on-surface hover:opacity-70 transition-opacity active:scale-95 duration-300 flex items-center justify-center p-2 rounded-full"
+        >
+          <span className="material-symbols-outlined">{rightIcon}</span>
+        </button>
+      ) : rightHref ? (
         <Link
           href={rightHref}
+          aria-label={rightAriaLabel}
           className="text-on-surface hover:opacity-70 transition-opacity active:scale-95 duration-300 flex items-center justify-center p-2 rounded-full"
         >
           <span className="material-symbols-outlined">{rightIcon}</span>
         </Link>
       ) : (
         <button
-          aria-label="Profile"
+          type="button"
+          aria-label={rightAriaLabel}
           className="text-on-surface hover:opacity-70 transition-opacity active:scale-95 duration-300 flex items-center justify-center p-2 rounded-full"
         >
           <span className="material-symbols-outlined">{rightIcon}</span>

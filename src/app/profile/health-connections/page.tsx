@@ -532,14 +532,23 @@ export default function HealthConnectionsPage() {
 
 function Header({ title }: { title: string }) {
   return (
-    <header className="sticky top-0 z-50 bg-surface/80 backdrop-blur-xl flex items-center px-6 h-16">
+    <header className="sticky top-0 z-50 bg-surface/80 backdrop-blur-xl flex items-center justify-between px-6 h-16">
       <Link
         href="/profile"
-        className="text-on-surface hover:opacity-70 transition-opacity active:scale-95 duration-300 flex items-center justify-center p-2 rounded-full -ml-2"
+        className="text-on-surface hover:opacity-70 transition-opacity active:scale-95 duration-300 flex items-center justify-center w-10 h-10 rounded-full"
       >
         <span className="material-symbols-outlined">arrow_back</span>
       </Link>
-      <h1 className="[font-family:var(--font-display)] text-xl font-medium text-on-surface ml-2">{title}</h1>
+      <h1 className="[font-family:var(--font-display)] text-xl font-medium text-on-surface flex-1 text-center px-4">
+        {title}
+      </h1>
+      <Link
+        href="/notifications"
+        aria-label="通知中心"
+        className="text-on-surface hover:opacity-70 transition-opacity active:scale-95 duration-300 flex items-center justify-center w-10 h-10 rounded-full"
+      >
+        <span className="material-symbols-outlined">notifications</span>
+      </Link>
     </header>
   );
 }

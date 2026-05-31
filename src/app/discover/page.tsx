@@ -121,15 +121,6 @@ function PostsTab({ isLoggedIn }: { isLoggedIn: boolean }) {
           ))}
         </div>
       )}
-
-      {/* FAB — Create Post */}
-      <button
-        onClick={handleCreatePost}
-        className="fixed bottom-24 right-6 w-14 h-14 rounded-full bg-secondary text-on-secondary flex items-center justify-center ambient-shadow hover:opacity-90 active:scale-95 transition-all duration-300 z-40"
-        aria-label="发布文章"
-      >
-        <span className="material-symbols-outlined text-2xl">add</span>
-      </button>
     </div>
   );
 }
