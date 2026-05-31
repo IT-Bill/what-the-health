@@ -48,6 +48,7 @@ export interface ReportWithInsights {
   periodType: string;
   periodStart: string;
   periodEnd: string;
+  version: number;
   summary: string | null;
   data: ReportData;
   insights: InsightRecord[];
@@ -65,4 +66,6 @@ export interface MemoryApiResponse {
   report: ReportWithInsights | null;
   globalInsights: InsightRecord[];
   available: string[];
+  versions: { version: number; createdAt: string }[];
+  aiUnderstanding: { level: number; percentage: number; conversationCount: number };
 }
