@@ -9,7 +9,7 @@ const POSTS = [
     category: "mindfulness" as const,
     categoryIcon: "spa",
     readMinutes: 4,
-    coverImage: "https://lh3.googleusercontent.com/aida-public/AB6AXuDrbmsXLYiSOteMdlrNGNJlhW7a2qFB-aL73C0EiFktcnJEEze9oOM1ISJYYa_XTWMSgoVYp_CLIujeiJncs1UcCEHFKa8IWd9qpay6YwuGngo1w5IMtarjhGP5uA8gkoP_2mz7cHqJnWcP2xy6VExf8GR7lkaYQ7t2iZ0QNM36oJFPxPdwXHA2SA55BobYQLakAKPSiVmtTbeWZfi7wYu9DwMJn8t37ZzSLj9TdxmD8T95IV3fr8QffSmfiFmALefx3x_FMTg2oXo",
+    coverImage: "/api/assets/static/posts/post-1.webp",
     viewCount: 234,
   },
   {
@@ -19,7 +19,7 @@ const POSTS = [
     category: "reflection" as const,
     categoryIcon: "edit_note",
     readMinutes: 6,
-    coverImage: "https://lh3.googleusercontent.com/aida-public/AB6AXuBcJu1ooXwW1MLb-KSvybTdCNTyHRMtNB-5UNLBA1g0gsKOLwmddzQkOAUA7k_hdfOgpc6Mz1ekLz7iYFdGE3wQ6S9Vi0GOoZZn960pbzdn-TlrpzVKeyzhab5aBokSA5wLBfEl5YjbQfwDtJRcNIHyO-0t1IQCL93-NBMW6FsMDFUUy6X4amdm4Uz7b-vMz_kqt9f5onpfj34JQd0ezUkdb7mc58vqOSDBNLvZaXrPumW91ZIUwxSNUyTyXyZEIeosvpYVw3hLaAc",
+    coverImage: "/api/assets/static/posts/post-2.webp",
     viewCount: 187,
   },
   {
@@ -29,7 +29,7 @@ const POSTS = [
     category: "nutrition" as const,
     categoryIcon: "restaurant_menu",
     readMinutes: 5,
-    coverImage: "https://lh3.googleusercontent.com/aida-public/AB6AXuCPP02i2HR4CCVgIFydvZ86zcxyiPibwltISdQcmqIbNMhE_YbBKHTaUdALvxp8dK7etipdHysd6MOmIL2fpV8isPswp7yMoejaC4GvH-xLp1bqS95Xog5rIOd2X-j8OxTyt_1Ep49YJEmTls5U9NC0wCO3YjQq_jvpqyT0CXRNY-Y0EA2h8bVlJD1R-zWGg48NhZ-awsBOqpWQCVsxINX2TpgbLISZwuH5UVlx_daAs7dO3wt4zHh-9irv2HWLhz3SZRfRtmk_VJ0",
+    coverImage: "/api/assets/static/posts/post-3.webp",
     viewCount: 312,
   },
   {
@@ -39,7 +39,7 @@ const POSTS = [
     category: "mindfulness" as const,
     categoryIcon: "self_improvement",
     readMinutes: 3,
-    coverImage: "https://lh3.googleusercontent.com/aida-public/AB6AXuDE_qoSpDao7VMBAeiSLqxL7LV_VVHjhlL5Lc2WQH4XrSaTTmwYgBIHO1PtbOkupTo871LmM0AmQRxugOp6At3lAg2YRc6mtf6oQ9VqDEcumkOg3qGhV53ozLiXaP_-8MNJnl9BCYdWiwyvDTySJIsqa9m_Mw_qt76_apAZZpzBj6yXpt5ai2LyI21XcoKUQI7zzzkHOqh0YpRtNlr-0FDzPo0pifDsuoHk91Ep6dIRJZ7m1hhHhBupyfZqRfOOJLbQyt53LfQ0g_U",
+    coverImage: "/api/assets/static/posts/post-4.webp",
     viewCount: 456,
   },
   {
@@ -49,7 +49,7 @@ const POSTS = [
     category: "sleep" as const,
     categoryIcon: "bedtime",
     readMinutes: 7,
-    coverImage: "https://lh3.googleusercontent.com/aida-public/AB6AXuAMyX9cJtfOwxThdhr4mBqRGV1dHxAP7TpD6WligWDidUkURRDn6HsRaxIjt2K3wCZuLOimovmAdkTorTcOQEpHapkZEnIiloU9qb1tOt3kI9iZZlPa2_AbVrVNv0R9bCtjXNDyBg2a52vV9z-GrWdZe7GPPWYbDPGaHxksVdMlEn4pCqkK3wTN79LS9sHA0xBAeHEf9vxMt9HTmwIYbyi0CrTN1Ptxq4B_dgzSKTHaqqLq1xDqDQF51IjvRcpqaTa3g4756N8WzfI",
+    coverImage: "/api/assets/static/posts/post-5.webp",
     viewCount: 289,
   },
   {
@@ -59,7 +59,7 @@ const POSTS = [
     category: "mindfulness" as const,
     categoryIcon: "psychology",
     readMinutes: 5,
-    coverImage: "https://lh3.googleusercontent.com/aida-public/AB6AXuAOytiVKcjHhk6OVZPIIJwyIGAuX5IARCMXg5mZQ1hWh4AjOHMg77wiJn7Rnsf7Hpp_yWraNcNfzJ1IcR3WN6zZXxpm-tey0AMYp7qopQnnSpZKHy7bWDOTTx7Hi1iVMGZl2gA9gz1yy6JF1cNRU3R_JeDBxaAEn6CzfVnLZ8xSbT66FrHsGs8ngo3cOhfj-Jvg-ZyTBCCeEs5PG-gOEjS5AcQgMpkMVVvIIdAQbFxH655GDh90YVoYfFOx5tD2AHx5ssfR9BHv9sg",
+    coverImage: "/api/assets/static/posts/post-6.webp",
     viewCount: 523,
   },
 ];

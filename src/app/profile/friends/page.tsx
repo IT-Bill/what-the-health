@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, type ReactNode } from "react";
-import Image from "next/image";
 import Link from "next/link";
 
 // --- Types ---
@@ -708,7 +707,7 @@ function Avatar({ user, size = 40 }: { user: FriendUser; size?: number }) {
       style={{ width: size, height: size }}
     >
       {user.avatarUrl ? (
-        <Image src={user.avatarUrl} alt={user.name} fill className="object-cover" />
+        <img src={user.avatarUrl} alt={user.name} className="absolute inset-0 w-full h-full object-cover" />
       ) : (
         <span className="material-symbols-outlined text-on-surface-variant absolute inset-0 flex items-center justify-center text-lg">
           person
