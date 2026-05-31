@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
 interface GoalOption {
   id: string;
@@ -15,19 +16,22 @@ const goalOptions: GoalOption[] = [
     id: "build_muscle",
     title: "Build Muscle",
     description: "Enhance strength and physical resilience.",
-    image: "/api/assets/static/pages/goal-muscle.webp",
+    image:
+      "https://lh3.googleusercontent.com/aida-public/AB6AXuCPehgAu29yvkxbtg58pTf6IogfJLGeu68ma6OCs11g_yNDAF0xXFh8xpb9Ei6_Q3qe8YVKlSKnCOiLqSaDg4kIPAw-LQCkX3rXNbO7V_bsmkg3f5g681AGfgmoEn91nZEs5sM9YhlNOkg6jv2uBziaakdZJ0nfYavu0XvzfTs72v2AwJQa6IpXJNeuP5ArFsguMlLvyj-BQNPr3Iedge0_YRe8xYh-F-dJFU8MfvKfxJWj6UtghXPqIEX59nRNGXc3ZxGAOx82rfI",
   },
   {
     id: "lose_weight",
     title: "Lose Weight",
     description: "Achieve balance and lightness in your body.",
-    image: "/api/assets/static/pages/goal-weight.webp",
+    image:
+      "https://lh3.googleusercontent.com/aida-public/AB6AXuB22vKccf8IAYSeNZZXWypkk-6z8NQb-EvVX9ffO65U7FUtlL2JR-FVBn6Rum3JcNKOa-YMl3kq6hlcmDVfYv2u3U1BLpdmlSKZaNp3jIMG0o986gzcKaMFTj9Klvb6QqAmHXoFBcUjoZLUN2RCirmZ8bC5mWeVMuZExHgoerUhEcM4J8veVlLTRKUgBJbziHCA74Yf0gK48Ht5Ei4RidDGAwlDe355lU7c79Z_U1CplLnQjROd7aabIYWK48H7qdpYdj1QZNyebA4",
   },
   {
     id: "healthy_habits",
     title: "Healthy Habits",
     description: "Cultivate consistency and long-term wellbeing.",
-    image: "/api/assets/static/pages/goal-habits.webp",
+    image:
+      "https://lh3.googleusercontent.com/aida-public/AB6AXuC2gjUP__2ceEl3Vm492Jvz8QyX_0re7z1d-5DqAWuoMLlcy6vJAs-9OYc4vFG_YEWWew89b05OgK_SdvToyxy_ukHgUOsWfQl0S0KPhOw8yQLPogXr6IntaCugeCX0oajcPSE3sABVcXxWSnhptXWPRq0STFp3gQjcDVfKW8huNEy7itFrpslyufWN1h8alHoijImMn-bbUTD3MTADTfLf68Y5XNNEDrv2psi-EfX5XF6-OxT1rQbe9j-rP5_ZIr5XjwHD08Mo_SM",
   },
 ];
 
@@ -82,9 +86,11 @@ export default function OnboardingGoalPage() {
               />
               <div className="h-full bg-primary-container rounded-2xl md:rounded-3xl p-8 ambient-shadow transition-all duration-500 ease-out border border-transparent peer-checked:border-secondary peer-checked:bg-surface-container-low hover:bg-surface-container-low flex flex-col items-center justify-center text-center gap-6">
                 <div className="w-24 h-24 rounded-full bg-surface flex items-center justify-center mb-2 shadow-sm group-hover:scale-105 transition-transform duration-500 overflow-hidden">
-                  <img
+                  <Image
                     src={goal.image}
                     alt={goal.title}
+                    width={96}
+                    height={96}
                     className="w-full h-full object-cover rounded-full opacity-80 mix-blend-multiply"
                   />
                 </div>
