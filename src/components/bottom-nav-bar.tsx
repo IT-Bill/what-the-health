@@ -254,7 +254,7 @@ export function BottomNavBar() {
       </div>
 
       {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 w-full z-50 bg-surface/80 backdrop-blur-xl rounded-t-3xl shadow-[0_-20px_40px_rgba(45,45,45,0.04)] flex justify-between items-center px-4 pb-4 pt-2">
+      <nav className="fixed bottom-3 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-sm z-40 bg-surface/85 backdrop-blur-xl rounded-full shadow-[0_8px_32px_rgba(45,45,45,0.12)] border border-outline-variant/20 flex justify-between items-center px-4 py-0.5">
         {/* Left items */}
         {navItems.slice(0, 2).map((item) => {
           const isActive = pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href + "/"));
