@@ -32,6 +32,7 @@
     "@aws-sdk/client-s3": "^3.1057.0",
     "@earendil-works/pi-agent-core": "^0.78.0",
     "@earendil-works/pi-ai": "^0.78.0",
+    "@img/sharp-darwin-arm64": "^0.34.5",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "@sinclair/typebox": "^0.34.49",

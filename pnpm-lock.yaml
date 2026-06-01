@@ -17,6 +17,9 @@ importers:
       '@earendil-works/pi-ai':
         specifier: ^0.78.0
         version: 0.78.0(ws@8.21.0)(zod@4.4.3)
+      '@img/sharp-darwin-arm64':
+        specifier: ^0.34.5
+        version: 0.34.5
       '@prisma/adapter-pg':
         specifier: ^7.8.0
         version: 7.8.0
@@ -4160,7 +4163,6 @@ snapshots:
   '@img/sharp-darwin-arm64@0.34.5':
     optionalDependencies:
       '@img/sharp-libvips-darwin-arm64': 1.2.4
-    optional: true
 
   '@img/sharp-darwin-x64@0.34.5':
     optionalDependencies:

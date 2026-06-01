@@ -398,6 +398,8 @@ model ChatMessage {
   sessionId    String
   role         ChatRole
   content      String
+  /// URL to uploaded image (e.g. /api/assets/chat/xxx.jpg)
+  imageUrl     String?  @map("image_url")
   /// Optional reasoning/thinking trace kept separate from the visible content.
   reasoning      String?
   /// JSON-serialized ToolCallInfo[] for display in the thinking section.

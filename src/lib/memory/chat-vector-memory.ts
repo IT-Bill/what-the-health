@@ -80,7 +80,7 @@ export async function backfillChatMessagesToVectorMemory(limit = 500): Promise<n
 }
 
 export function buildChatMessageVectorContent(input: ChatMessageVectorInput): string {
-  const text = input.content.trim();
+  const text = input.content.trim() || "[图片消息]";
   return [
     "来源：chat-message",
     `会话：${input.sessionId}`,

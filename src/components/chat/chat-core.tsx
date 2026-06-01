@@ -35,6 +35,7 @@ interface Message {
   id: string;
   role: "user" | "agent";
   content: string;
+  imageUrl?: string;
   reasoning?: string;
   thinkingDuration?: number;
   isStreaming?: boolean;
@@ -82,6 +83,7 @@ function coerceCachedMessage(value: unknown): Message | null {
     id: message.id,
     role: message.role,
     content: message.content,
+    imageUrl: typeof message.imageUrl === "string" ? message.imageUrl : undefined,
     isStreaming: false,
   };
 }
@@ -315,6 +317,16 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
 
   // UI state
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
+
+  // Pending image upload
+  const [pendingImage, setPendingImage] = useState<{
+    file: File;
+    previewUrl: string;
+    uploading: boolean;
+    url?: string;
+  } | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
 
   // Session menu state
   const [activeMenuSessionId, setActiveMenuSessionId] = useState<string | null>(null);
@@ -707,11 +719,13 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
             id: string;
             role: string;
             content: string;
+            imageUrl?: string;
             toolCallsJson?: string;
           }) => ({
             id: m.id,
             role: m.role === "user" ? "user" : "agent",
             content: m.content,
+            imageUrl: m.imageUrl ?? undefined,
             toolCalls: m.toolCallsJson ? JSON.parse(m.toolCallsJson) : undefined,
           })
         );
@@ -848,17 +862,61 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingVoiceText, isSessionBootstrapDone, isStreaming]);
 
+  async function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.type)) {
+      alert("仅支持 JPEG、PNG、WebP、GIF 格式");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      alert("图片大小不能超过 10MB");
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    setPendingImage({ file, previewUrl, uploading: true });
+    setShowAttachmentMenu(false);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload/image?prefix=chat", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "上传失败");
+      setPendingImage({ file, previewUrl, uploading: false, url: data.url });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "上传失败");
+      setPendingImage(null);
+      URL.revokeObjectURL(previewUrl);
+    }
+  }
+
+  function removePendingImage() {
+    if (pendingImage) {
+      URL.revokeObjectURL(pendingImage.previewUrl);
+      setPendingImage(null);
+    }
+  }
+
   async function handleSend(
     overrideText?: string,
     options: { startNewSession?: boolean } = {}
   ) {
     const text = (overrideText ?? input).trim();
-    if (!text || isStreamingRef.current) return;
+    const imageUrl = pendingImage?.url;
+
+    if ((!text && !imageUrl) || isStreamingRef.current) return;
 
     const userMsg: Message = {
       id: `u-${Date.now()}`,
       role: "user",
       content: text,
+      imageUrl,
     };
     const assistantId = `a-${Date.now()}`;
 
@@ -882,6 +940,10 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
     setMessages(nextMessages);
     setInput("");
     if (textareaRef.current) textareaRef.current.style.height = "";
+    if (pendingImage) {
+      URL.revokeObjectURL(pendingImage.previewUrl);
+      setPendingImage(null);
+    }
     isStreamingRef.current = true;
     setIsStreaming(true);
     setCurrentAgentState("thinking");
@@ -900,6 +962,7 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
         body: JSON.stringify({
           message: text,
           sessionId: options.startNewSession ? undefined : sessionId,
+          imageUrl,
         }),
         signal: controller.signal,
       });
@@ -1263,10 +1326,27 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
     recordingTextRef.current = "";
   }
 
-  const hasInput = input.trim().length > 0;
+  const hasInput = input.trim().length > 0 || !!pendingImage?.url;
 
   return (
     <div className="h-[100dvh] min-h-[100dvh] flex flex-col relative overflow-hidden bg-background">
+      {/* Hidden file inputs for image upload */}
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        capture="environment"
+        className="hidden"
+        onChange={handleImageSelect}
+      />
+      <input
+        ref={galleryInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        className="hidden"
+        onChange={handleImageSelect}
+      />
+
       {/* Mobile TopAppBar */}
       <header className="fixed inset-x-0 top-0 z-50 bg-surface/80 backdrop-blur-xl border-b border-outline-variant/30 flex justify-between items-center w-full px-6 h-16 md:hidden">
         <button
@@ -1548,6 +1628,28 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
           {/* Input Area */}
           <div className="fixed bottom-[84px] left-0 right-0 z-[55] bg-gradient-to-t from-background via-background/95 to-transparent pt-4 pb-2 px-4 md:sticky md:bottom-0">
             <div className="max-w-[800px] mx-auto">
+              {/* Pending image preview */}
+              {pendingImage && (
+                <div className="mb-2 flex items-center gap-2 px-4">
+                  <div className="relative rounded-sm overflow-hidden border border-outline-variant/30 max-w-32 max-h-32">
+                    <img src={pendingImage.previewUrl} alt="Preview" className="w-full h-auto object-contain" />
+                    {pendingImage.uploading && (
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                        <div className="w-5 h-5 border-2 border-white/60 border-t-white rounded-full animate-spin" />
+                      </div>
+                    )}
+                    <button
+                      onClick={removePendingImage}
+                      className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/50 text-white flex items-center justify-center text-xs"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <span className="text-xs text-on-surface-variant">
+                    {pendingImage.uploading ? "上传中..." : "已就绪"}
+                  </span>
+                </div>
+              )}
               <div className="relative flex items-end gap-2 bg-surface/60 backdrop-blur-xl border border-outline-variant/30 rounded-[28px] shadow-[0_12px_32px_rgba(45,45,45,0.04)] px-2 py-1.5">
                 {/* Attachment / Cancel Button */}
                 <button
@@ -1619,12 +1721,13 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
           >
             <div className="flex flex-col gap-1 p-1">
               {[
-                { icon: Camera, label: "相机" },
-                { icon: Image, label: "照片" },
-                { icon: FileText, label: "文件" },
+                { icon: Camera, label: "相机", onClick: () => { cameraInputRef.current?.click(); } },
+                { icon: Image, label: "照片", onClick: () => { galleryInputRef.current?.click(); } },
+                { icon: FileText, label: "文件", onClick: undefined },
               ].map((item) => (
                 <button
                   key={item.label}
+                  onClick={item.onClick}
                   className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface-container-high transition-colors text-left"
                 >
                   <item.icon className="w-5 h-5 text-on-surface-variant" />
@@ -1664,9 +1767,9 @@ function AgentMessage({ message }: { message: Message }) {
             onClick={() => setExpanded(e => !e)}
             className="flex items-center gap-1.5 text-on-surface-variant/60 hover:text-on-surface-variant transition-colors text-sm"
           >
-            <Icon name="key" />
+            <Icon name="key" size={14} />
             <span>{summary}</span>
-            <Icon name="expand_more" className="text-base" />
+            <Icon name="expand_more" size={14} className={`transition-transform duration-300 ${expanded ? "" : "-rotate-90"}`} />
           </button>
           {expanded && (
             <div className="mt-2 pl-5 border-l-2 border-outline-variant/30 text-on-surface-variant/70 text-sm leading-relaxed space-y-2">
@@ -1731,9 +1834,9 @@ function AgentThinkingState({
             onClick={() => setExpanded(e => !e)}
             className="flex items-center gap-1.5 text-on-surface-variant/60 hover:text-on-surface-variant transition-colors text-sm"
           >
-            <Icon name="key" />
+            <Icon name="key" size={14} />
             <span>{doneTools.length} 次工具调用</span>
-            <Icon name="expand_more" className="text-base" />
+            <Icon name="expand_more" size={14} className={`transition-transform duration-300 ${expanded ? "" : "-rotate-90"}`} />
           </button>
           {expanded && (
             <div className="mt-2 pl-5 border-l-2 border-outline-variant/30 text-on-surface-variant/70 text-sm space-y-1.5">
@@ -1766,9 +1869,24 @@ function AgentThinkingState({
 
 function UserBubble({ message }: { message: Message }) {
   return (
-    <div className="flex w-full justify-end py-2">
-      <div className="bg-surface-container-high rounded-[20px] rounded-tr-[4px] px-4 py-2.5 max-w-[85%] md:max-w-[70%]">
-        <p className="text-on-surface text-base leading-relaxed">{message.content}</p>
+    <div className="flex w-full justify-end py-1">
+      <div className="flex flex-col items-end gap-1.5 max-w-[85%] md:max-w-[70%]">
+        {message.imageUrl && (
+          <div className="bg-surface-container-high rounded-sm overflow-hidden shadow-sm max-w-xs sm:max-w-sm">
+            <img
+              src={message.imageUrl}
+              alt="Uploaded"
+              className="w-full h-auto object-contain block"
+              loading="lazy"
+              onClick={() => window.open(message.imageUrl, "_blank")}
+            />
+          </div>
+        )}
+        {message.content && (
+          <div className="bg-surface-container-high rounded-[20px] rounded-tr-[4px] px-4 py-2.5">
+            <p className="text-on-surface text-base leading-relaxed">{message.content}</p>
+          </div>
+        )}
       </div>
     </div>
   );

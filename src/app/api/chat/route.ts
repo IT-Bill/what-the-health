@@ -26,15 +26,15 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MODEL: Model<"openai-completions"> = {
-  id: "GLM-5.1",
-  name: "GLM-5.1 (AI Ping)",
+  id: "Kimi-K2.6",
+  name: "Kimi K2.6 (AI Ping)",
   api: "openai-completions",
   provider: "aiping",
   baseUrl: "https://aiping.cn/api/v1",
   reasoning: true,
-  input: ["text"],
+  input: ["text", "image"],
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-  contextWindow: 128000,
+  contextWindow: 256000,
   maxTokens: 32000,
 };
 
@@ -56,7 +56,19 @@ const EXTRA_BODY = {
 
 function agentMsgToWire(m: AgentMessage): { role: string; text: string } | null {
   if (m.role === "user") {
-    return { role: "user", text: m.content as string };
+    const content = m.content;
+    if (typeof content === "string") {
+      return { role: "user", text: content };
+    }
+    // Array content: extract text parts
+    if (Array.isArray(content)) {
+      const text = content
+        .filter((c) => c.type === "text")
+        .map((c) => (c as { text: string }).text)
+        .join("");
+      return { role: "user", text };
+    }
+    return { role: "user", text: "" };
   }
   if (m.role === "assistant") {
     const text = m.content
@@ -76,10 +88,10 @@ function agentMsgToWire(m: AgentMessage): { role: string; text: string } | null 
 }
 
 function wireToAgentMsgs(
-  msgs: { role: "user" | "assistant"; text: string }[]
+  msgs: { role: "user" | "assistant"; text: string; imageUrl?: string | null }[]
 ): AgentMessage[] {
   return msgs
-    .filter((m) => m.text.trim())
+    .filter((m) => m.text.trim() || m.imageUrl)
     .map((m) => {
       if (m.role === "user") {
         return { role: "user", content: m.text, timestamp: Date.now() };
@@ -102,6 +114,22 @@ function wireToAgentMsgs(
         timestamp: Date.now(),
       } as AgentMessage;
     });
+}
+
+async function imageUrlToBase64(imageUrl: string): Promise<{ data: string; mimeType: string } | null> {
+  try {
+    // imageUrl is like "/api/assets/chat/xxx.jpg"
+    // Need to resolve to full URL for fetch
+    const url = imageUrl.startsWith("http") ? imageUrl : `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}${imageUrl}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const buffer = Buffer.from(await res.arrayBuffer());
+    const base64 = buffer.toString("base64");
+    const contentType = res.headers.get("content-type") || "image/jpeg";
+    return { data: base64, mimeType: contentType };
+  } catch {
+    return null;
+  }
 }
 
 function sse(data: unknown): string {
@@ -381,7 +409,7 @@ export async function POST(request: Request) {
   }
   const userId = payload.userId;
 
-  let body: { message?: string; sessionId?: string };
+  let body: { message?: string; sessionId?: string; imageUrl?: string };
   try {
     body = await request.json();
   } catch {
@@ -391,8 +419,8 @@ export async function POST(request: Request) {
     });
   }
 
-  const userMessageText = body.message?.trim();
-  if (!userMessageText) {
+  const userMessageText = body.message?.trim() || "";
+  if (!userMessageText && !body.imageUrl) {
     return new Response(sse({ type: "error", message: "消息不能为空" }), {
       status: 400,
       headers: { "Content-Type": "text/event-stream" },
@@ -401,7 +429,7 @@ export async function POST(request: Request) {
 
   // Resolve or create session
   let sessionId = body.sessionId;
-  let existingMessages: { role: "user" | "assistant"; text: string }[] = [];
+  let existingMessages: { role: "user" | "assistant"; text: string; imageUrl?: string | null }[] = [];
 
   if (sessionId) {
     const session = await prisma.chatSession.findUnique({
@@ -414,6 +442,7 @@ export async function POST(request: Request) {
       existingMessages = session.messages.map((m) => ({
         role: m.role.toLowerCase() as "user" | "assistant",
         text: m.content,
+        imageUrl: m.imageUrl,
       }));
     } else {
       sessionId = undefined;
@@ -433,6 +462,7 @@ export async function POST(request: Request) {
       sessionId,
       role: "user",
       content: userMessageText,
+      imageUrl: body.imageUrl || undefined,
     },
   });
   indexChatMessageInBackground({
@@ -450,7 +480,7 @@ export async function POST(request: Request) {
     where: { id: sessionId },
     data: {
       updatedAt: new Date(),
-      ...(msgCount <= 2 ? { title: userMessageText.slice(0, 30) } : {}),
+      ...(msgCount <= 2 ? { title: userMessageText.slice(0, 30) || "[图片]" } : {}),
     },
   });
 
@@ -645,8 +675,17 @@ export async function POST(request: Request) {
         }
       });
 
+      // Prepare image content for current message if present
+      let imageContent: { type: "image"; data: string; mimeType: string }[] | undefined;
+      if (body.imageUrl) {
+        const img = await imageUrlToBase64(body.imageUrl);
+        if (img) {
+          imageContent = [{ type: "image", data: img.data, mimeType: img.mimeType }];
+        }
+      }
+
       try {
-        await agent.prompt(userMessageText);
+        await agent.prompt(userMessageText, imageContent);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "未知错误";
         controller.enqueue(sse({ type: "error", message: msg }));
