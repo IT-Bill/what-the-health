@@ -54,7 +54,7 @@ export default function SignUpPage() {
       {/* Left Side: Hero Image */}
       <div className="hidden lg:flex lg:w-1/2 relative bg-surface-container overflow-hidden items-center justify-center">
         <img
-          src="/api/assets/static/pages/hero.webp"
+          src="/api/assets/static/pages/hero.jpg"
           alt="Serene minimal interior"
           className="absolute inset-0 w-full h-full object-cover opacity-90 mix-blend-multiply"
         />
