@@ -20,6 +20,7 @@ type ToolParams = {
   postId?: string;
   prompt?: string | null;
   query?: string;
+  topic?: string;
 };
 
 function p(params: unknown): ToolParams {
@@ -475,6 +476,65 @@ export function createTools(userId: string): AgentTool[] {
     },
   };
 
+  const webSearchTool: AgentTool = {
+    name: "web_search",
+    label: "搜索网络",
+    description:
+      "搜索互联网获取最新信息。适用于：查询最新健康研究、营养知识、运动科学、药物信息、医疗建议等需要实时或专业外部信息的问题。不要用于查询用户个人数据。",
+    parameters: Type.Object({
+      query: Type.String({ description: "搜索关键词，建议使用中文或英文专业术语" }),
+      topic: Type.Optional(
+        Type.Union([
+          Type.Literal("general"),
+          Type.Literal("news"),
+        ], { description: "搜索类型：general（通用）或 news（新闻）" })
+      ),
+    }),
+    execute: async (params) => {
+      const { query, topic = "general" } = p(params);
+      if (!query) throw new Error("query is required");
+
+      const apiKey = process.env.TAVILY_API_KEY;
+      if (!apiKey) throw new Error("TAVILY_API_KEY not configured");
+
+      const res = await fetch("https://api.tavily.com/search", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          query,
+          topic,
+          search_depth: "basic",
+          max_results: 5,
+          include_answer: true,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Tavily search failed: ${res.status}`);
+      }
+
+      const data = await res.json() as {
+        answer?: string;
+        results: { title: string; url: string; content: string; score: number }[];
+      };
+
+      const summary = [
+        data.answer ? `**摘要**: ${data.answer}\n` : "",
+        data.results
+          .map((r, i) => `[${i + 1}] **${r.title}**\n${r.content}\n来源: ${r.url}`)
+          .join("\n\n"),
+      ].filter(Boolean).join("\n");
+
+      return {
+        content: [{ type: "text" as const, text: summary }],
+        details: { answer: data.answer, results: data.results },
+      };
+    },
+  };
+
   return [
     getUserPersonaTool,
     getUserProfileTool,
@@ -488,5 +548,6 @@ export function createTools(userId: string): AgentTool[] {
     searchPostsTool,
     getPostDetailTool,
     notifyFamilyConcernTool,
+    webSearchTool,
   ];
 }
