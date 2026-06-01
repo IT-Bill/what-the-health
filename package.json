@@ -46,7 +46,9 @@
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "sax": "^1.6.0",
+    "sharp": "^0.34.5",
     "tailwindcss-animate": "^1.0.7",
+    "uuid": "^14.0.0",
     "ws": "^8.21.0"
   },
   "devDependencies": {

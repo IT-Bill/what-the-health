@@ -10,12 +10,16 @@ import { seedReports } from "./seeders/reports";
 import { seedMisc } from "./seeders/misc";
 import { seedFriends } from "./seeders/friends";
 import { seedFamily } from "./seeders/family";
+import { uploadSeedAssets } from "./seeders/upload-assets";
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DIRECT_URL ?? process.env.DATABASE_URL }),
 });
 
 async function main() {
+  // --- Upload static assets to MinIO ---
+  await uploadSeedAssets();
+
   // --- Global catalogs (shared across all users) ---
   await seedProducts(prisma);
 

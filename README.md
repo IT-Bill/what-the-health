@@ -6,7 +6,7 @@
 
 - **框架**: Next.js 16 (Turbopack), React 19
 - **样式**: Tailwind CSS v4, Material Design 3 色彩系统
-- **数据库**: PostgreSQL 17 + Prisma 7 (driver adapter)
+- **数据库**: PostgreSQL 17 + pgvector + Prisma 7 (driver adapter)
 - **对象存储**: MinIO (S3 兼容)
 - **AI Chat**: AI Ping GLM-5.1 (OpenAI 兼容接口)
 - **语音识别**: 火山引擎 (豆包) Streaming ASR
@@ -15,7 +15,7 @@
 
 - Node.js >= 20
 - pnpm
-- PostgreSQL 17 (本地 Docker 或云端如 Neon、Supabase 均可)
+- PostgreSQL 17 + pgvector (本地 Docker 或云端如 Neon、Supabase 均可)
 - MinIO 实例 (S3 兼容对象存储)
 
 ## 快速开始
@@ -31,10 +31,11 @@ pnpm install
 **方式 A：本地 Docker**
 
 ```bash
-docker run -d --name postgres \
+docker run -d --name what-the-health \
+  -e POSTGRES_DB=postgres \
   -e POSTGRES_PASSWORD=postgres \
   -p 5432:5432 \
-  postgres:17-bookworm
+  pgvector/pgvector:pg17
 ```
 
 **方式 B：云端 (Neon / Supabase 等)**

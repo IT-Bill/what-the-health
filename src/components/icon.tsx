@@ -32,6 +32,7 @@ import {
   Heart,
   HeartPulse,
   Hourglass,
+  ImagePlus,
   Key,
   Leaf,
   Lock,
@@ -157,6 +158,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   restaurant_menu: Utensils,
 
   // Content & Media
+  add_photo_alternate: ImagePlus,
   auto_stories: Bookmark,
   article: FileText,
   auto_awesome: Sparkles,

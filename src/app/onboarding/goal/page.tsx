@@ -16,19 +16,19 @@ const goalOptions: GoalOption[] = [
     id: "build_muscle",
     title: "Build Muscle",
     description: "Enhance strength and physical resilience.",
-    image: "/api/assets/static/pages/goal-muscle.webp",
+    image: "/api/assets/static/pages/goal-muscle.jpg",
   },
   {
     id: "lose_weight",
     title: "Lose Weight",
     description: "Achieve balance and lightness in your body.",
-    image: "/api/assets/static/pages/goal-weight.webp",
+    image: "/api/assets/static/pages/goal-weight.jpg",
   },
   {
     id: "healthy_habits",
     title: "Healthy Habits",
     description: "Cultivate consistency and long-term wellbeing.",
-    image: "/api/assets/static/pages/goal-habits.webp",
+    image: "/api/assets/static/pages/goal-habits.jpg",
   },
 ];
 
