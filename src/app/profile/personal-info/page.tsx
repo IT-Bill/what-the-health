@@ -4,6 +4,14 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icon";
+import { PrimaryGoalSelectorDialog } from "@/components/primary-goal-selector-dialog";
+import {
+  ACTIVITY_GOAL_IDS,
+  BODY_COMPOSITION_GOAL_IDS,
+  getPrimaryGoalLabels,
+  hasPrimaryGoalGroup,
+  requiresPrimaryGoalParameters,
+} from "@/lib/primary-goals";
 
 interface User {
   id: string;
@@ -13,6 +21,14 @@ interface User {
   birthday?: string;
   heightCm?: number;
   weightKg?: number;
+  targetWeightKg?: number;
+  targetBodyFatPct?: number;
+  dailyActiveCalories?: number;
+  dailyExerciseMinutes?: number;
+  dailyStepGoal?: number;
+  dailyActiveHours?: number;
+  primaryGoal?: string | null;
+  primaryGoals?: string[];
 }
 
 const genderOptions = [
@@ -36,6 +52,17 @@ export default function PersonalInfoPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<Partial<User>>({});
+  const [goalDialogOpen, setGoalDialogOpen] = useState(false);
+  const [goalParameterStepActive, setGoalParameterStepActive] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const nextStep = new URLSearchParams(window.location.search).get("next");
+    setGoalParameterStepActive(nextStep === "goal-params");
+  }, []);
 
   useEffect(() => {
     fetch("/api/me")
@@ -49,6 +76,12 @@ export default function PersonalInfoPage() {
             birthday: formatDateForInput(data.user.birthday),
             heightCm: data.user.heightCm ?? undefined,
             weightKg: data.user.weightKg ?? undefined,
+            targetWeightKg: data.user.targetWeightKg ?? undefined,
+            targetBodyFatPct: data.user.targetBodyFatPct ?? undefined,
+            dailyActiveCalories: data.user.dailyActiveCalories ?? undefined,
+            dailyExerciseMinutes: data.user.dailyExerciseMinutes ?? undefined,
+            dailyStepGoal: data.user.dailyStepGoal ?? undefined,
+            dailyActiveHours: data.user.dailyActiveHours ?? undefined,
           });
         }
       })
@@ -70,11 +103,18 @@ export default function PersonalInfoPage() {
           birthday: form.birthday || null,
           heightCm: form.heightCm ?? null,
           weightKg: form.weightKg ?? null,
+          targetWeightKg: form.targetWeightKg ?? null,
+          targetBodyFatPct: form.targetBodyFatPct ?? null,
+          dailyActiveCalories: form.dailyActiveCalories ?? null,
+          dailyExerciseMinutes: form.dailyExerciseMinutes ?? null,
+          dailyStepGoal: form.dailyStepGoal ?? null,
+          dailyActiveHours: form.dailyActiveHours ?? null,
         }),
       });
       const data = await res.json();
       if (res.ok && data.user) {
         setUser(data.user);
+        setGoalParameterStepActive(false);
       }
     } finally {
       setSaving(false);
@@ -89,6 +129,16 @@ export default function PersonalInfoPage() {
     await fetch("/api/logout", { method: "POST" });
     router.push("/login");
   }
+
+  const primaryGoalLabels = user
+    ? getPrimaryGoalLabels(user.primaryGoals, user.primaryGoal)
+    : [];
+  const showBodyCompositionFields = user
+    ? hasPrimaryGoalGroup(user.primaryGoals, user.primaryGoal, BODY_COMPOSITION_GOAL_IDS)
+    : false;
+  const showActivityFields = user
+    ? hasPrimaryGoalGroup(user.primaryGoals, user.primaryGoal, ACTIVITY_GOAL_IDS)
+    : false;
 
   if (loading) {
     return (
@@ -123,6 +173,12 @@ export default function PersonalInfoPage() {
       <Header title="个人信息" />
 
       <main className="flex-1 px-6 py-6 max-w-screen-md mx-auto w-full">
+        {goalParameterStepActive && (showBodyCompositionFields || showActivityFields) ? (
+          <section className="mb-4 rounded-[1.5rem] border border-secondary/20 bg-secondary-container/70 p-4 text-sm text-on-secondary-container">
+            下一步：请先填写下面的目标参数，再点击保存。这样系统才能根据你的主要目标提供更准确的建议。
+          </section>
+        ) : null}
+
         <div className="bg-primary-container rounded-[2rem] p-6 ambient-shadow flex flex-col gap-1">
           <InfoField
             label="邮箱"
@@ -162,10 +218,107 @@ export default function PersonalInfoPage() {
             value={form.weightKg?.toString() || ""}
             placeholder="kg"
             suffix="kg"
-            last
             onChange={(v) => handleChange("weightKg", v ? parseFloat(v) : "")}
           />
+          {showBodyCompositionFields ? (
+            <>
+              <InfoField
+                label="目标体重"
+                type="number"
+                value={form.targetWeightKg?.toString() || ""}
+                placeholder="kg"
+                suffix="kg"
+                autoFocus={goalParameterStepActive}
+                onChange={(v) => handleChange("targetWeightKg", v ? parseFloat(v) : "")}
+              />
+              <InfoField
+                label="目标体脂"
+                type="number"
+                value={form.targetBodyFatPct?.toString() || ""}
+                placeholder="%"
+                suffix="%"
+                last={!showActivityFields}
+                onChange={(v) => handleChange("targetBodyFatPct", v ? parseFloat(v) : "")}
+              />
+            </>
+          ) : null}
+          {showActivityFields ? (
+            <>
+              <InfoField
+                label="活动热量"
+                type="number"
+                value={form.dailyActiveCalories?.toString() || ""}
+                placeholder="kcal"
+                suffix="kcal"
+                autoFocus={goalParameterStepActive && !showBodyCompositionFields}
+                onChange={(v) => handleChange("dailyActiveCalories", v ? parseInt(v, 10) : "")}
+              />
+              <InfoField
+                label="运动时间"
+                type="number"
+                value={form.dailyExerciseMinutes?.toString() || ""}
+                placeholder="min"
+                suffix="min"
+                onChange={(v) => handleChange("dailyExerciseMinutes", v ? parseInt(v, 10) : "")}
+              />
+              <InfoField
+                label="每日步数"
+                type="number"
+                value={form.dailyStepGoal?.toString() || ""}
+                placeholder="steps"
+                suffix="步"
+                onChange={(v) => handleChange("dailyStepGoal", v ? parseInt(v, 10) : "")}
+              />
+              <InfoField
+                label="活动小时"
+                type="number"
+                value={form.dailyActiveHours?.toString() || ""}
+                placeholder="h"
+                suffix="h"
+                last
+                onChange={(v) => handleChange("dailyActiveHours", v ? parseFloat(v) : "")}
+              />
+            </>
+          ) : null}
+          {!showBodyCompositionFields && !showActivityFields ? (
+            <div className="py-4 text-sm text-on-surface-variant">
+              选择“减重管理 / 增肌塑形”或“健康习惯 / 每日活动”后，会显示对应目标参数。
+            </div>
+          ) : null}
         </div>
+
+        <section className="mt-4 rounded-[2rem] bg-primary-container p-6 ambient-shadow">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-base font-medium text-on-surface">主要目标</h2>
+              <p className="mt-1 text-sm leading-6 text-on-surface-variant">
+                登录后的推荐内容、习惯建议和陪伴风格会参考这些目标。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setGoalDialogOpen(true)}
+              className="rounded-full bg-surface px-4 py-2 text-sm font-medium text-on-surface transition-colors hover:bg-surface-container"
+            >
+              编辑
+            </button>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            {primaryGoalLabels.length > 0 ? (
+              primaryGoalLabels.map((goal) => (
+                <span
+                  key={goal}
+                  className="rounded-full bg-secondary-container px-3 py-1.5 text-sm font-medium text-on-secondary-container"
+                >
+                  {goal}
+                </span>
+              ))
+            ) : (
+              <span className="text-sm text-on-surface-variant">未设置</span>
+            )}
+          </div>
+        </section>
 
         <button
           onClick={handleSave}
@@ -182,6 +335,33 @@ export default function PersonalInfoPage() {
           退出登录
         </button>
       </main>
+
+      {user ? (
+        <PrimaryGoalSelectorDialog
+          open={goalDialogOpen}
+          userId={user.id}
+          initialValue={user.primaryGoals}
+          fallbackPrimaryGoal={user.primaryGoal ?? null}
+          title="编辑主要目标"
+          description="可多选，保存后会立即同步到你的个人资料。"
+          onClose={() => setGoalDialogOpen(false)}
+          onSaved={(selection) => {
+            setUser((current) => {
+              if (!current) {
+                return current;
+              }
+              return {
+                ...current,
+                primaryGoal: selection.primaryGoal,
+                primaryGoals: selection.primaryGoals,
+              };
+            });
+            setGoalParameterStepActive(
+              requiresPrimaryGoalParameters(selection.primaryGoals, selection.primaryGoal),
+            );
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -217,6 +397,7 @@ function InfoField({
   suffix,
   readOnly = false,
   last = false,
+  autoFocus = false,
   onChange,
 }: {
   label: string;
@@ -226,6 +407,7 @@ function InfoField({
   suffix?: string;
   readOnly?: boolean;
   last?: boolean;
+  autoFocus?: boolean;
   onChange: (value: string) => void;
 }) {
   return (
@@ -243,6 +425,7 @@ function InfoField({
           value={value}
           placeholder={placeholder}
           readOnly={readOnly}
+          autoFocus={autoFocus}
           onChange={(e) => onChange(e.target.value)}
           className={`text-base text-on-surface bg-transparent text-right focus:outline-none w-full max-w-[200px] ${
             readOnly ? "opacity-60 cursor-default" : "border-b border-transparent focus:border-secondary"

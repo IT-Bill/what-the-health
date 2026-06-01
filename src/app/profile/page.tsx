@@ -2,8 +2,15 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { Icon } from "@/components/icon";
+import { PrimaryGoalSelectorDialog } from "@/components/primary-goal-selector-dialog";
+import {
+  getPrimaryGoalLabels,
+  hasStoredPrimaryGoals,
+  requiresPrimaryGoalParameters,
+} from "@/lib/primary-goals";
 
 interface User {
   id: string;
@@ -15,6 +22,8 @@ interface User {
   birthday?: string;
   heightCm?: number;
   weightKg?: number;
+  primaryGoal?: string | null;
+  primaryGoals?: string[];
 }
 
 interface MenuItem {
@@ -33,18 +42,29 @@ const menuItems: MenuItem[] = [
 ];
 
 export default function ProfilePage() {
+  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [goalDialogOpen, setGoalDialogOpen] = useState(false);
 
   useEffect(() => {
     fetch("/api/me")
       .then((res) => res.json())
       .then((data) => {
-        if (data.user) setUser(data.user);
+        if (data.user) {
+          setUser(data.user);
+          if (!hasStoredPrimaryGoals(data.user.primaryGoals, data.user.primaryGoal)) {
+            setGoalDialogOpen(true);
+          }
+        }
       })
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
+
+  const primaryGoalLabels = user
+    ? getPrimaryGoalLabels(user.primaryGoals, user.primaryGoal)
+    : [];
 
   if (loading) {
     return (
@@ -103,6 +123,26 @@ export default function ProfilePage() {
                 <h2 className="[font-family:var(--font-display)] text-xl font-medium text-on-surface">
                   {user.name || "未设置昵称"}
                 </h2>
+                <div className="mt-1 flex flex-wrap gap-2">
+                  {primaryGoalLabels.length > 0 ? (
+                    primaryGoalLabels.map((goal) => (
+                      <span
+                        key={goal}
+                        className="rounded-full bg-secondary-container px-3 py-1 text-xs font-medium text-on-secondary-container"
+                      >
+                        {goal}
+                      </span>
+                    ))
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setGoalDialogOpen(true)}
+                      className="rounded-full bg-primary-container px-3 py-1 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container"
+                    >
+                      设置主要目标
+                    </button>
+                  )}
+                </div>
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(user.username);
@@ -142,6 +182,33 @@ export default function ProfilePage() {
           </section>
         )}
       </div>
+      {user ? (
+        <PrimaryGoalSelectorDialog
+          open={goalDialogOpen}
+          userId={user.id}
+          initialValue={user.primaryGoals}
+          fallbackPrimaryGoal={user.primaryGoal ?? null}
+          required={!hasStoredPrimaryGoals(user.primaryGoals, user.primaryGoal)}
+          description="可多选。我们会根据这些方向个性化推荐内容、习惯和陪伴方式。"
+          onClose={() => setGoalDialogOpen(false)}
+          onSaved={(selection) => {
+            setUser((current) => {
+              if (!current) {
+                return current;
+              }
+              return {
+                ...current,
+                primaryGoal: selection.primaryGoal,
+                primaryGoals: selection.primaryGoals,
+              };
+            });
+
+            if (requiresPrimaryGoalParameters(selection.primaryGoals, selection.primaryGoal)) {
+              router.push("/profile/personal-info?next=goal-params");
+            }
+          }}
+        />
+      ) : null}
     </AppShell>
   );
 }

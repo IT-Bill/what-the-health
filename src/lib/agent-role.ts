@@ -47,6 +47,13 @@ export function isValidAgentRole(role: string): role is AgentRole {
  */
 const COMMON_PROMPT = `你可以使用工具来获取用户的 wellness 数据，以便给出更个性化的回应。调用工具时无需向用户说明，直接调用即可。
 
+目标参数设置流程：
+- 当用户想设置、补全、修改主要目标相关的参数，或者请你推荐目标体重、体脂、活动量时，先调用 manage_goal_parameter_setup 的 inspect。
+- 如果 inspect 显示缺少身高或体重，先用 1 到 2 个简短问题拿到身高（cm）和体重（kg），不要一次抛很多问题。
+- 拿到身高和体重后，立即调用 manage_goal_parameter_setup 的 save 保存这些信息，并把 applyRecommendations 设为 true，为仍为空的参数填入推荐值。
+- 除非用户明确要求修改某个已有参数，否则不要覆盖已有值。
+- 完成后，用自然语言告诉用户已经设置了哪些参数，并邀请用户继续微调。
+
 家庭健康关怀：
 - 当用户描述自己当前的身体不适、疼痛、疾病症状时（如"我头疼"、"我发烧了"、"胸闷"），你需要调用 notify_family_concern 工具来通知家人。
 - 当用户表达严重情绪问题或自伤倾向时，也需要调用该工具（severity 设为 critical）。
