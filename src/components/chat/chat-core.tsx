@@ -686,9 +686,10 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
       const res = await fetch(`/api/chat/sessions/${sid}/messages`);
       if (!res.ok) return;
       const data = await res.json();
-      const messages = (data.session?.messages ?? []).map((m: { role: string; content: string }) => ({
+      const messages = (data.session?.messages ?? []).map((m: { role: string; content: string; toolCallsJson?: string }) => ({
         role: m.role === "assistant" ? "assistant" : m.role,
         content: m.content,
+        ...(m.toolCallsJson ? { toolCallsJson: m.toolCallsJson } : {}),
       }));
       const blob = new Blob(
         [JSON.stringify({ title, messages }, null, 2)],
@@ -1385,8 +1386,8 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
         <aside
           className={`${
             showSidebar
-              ? "fixed top-0 left-0 h-full w-5/6 z-40 bg-surface/95 backdrop-blur-xl flex flex-col md:relative md:inset-auto md:w-72 md:bg-transparent md:backdrop-blur-none"
-              : "hidden md:flex md:w-72 md:flex-col"
+              ? "fixed top-0 left-0 h-full w-5/6 z-40 bg-surface/95 backdrop-blur-xl flex flex-col overflow-hidden md:relative md:inset-auto md:w-72 md:bg-transparent md:backdrop-blur-none"
+              : "hidden md:flex md:w-72 md:flex-col md:overflow-hidden"
           } md:border-r md:border-outline-variant/20 md:bg-surface-container-low/50`}
         >
           <div className="flex items-center justify-between p-4 md:p-4 border-b border-outline-variant/20 md:border-none">
@@ -1546,7 +1547,7 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
             })}
           </div>
           {/* Import button at sidebar bottom */}
-          <div className="p-2 border-t border-outline-variant/20">
+          <div className="p-2 pb-[calc(0.5rem+84px)] md:pb-2 border-t border-outline-variant/20 z-50">
             <input
               ref={importFileRef}
               type="file"

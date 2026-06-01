@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 interface ImportMessage {
   role: string;
   content: string;
+  toolCallsJson?: string;
 }
 
 interface ImportPayload {
@@ -57,6 +58,7 @@ export async function POST(request: Request) {
         create: messages.map((m, i) => ({
           role: m.role === "user" ? "user" : "assistant",
           content: m.content.trim(),
+          toolCallsJson: typeof m.toolCallsJson === "string" ? m.toolCallsJson : null,
           createdAt: new Date(Date.now() + i),
         })),
       },
