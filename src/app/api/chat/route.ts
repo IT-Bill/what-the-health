@@ -633,12 +633,16 @@ export async function POST(request: Request) {
                 .join("")
                 .slice(0, 200);
               toolExecutions[idx].result = text ?? "";
-              controller.enqueue(
-                sse({
-                  type: "tool_end",
-                  tool: toolExecutions[idx],
-                })
-              );
+              const ssePayload: Record<string, unknown> = {
+                type: "tool_end",
+                tool: toolExecutions[idx],
+              };
+              // Pass web_search sources to the client for the sources drawer
+              if (toolExecutions[idx].name === "web_search" && !event.isError) {
+                const details = (result as { details?: { results?: unknown[] } } | undefined)?.details;
+                if (details?.results) ssePayload.sources = details.results;
+              }
+              controller.enqueue(sse(ssePayload));
             }
             break;
           }
