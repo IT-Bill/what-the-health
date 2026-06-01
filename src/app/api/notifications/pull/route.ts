@@ -11,23 +11,21 @@ export async function POST() {
     return Response.json({ error: "未登录" }, { status: 401 });
   }
 
-  const notification = await prisma.$transaction(async (tx) => {
-    const pending = await tx.notification.findFirst({
-      where: {
-        userId: sessionUser.userId,
-        deliveredAt: null,
-      },
-      orderBy: { createdAt: "asc" },
-    });
+  const pending = await prisma.notification.findFirst({
+    where: {
+      userId: sessionUser.userId,
+      deliveredAt: null,
+    },
+    orderBy: { createdAt: "asc" },
+  });
 
-    if (!pending) {
-      return null;
-    }
+  if (!pending) {
+    return Response.json({ notification: null });
+  }
 
-    return tx.notification.update({
-      where: { id: pending.id },
-      data: { deliveredAt: new Date() },
-    });
+  const notification = await prisma.notification.update({
+    where: { id: pending.id },
+    data: { deliveredAt: new Date() },
   });
 
   return Response.json({
