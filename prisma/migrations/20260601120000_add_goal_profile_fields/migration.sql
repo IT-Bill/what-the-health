@@ -1,0 +1,7 @@
+ALTER TABLE "users"
+ADD COLUMN "targetWeightKg" DOUBLE PRECISION,
+ADD COLUMN "targetBodyFatPct" DOUBLE PRECISION,
+ADD COLUMN "dailyActiveCalories" INTEGER,
+ADD COLUMN "dailyExerciseMinutes" INTEGER,
+ADD COLUMN "dailyStepGoal" INTEGER,
+ADD COLUMN "dailyActiveHours" DOUBLE PRECISION;

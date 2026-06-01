@@ -20,7 +20,8 @@ import {
 } from "@/lib/persona-service";
 import { buildAnswerReferenceContext } from "@/lib/memory/answer-context";
 import { indexChatMessageInBackground } from "@/lib/memory/chat-vector-memory";
-import { buildRoleSystemPrompt } from "@/lib/agent-role";
+import { buildRoleSystemPrompt, isValidAgentRole } from "@/lib/agent-role";
+import { buildGoalParameterSetupState } from "@/lib/goal-parameter-setup";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -461,14 +462,52 @@ export async function POST(request: Request) {
   // Fetch user's agent role preference (only for new sessions)
   const userPrefs = await prisma.user.findUnique({
     where: { id: userId },
-    select: { agentRole: true },
+    select: {
+      agentRole: true,
+      gender: true,
+      heightCm: true,
+      weightKg: true,
+      targetWeightKg: true,
+      targetBodyFatPct: true,
+      dailyActiveCalories: true,
+      dailyExerciseMinutes: true,
+      dailyStepGoal: true,
+      dailyActiveHours: true,
+      primaryGoal: true,
+      primaryGoals: true,
+    },
   });
 
   // Build Alice-style layered context: persona + health goals/data + recent chat + vector memory.
   const answerReferenceContext = await buildAnswerReferenceContext(userId, userMessageText);
-  const rolePrompt = buildRoleSystemPrompt(userPrefs?.agentRole);
+  const agentRole = userPrefs?.agentRole;
+  let normalizedAgentRole: Parameters<typeof buildRoleSystemPrompt>[0] = null;
+  if (agentRole && isValidAgentRole(agentRole)) {
+    normalizedAgentRole = agentRole;
+  }
+  const rolePrompt = buildRoleSystemPrompt(normalizedAgentRole);
+  const goalParameterSetup = userPrefs
+    ? buildGoalParameterSetupState(userPrefs)
+    : null;
+  const goalParameterPrompt = goalParameterSetup && goalParameterSetup.requiresParameters
+    ? goalParameterSetup.missingPrerequisiteFields.length > 0
+      ? [
+          "目标参数尚未设置完成。",
+          "在继续常规建议前，先调用 manage_goal_parameter_setup 的 inspect 确认缺口，然后只追问当前最缺的 1 项基础信息。",
+          `当前缺少的基础信息：${goalParameterSetup.missingPrerequisiteFields.join(", ")}。`,
+          "等用户回复数字后，立刻调用 manage_goal_parameter_setup 的 save 保存；如果身高、体重和主要目标齐了，再把 applyRecommendations 设为 true。",
+        ].join("\n")
+      : goalParameterSetup.missingParameterFields.length > 0
+        ? [
+            "用户的主要目标已经确定，但目标参数还没补齐。",
+            "在给深入建议前，先调用 manage_goal_parameter_setup 的 inspect，然后主动邀请用户现在完成剩余目标参数设置。",
+            `当前缺少的目标参数：${goalParameterSetup.missingParameterFields.join(", ")}。`,
+            "如果用户同意，就调用 manage_goal_parameter_setup 的 save，并优先用 applyRecommendations=true 自动补齐仍为空的参数。",
+          ].join("\n")
+        : ""
+    : "";
   const systemPrompt = await buildSystemPrompt(
-    `${rolePrompt}\n\n${answerReferenceContext}`,
+    `${rolePrompt}${goalParameterPrompt ? `\n\n${goalParameterPrompt}` : ""}\n\n${answerReferenceContext}`,
     userId
   );
 

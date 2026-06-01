@@ -3,8 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "prisma generate",
     "dev": "concurrently \"tsx src/server/asr-proxy.ts\" \"next dev --hostname 0.0.0.0\"",
+    "prebuild": "prisma generate",
     "build": "next build",
+    "prestart": "prisma generate",
     "start": "next start",
     "lint": "eslint",
     "example:notification-agent": "tsx scripts/notification-agent-example.ts",

@@ -1,4 +1,5 @@
 import { embedTextWithBailian } from "@/lib/embeddings/bailian";
+import { getPrimaryGoalLabels } from "@/lib/primary-goals";
 import { prisma } from "@/lib/prisma";
 import { searchVectorDocuments } from "@/lib/vector/pgvector";
 import { MEMORY_VECTOR_NAMESPACE } from "./constants";
@@ -115,7 +116,7 @@ export async function buildAnswerReferenceContext(userId: string, query: string)
   const [user, activeGoals, healthRecords, chatMessages, interactionMemories, vectorMemories] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
-      select: { primaryGoal: true },
+      select: { primaryGoal: true, primaryGoals: true },
     }),
     prisma.goal.findMany({
       where: { userId, archived: false },
@@ -157,7 +158,7 @@ export async function buildAnswerReferenceContext(userId: string, query: string)
   ]);
 
   return formatAnswerReferenceContext({
-    healthGoal: user?.primaryGoal ?? null,
+    healthGoal: user ? getPrimaryGoalLabels(user.primaryGoals, user.primaryGoal).join("、") || null : null,
     activeGoals: activeGoals.map((goal) => goal.title),
     healthRecords,
     chatMessages: chatMessages.map((message) => ({

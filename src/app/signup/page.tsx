@@ -40,7 +40,8 @@ export default function SignUpPage() {
         return;
       }
 
-      router.push("/login");
+      router.replace("/profile");
+      router.refresh();
     } catch {
       setError("网络错误，请稍后重试");
     } finally {
