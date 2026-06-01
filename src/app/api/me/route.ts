@@ -26,6 +26,7 @@ export async function GET() {
         birthday: true,
         heightCm: true,
         weightKg: true,
+        agentRole: true,
       },
     });
 

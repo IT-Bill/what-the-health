@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { isValidAgentRole } from "@/lib/agent-role";
 
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, name, gender, birthday, heightCm, weightKg } = body;
+    const { id, name, gender, birthday, heightCm, weightKg, agentRole } = body;
 
     if (!id) {
       return NextResponse.json(
@@ -19,6 +20,15 @@ export async function PATCH(request: NextRequest) {
     if (birthday !== undefined) data.birthday = birthday ? new Date(birthday) : null;
     if (heightCm !== undefined) data.heightCm = heightCm ? parseInt(heightCm, 10) : null;
     if (weightKg !== undefined) data.weightKg = weightKg ? parseFloat(weightKg) : null;
+    if (agentRole !== undefined) {
+      if (agentRole && !isValidAgentRole(agentRole)) {
+        return NextResponse.json(
+          { error: "无效的 AI 陪伴风格" },
+          { status: 400 }
+        );
+      }
+      data.agentRole = agentRole || null;
+    }
 
     if (Object.keys(data).length === 0) {
       return NextResponse.json(
@@ -40,6 +50,7 @@ export async function PATCH(request: NextRequest) {
         birthday: true,
         heightCm: true,
         weightKg: true,
+        agentRole: true,
       },
     });
 

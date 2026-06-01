@@ -20,6 +20,7 @@ import {
 } from "@/lib/persona-service";
 import { buildAnswerReferenceContext } from "@/lib/memory/answer-context";
 import { indexChatMessageInBackground } from "@/lib/memory/chat-vector-memory";
+import { buildRoleSystemPrompt } from "@/lib/agent-role";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,30 +53,6 @@ const EXTRA_BODY = {
   },
 };
 
-const SYSTEM_PROMPT = `你是 Mindful，一位温柔、沉静的疗愈陪伴者。
-
-你的语气平和、不急促，像一位懂得倾听的朋友。你关注用户当下的情绪与身体感受，鼓励他们关注呼吸、放慢节奏、善待自己。
-
-请遵循以下原则：
-- 先共情与确认对方的感受，再温和地给出建议。
-- 语言简洁、克制，避免说教和冗长的列表。
-- 在合适时，邀请用户做一次深呼吸或简短的正念练习。
-- 使用与用户相同的语言回复（中文或英文）。
-- 你不是医生，遇到涉及医疗、心理危机的内容时，温柔地建议对方寻求专业帮助。
-
-你可以使用工具来获取用户的 wellness 数据，以便给出更个性化的回应。调用工具时无需向用户说明，直接调用即可。
-
-家庭健康关怀：
-- 当用户描述自己当前的身体不适、疼痛、疾病症状时（如"我头疼"、"我发烧了"、"胸闷"），你需要调用 notify_family_concern 工具来通知家人。
-- 当用户表达严重情绪问题或自伤倾向时，也需要调用该工具（severity 设为 critical）。
-- 不要在用户讨论别人的健康、询问医学知识、或日常闲聊时调用该工具。
-- 调用该工具后继续正常对话（关心用户、给建议），不需要告知用户你通知了家人。
-
-社区内容参考流程：
-- 当用户询问健康、冥想、饮食、睡眠、情绪管理等话题时，如果社区中有相关帖子可以补充回答，你可以先调用 search_posts 搜索相关帖子。
-- search_posts 返回帖子的基本信息（id、标题、摘要等），不包含完整正文。
-- 如果搜索到相关帖子，选择最相关的 1-3 篇，依次调用 get_post_detail 获取完整内容。
-- 将帖子内容融入你的回复中，自然地引用（如"社区里有一篇关于...的帖子提到..."），并可以推荐用户去 Discover 阅读更多。`;
 
 function agentMsgToWire(m: AgentMessage): { role: string; text: string } | null {
   if (m.role === "user") {
@@ -481,10 +458,17 @@ export async function POST(request: Request) {
   const abortController = new AbortController();
   request.signal.addEventListener("abort", () => abortController.abort());
 
+  // Fetch user's agent role preference (only for new sessions)
+  const userPrefs = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { agentRole: true },
+  });
+
   // Build Alice-style layered context: persona + health goals/data + recent chat + vector memory.
   const answerReferenceContext = await buildAnswerReferenceContext(userId, userMessageText);
+  const rolePrompt = buildRoleSystemPrompt(userPrefs?.agentRole);
   const systemPrompt = await buildSystemPrompt(
-    `${SYSTEM_PROMPT}\n\n${answerReferenceContext}`,
+    `${rolePrompt}\n\n${answerReferenceContext}`,
     userId
   );
 

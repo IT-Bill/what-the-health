@@ -213,7 +213,7 @@ function Header({ title }: { title: string }) {
         aria-label="通知中心"
         className="text-on-surface hover:opacity-70 transition-opacity active:scale-95 duration-300 flex items-center justify-center w-10 h-10 rounded-full"
       >
-        <Icon name="notifications" />
+        <Icon name="notifications" size={24} />
       </Link>
     </header>
   );
