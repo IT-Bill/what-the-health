@@ -1,4 +1,3 @@
-import { prisma } from "@/lib/prisma";
 import { getAuthCookie, verifyToken } from "@/lib/auth";
 import { uploadImage, UploadError } from "@/lib/upload";
 
@@ -6,8 +5,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/upload/avatar
- * Upload user avatar to S3/MinIO (converted to JPEG, UUIDv7 naming).
+ * POST /api/upload/image
+ * Generic image upload (posts, etc). Converts to JPEG, UUIDv7 naming.
+ * Query param: ?prefix=posts (default "uploads")
  */
 export async function POST(request: Request) {
   const token = await getAuthCookie();
@@ -15,7 +15,14 @@ export async function POST(request: Request) {
   const payload = await verifyToken(token);
   if (!payload) return Response.json({ error: "登录已过期" }, { status: 401 });
 
-  const userId = payload.userId;
+  const { searchParams } = new URL(request.url);
+  const prefix = searchParams.get("prefix") || "uploads";
+
+  // Only allow safe prefixes
+  const allowedPrefixes = ["posts", "uploads"];
+  if (!allowedPrefixes.includes(prefix)) {
+    return Response.json({ error: "无效的上传类型" }, { status: 400 });
+  }
 
   let formData: FormData;
   try {
@@ -30,20 +37,13 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { url } = await uploadImage(file, "avatars");
-
-    // Update user's avatarUrl in DB
-    await prisma.user.update({
-      where: { id: userId },
-      data: { avatarUrl: url },
-    });
-
+    const { url } = await uploadImage(file, prefix);
     return Response.json({ url });
   } catch (err) {
     if (err instanceof UploadError) {
       return Response.json({ error: err.message }, { status: 400 });
     }
-    console.error("[avatar upload]", err);
+    console.error("[image upload]", err);
     return Response.json({ error: "上传失败，请稍后重试" }, { status: 500 });
   }
 }

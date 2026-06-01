@@ -20,7 +20,7 @@ import {
 } from "@/lib/persona-service";
 import { buildAnswerReferenceContext } from "@/lib/memory/answer-context";
 import { indexChatMessageInBackground } from "@/lib/memory/chat-vector-memory";
-import { buildRoleSystemPrompt } from "@/lib/agent-role";
+import { buildRoleSystemPrompt, type AgentRole } from "@/lib/agent-role";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -466,7 +466,7 @@ export async function POST(request: Request) {
 
   // Build Alice-style layered context: persona + health goals/data + recent chat + vector memory.
   const answerReferenceContext = await buildAnswerReferenceContext(userId, userMessageText);
-  const rolePrompt = buildRoleSystemPrompt(userPrefs?.agentRole);
+  const rolePrompt = buildRoleSystemPrompt(userPrefs?.agentRole as AgentRole | undefined);
   const systemPrompt = await buildSystemPrompt(
     `${rolePrompt}\n\n${answerReferenceContext}`,
     userId

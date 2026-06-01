@@ -48,7 +48,7 @@ export async function POST(request: Request) {
   if (!payload) return Response.json({ error: "登录已过期" }, { status: 401 });
 
   const body = await request.json();
-  const { title, excerpt, body: postBody, category } = body;
+  const { title, excerpt, body: postBody, category, coverImage } = body;
 
   if (!title?.trim() || !postBody?.trim()) {
     return Response.json({ error: "标题和正文不能为空" }, { status: 400 });
@@ -77,6 +77,7 @@ export async function POST(request: Request) {
       body: postBody.trim(),
       category,
       categoryIcon: categoryIcons[category] || null,
+      coverImage: coverImage || null,
       readMinutes,
     },
   });
