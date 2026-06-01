@@ -320,7 +320,9 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
   const [activeMenuSessionId, setActiveMenuSessionId] = useState<string | null>(null);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  const [importError, setImportError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const importFileRef = useRef<HTMLInputElement>(null);
 
   // Long-press for session items (mobile-friendly menu trigger)
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -678,6 +680,31 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
     }
   }, [sessionId, startNewSession]);
 
+  const exportSession = useCallback(async (sid: string, title: string) => {
+    setActiveMenuSessionId(null);
+    try {
+      const res = await fetch(`/api/chat/sessions/${sid}/messages`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const messages = (data.session?.messages ?? []).map((m: { role: string; content: string }) => ({
+        role: m.role === "assistant" ? "assistant" : m.role,
+        content: m.content,
+      }));
+      const blob = new Blob(
+        [JSON.stringify({ title, messages }, null, 2)],
+        { type: "application/json" }
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${title.slice(0, 40).replace(/[/\\?%*:|"<>]/g, "-")}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Export session error:", err);
+    }
+  }, []);
+
   const loadSession = useCallback(async (sid: string, opts?: { silent?: boolean }) => {
     loadSessionAbortRef.current?.abort();
     const controller = new AbortController();
@@ -738,6 +765,39 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
       }
     }
   }, [startNewSession]);
+
+  const handleImportFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setImportError(null);
+
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      const res = await fetch("/api/chat/sessions/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(json),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setImportError(data.error ?? "导入失败");
+        return;
+      }
+      const listRes = await fetch("/api/chat/sessions");
+      const listData = await listRes.json();
+      if (listData.sessions) {
+        setSessions(listData.sessions);
+        setCachedSessionList(listData.sessions);
+      }
+      if (data.session?.id) {
+        loadSession(data.session.id);
+      }
+    } catch {
+      setImportError("文件格式无效，请选择有效的对话导出文件");
+    }
+  }, [loadSession]);
 
   // Load sessions on mount before auto-submitting queued voice text.
   useEffect(() => {
@@ -1464,6 +1524,13 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
                         <Icon name={s.pinned ? "keep_off" : "keep"} size={18} />
                         {s.pinned ? "取消置顶" : "置顶"}
                       </button>
+                      <button
+                        onClick={() => exportSession(s.id, s.title)}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-on-surface hover:bg-surface-container-high transition-colors text-left"
+                      >
+                        <Icon name="upload_file" size={18} />
+                        导出对话
+                      </button>
                       <div className="mx-3 my-1 h-px bg-outline-variant/30" />
                       <button
                         onClick={() => deleteSession(s.id)}
@@ -1477,6 +1544,26 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
                 </div>
               );
             })}
+          </div>
+          {/* Import button at sidebar bottom */}
+          <div className="p-2 border-t border-outline-variant/20">
+            <input
+              ref={importFileRef}
+              type="file"
+              accept="application/json,.json"
+              onChange={handleImportFile}
+              className="hidden"
+            />
+            {importError && (
+              <p className="text-xs text-error px-3 pb-2">{importError}</p>
+            )}
+            <button
+              onClick={() => { setImportError(null); importFileRef.current?.click(); }}
+              className="w-full flex items-center gap-3 px-4 py-2.5 rounded-2xl text-on-surface-variant hover:bg-surface-container-high/60 transition-colors"
+            >
+              <Icon name="autorenew" size={18} />
+              <span className="text-sm">导入对话</span>
+            </button>
           </div>
         </aside>
 
