@@ -490,7 +490,7 @@ export function createTools(userId: string): AgentTool[] {
         ], { description: "搜索类型：general（通用）或 news（新闻）" })
       ),
     }),
-    execute: async (params) => {
+    execute: async (_toolCallId, params) => {
       const { query, topic = "general" } = p(params);
       if (!query) throw new Error("query is required");
 
@@ -524,7 +524,7 @@ export function createTools(userId: string): AgentTool[] {
       const summary = [
         data.answer ? `**摘要**: ${data.answer}\n` : "",
         data.results
-          .map((r, i) => `[${i + 1}] **${r.title}**\n${r.content}\n来源: ${r.url}`)
+          .map((r, i) => `[${i + 1}] **${r.title}**\n${r.content}\n来源: [${r.url}](${r.url})`)
           .join("\n\n"),
       ].filter(Boolean).join("\n");
 
