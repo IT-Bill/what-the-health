@@ -59,6 +59,9 @@ interface ToolCallInfo {
   result?: string;
 }
 
+const DEFAULT_INIT_MESSAGE =
+  "欢迎回来。我是 Mindful，你的疗愈陪伴者。在这个当下，你感觉如何？";
+
 interface SseEvent {
   type: string;
   [key: string]: unknown;
@@ -304,8 +307,7 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
     {
       id: "init",
       role: "agent",
-      content:
-        "欢迎回来。我是 Mindful，你的疗愈陪伴者。在这个当下，你感觉如何？",
+      content: DEFAULT_INIT_MESSAGE,
     },
   ]);
   const [input, setInput] = useState("");
@@ -789,6 +791,58 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
     }
   }, [startNewSession]);
 
+  const refreshSessions = useCallback(async () => {
+    const response = await fetch("/api/chat/sessions");
+    if (response.status === 401) {
+      window.location.href = "/login";
+      return;
+    }
+
+    const data = await response.json();
+    if (data?.sessions) {
+      setSessions(data.sessions);
+      setCachedSessionList(data.sessions);
+    }
+  }, []);
+
+  const openProfileSetupSessionIfNeeded = useCallback(async () => {
+    try {
+      const response = await fetch("/api/chat/sessions/new", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "profile-setup" }),
+      });
+
+      if (!response.ok) {
+        return false;
+      }
+
+      const data = await response.json();
+      const sid = data.session?.id as string | undefined;
+
+      if (!sid) {
+        return false;
+      }
+
+      await refreshSessions();
+      await loadSession(sid, { silent: true });
+      setShowSidebar(false);
+      setError(null);
+      return true;
+    } catch (err) {
+      console.error("Open profile setup session error:", err);
+      return false;
+    }
+  }, [loadSession, refreshSessions]);
+
+  const beginNewSession = useCallback(async () => {
+    abortRef.current?.abort();
+    const openedProfileSetup = await openProfileSetupSessionIfNeeded();
+    if (!openedProfileSetup) {
+      await startNewSession();
+    }
+  }, [openProfileSetupSessionIfNeeded, startNewSession]);
+
   const handleImportFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -901,6 +955,11 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
 
           if (shouldRestoreLatest && data.sessions.length > 0) {
             await loadSession(data.sessions[0].id, { silent: true });
+          } else {
+            const openedProfileSetup = await openProfileSetupSessionIfNeeded();
+            if (!openedProfileSetup && data.sessions.length === 0) {
+              startNewSession();
+            }
           }
         }
       } catch (err) {
@@ -918,7 +977,7 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
       controller.abort();
       loadSessionAbortRef.current?.abort();
     };
-  }, [loadSession, initialSessionId]);
+  }, [loadSession, initialSessionId, openProfileSetupSessionIfNeeded, startNewSession]);
 
   useEffect(() => {
     if (!pendingVoiceText || !isSessionBootstrapDone || isStreamingRef.current || isStreaming) {
@@ -1492,7 +1551,9 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
             <button
-              onClick={startNewSession}
+              onClick={() => {
+                void beginNewSession();
+              }}
               className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-primary bg-primary-container/40 hover:bg-primary-container/60 transition-colors"
             >
               <Icon name="add" />
