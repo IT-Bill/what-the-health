@@ -26,6 +26,7 @@ interface MenuItem {
 
 const menuItems: MenuItem[] = [
   { id: "personal", icon: "person", label: "个人信息", href: "/profile/personal-info" },
+  { id: "favorites", icon: "bookmark", label: "我的收藏", href: "/profile/favorites" },
   { id: "health", icon: "watch", label: "健康连接", href: "/profile/health-connections" },
   { id: "health-data", icon: "health_metrics", label: "健康数据", href: "/profile/health-data" },
   { id: "prefs", icon: "settings", label: "偏好设置", href: "/profile/preferences" },
