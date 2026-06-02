@@ -5,6 +5,7 @@
   "scripts": {
     "predev": "prisma generate",
     "dev": "concurrently \"tsx src/server/asr-proxy.ts\" \"next dev --hostname 0.0.0.0\"",
+    "dev:lan": "tsx src/server/dev-server.ts",
     "prebuild": "prisma generate",
     "build": "next build",
     "prestart": "prisma generate",
