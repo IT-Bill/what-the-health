@@ -67,6 +67,7 @@ export function NotificationToast() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ action: "read" }),
+        keepalive: true,
       });
     } catch {
       // Ignore transient failures; the notification center still holds the record.
