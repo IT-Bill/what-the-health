@@ -14,6 +14,13 @@ export async function GET(request: Request) {
   if (category && category !== "all") {
     where.category = category;
   }
+  const q = searchParams.get("q")?.trim();
+  if (q) {
+    where.OR = [
+      { title: { contains: q, mode: "insensitive" } },
+      { excerpt: { contains: q, mode: "insensitive" } },
+    ];
+  }
 
   const posts = await prisma.post.findMany({
     where,

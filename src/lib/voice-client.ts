@@ -16,14 +16,15 @@ export function getAsrWebSocketUrl(): string {
   const configured = process.env.NEXT_PUBLIC_ASR_WS_URL;
   if (configured) return configured;
 
-  const { hostname, host, protocol } = window.location;
-  const isLocalDev = hostname === "localhost" || hostname === "127.0.0.1";
+  const { hostname, protocol } = window.location;
+  const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
 
-  if (isLocalDev) return "ws://localhost:3001";
-
-  if (protocol === "http:") {
-    return `ws://${hostname}:3001`;
+  if (isLocalhost && protocol === "http:") {
+    // Local dev without proxy: connect directly to ASR proxy
+    return "ws://localhost:3001";
   }
 
-  return `wss://${host}/api/asr`;
+  // LAN dev (via dev:lan) or production: proxy through /api/asr on same host
+  const wsProtocol = protocol === "https:" ? "wss:" : "ws:";
+  return `${wsProtocol}//${window.location.host}/api/asr`;
 }
