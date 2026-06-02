@@ -10,7 +10,6 @@
  */
 
 import { createServer } from "http";
-import { parse } from "url";
 import next from "next";
 import { WebSocket, WebSocketServer } from "ws";
 import { spawn } from "child_process";
@@ -57,13 +56,12 @@ async function main() {
   await app.prepare();
 
   const server = createServer((req, res) => {
-    const parsedUrl = parse(req.url ?? "/", true);
-    handle(req, res, parsedUrl);
+    handle(req, res);
   });
 
   // Intercept WebSocket upgrades
   server.on("upgrade", (req, socket, head) => {
-    const pathname = parse(req.url ?? "/").pathname;
+    const pathname = new URL(req.url ?? "/", "http://localhost").pathname;
 
     if (pathname === "/api/asr") {
       // Proxy to internal ASR proxy
