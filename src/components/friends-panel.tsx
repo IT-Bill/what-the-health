@@ -123,6 +123,15 @@ function FriendsList({
 }) {
   const [selectedFriend, setSelectedFriend] = useState<Friend | null>(null);
   const [viewingFriend, setViewingFriend] = useState<Friend | null>(null);
+  const [query, setQuery] = useState("");
+
+  const filtered = query.trim()
+    ? friends.filter(
+        (f) =>
+          f.name.toLowerCase().includes(query.toLowerCase()) ||
+          f.username.toLowerCase().includes(query.toLowerCase())
+      )
+    : friends;
 
   if (loading) {
     return (
@@ -146,8 +155,21 @@ function FriendsList({
 
   return (
     <>
+      <div className="relative">
+        <Icon name="search" size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-outline-variant pointer-events-none" />
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="搜索好友昵称或用户名..."
+          className="w-full bg-surface-container-low rounded-xl pl-10 pr-4 py-3 text-sm text-on-surface placeholder:text-outline-variant focus:ring-1 focus:ring-secondary border-0 transition-all"
+        />
+      </div>
+      {filtered.length === 0 && (
+        <div className="text-center py-8 text-on-surface-variant text-sm">未找到匹配的好友</div>
+      )}
       <div className="flex flex-col gap-3">
-        {friends.map((friend) => (
+        {filtered.map((friend) => (
           <div
             key={friend.id}
             className="bg-primary-container rounded-2xl p-4 ambient-shadow flex items-center gap-3"
