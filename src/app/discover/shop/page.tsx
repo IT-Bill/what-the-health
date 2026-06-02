@@ -11,6 +11,7 @@ export default function ShopPage() {
   const [data, setData] = useState<ShopApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeSubTab, setActiveSubTab] = useState<ShopSubTab>("积分兑换");
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     fetch("/api/shop")
@@ -70,17 +71,43 @@ export default function ShopPage() {
       </div>
 
       {/* Sub Tab Content */}
-      {activeSubTab === "积分兑换" && <ShopProducts products={data.products} balance={data.balance} />}
+      {activeSubTab === "积分兑换" && (
+        <>
+          <div className="relative">
+            <Icon name="search" size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-outline-variant pointer-events-none" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="搜索商品..."
+              className="w-full bg-surface-container-low rounded-xl pl-10 pr-4 py-3 text-sm text-on-surface placeholder:text-outline-variant focus:ring-1 focus:ring-secondary border-0 transition-all"
+            />
+          </div>
+          <ShopProducts products={data.products} balance={data.balance} searchQuery={searchQuery} />
+        </>
+      )}
       {activeSubTab === "赚取规则" && <ShopRules rules={data.rules} />}
       {activeSubTab === "积分明细" && <ShopHistory transactions={data.recentTransactions} />}
     </div>
   );
 }
 
-function ShopProducts({ products, balance }: { products: ShopApiResponse["products"]; balance: number }) {
+function ShopProducts({ products, balance, searchQuery }: { products: ShopApiResponse["products"]; balance: number; searchQuery: string }) {
+  const filtered = searchQuery.trim()
+    ? products.filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : products;
+
+  if (filtered.length === 0) {
+    return (
+      <div className="text-center py-12 text-on-surface-variant">
+        <p>未找到相关商品</p>
+      </div>
+    );
+  }
+
   return (
     <div className="grid grid-cols-2 gap-4">
-      {products.map((product) => (
+      {filtered.map((product) => (
         <ProductCard key={product.id} product={product} balance={balance} />
       ))}
     </div>

@@ -16,6 +16,7 @@ const CATEGORIES = [
 export default function DiscoverPage() {
   const [posts, setPosts] = useState<PostCard[]>([]);
   const [activeCategory, setActiveCategory] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
@@ -28,6 +29,7 @@ export default function DiscoverPage() {
     async function loadPosts() {
       setLoading(true);
       const params = new URLSearchParams({ category: activeCategory });
+      if (searchQuery.trim()) params.set("q", searchQuery.trim());
       try {
         const response = await fetch(`/api/posts?${params}`);
         const data = await response.json();
@@ -42,10 +44,22 @@ export default function DiscoverPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeCategory]);
+  }, [activeCategory, searchQuery]);
 
   return (
     <div className="flex flex-col gap-6 animate-[fadeIn_0.3s_ease] relative">
+      {/* Search */}
+      <div className="relative">
+        <Icon name="search" size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-outline-variant pointer-events-none" />
+        <input
+          type="search"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="搜索文章标题或摘要..."
+          className="w-full bg-surface-container-low rounded-xl pl-10 pr-4 py-3 text-sm text-on-surface placeholder:text-outline-variant focus:ring-1 focus:ring-secondary border-0 transition-all"
+        />
+      </div>
+
       {/* Category Chips */}
       <div className="flex flex-wrap justify-center gap-2">
         {CATEGORIES.map((cat) => (

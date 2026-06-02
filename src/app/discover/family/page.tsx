@@ -29,6 +29,7 @@ export default function FamilyPage() {
   const [createName, setCreateName] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [error, setError] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => { fetchFamilies(); }, []);
 
@@ -55,6 +56,17 @@ export default function FamilyPage() {
     else { const d = await res.json(); setError(d.error || "加入失败"); }
   }
 
+  const filtered = searchQuery.trim()
+    ? families.filter(
+        (f) =>
+          f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          f.members.some((m) =>
+            m.user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            m.user.username.toLowerCase().includes(searchQuery.toLowerCase())
+          )
+      )
+    : families;
+
   return (
     <div className="flex flex-col gap-4">
       {/* Info */}
@@ -65,23 +77,41 @@ export default function FamilyPage() {
         </p>
       </div>
 
+      {/* Search */}
+      {!loading && families.length > 0 && (
+        <div className="relative">
+          <Icon name="search" size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-outline-variant pointer-events-none" />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="搜索家庭名称或成员..."
+            className="w-full bg-surface-container-low rounded-xl pl-10 pr-4 py-3 text-sm text-on-surface placeholder:text-outline-variant focus:ring-1 focus:ring-secondary border-0 transition-all"
+          />
+        </div>
+      )}
+
       {/* Family list */}
       {loading ? (
         <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-secondary border-t-transparent rounded-full animate-spin" /></div>
       ) : families.length > 0 ? (
         <div className="flex flex-col gap-3">
-          {families.map((family) => (
-            <Link key={family.id} href={`/discover/family/${family.id}`} className="bg-primary-container rounded-2xl p-4 ambient-shadow flex items-center gap-4 hover:opacity-90 transition-opacity">
-              <div className="w-11 h-11 rounded-full bg-secondary-container flex items-center justify-center">
-                <Icon name="group" size={22} className="text-secondary" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-on-surface">{family.name}</p>
-                <p className="text-xs text-on-surface-variant mt-0.5">{family.members.length} 位成员 · {ROLE_LABELS[family.myRole]}</p>
-              </div>
-              <Icon name="chevron_right" size={18} className="text-on-surface-variant" />
-            </Link>
-          ))}
+          {filtered.length === 0 ? (
+            <div className="text-center py-8 text-on-surface-variant text-sm">未找到匹配的家庭</div>
+          ) : (
+            filtered.map((family) => (
+              <Link key={family.id} href={`/discover/family/${family.id}`} className="bg-primary-container rounded-2xl p-4 ambient-shadow flex items-center gap-4 hover:opacity-90 transition-opacity">
+                <div className="w-11 h-11 rounded-full bg-secondary-container flex items-center justify-center">
+                  <Icon name="group" size={22} className="text-secondary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-on-surface">{family.name}</p>
+                  <p className="text-xs text-on-surface-variant mt-0.5">{family.members.length} 位成员 · {ROLE_LABELS[family.myRole]}</p>
+                </div>
+                <Icon name="chevron_right" size={18} className="text-on-surface-variant" />
+              </Link>
+            ))
+          )}
         </div>
       ) : (
         <div className="flex flex-col items-center py-10 text-center">
