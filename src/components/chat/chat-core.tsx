@@ -1032,6 +1032,85 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
     }
   }
 
+  async function handleRetry(assistantMsgId: string, userContent: string) {
+    if (isStreamingRef.current) return;
+
+    const newAssistantId = `a-${Date.now()}`;
+
+    // Reset the target assistant message in-place
+    const nextMessages = messagesRef.current.map((m) =>
+      m.id === assistantMsgId
+        ? { ...m, id: newAssistantId, content: "", isStreaming: true, toolCalls: [], sources: undefined, reasoning: undefined }
+        : m
+    );
+    messagesRef.current = nextMessages;
+    setMessages(nextMessages);
+
+    isStreamingRef.current = true;
+    setIsStreaming(true);
+    setCurrentAgentState("thinking");
+    setError(null);
+    assistantAccRef.current = "";
+    reasoningAccRef.current = "";
+    thinkingStartRef.current = Date.now();
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: userContent, sessionId }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? `请求失败 (${res.status})`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data:")) continue;
+          const jsonStr = trimmed.slice(5).trim();
+          if (!jsonStr) continue;
+          try {
+            const event = JSON.parse(jsonStr) as SseEvent;
+            processSseEvent(event, newAssistantId);
+          } catch { /* ignore malformed */ }
+        }
+      }
+    } catch (err) {
+      if (!(err instanceof DOMException && err.name === "AbortError")) {
+        const msg = err instanceof Error ? err.message : "连接出错，请稍后再试。";
+        setError(msg);
+        setMessages((prev) =>
+          prev.map((m) => m.id === newAssistantId ? { ...m, content: `⚠️ ${msg}`, isStreaming: false } : m)
+        );
+      }
+    } finally {
+      isStreamingRef.current = false;
+      setIsStreaming(false);
+      setCurrentAgentState("idle");
+      abortRef.current = null;
+      fetch("/api/chat/sessions")
+        .then((r) => r.json())
+        .then((data) => { if (data.sessions) setSessions(data.sessions); })
+        .catch(console.error);
+    }
+  }
+
   async function handleSend(
     overrideText?: string,
     options: { startNewSession?: boolean } = {}
@@ -1754,7 +1833,7 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
                         message={msg}
                         onRetry={() => {
                           const prevUser = [...messages].slice(0, idx).reverse().find((m) => m.role === "user");
-                          if (prevUser) handleSend(prevUser.content);
+                          if (prevUser) void handleRetry(msg.id, prevUser.content);
                         }}
                         onShowSources={msg.sources?.length ? () => setActiveSources(msg.sources!) : undefined}
                       />
