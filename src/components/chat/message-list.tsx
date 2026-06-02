@@ -7,19 +7,20 @@ import { UserBubble } from "./user-bubble";
 import { Icon } from "@/components/icon";
 
 interface MessageListProps {
-  onRetry: (userContent: string) => void;
+  onRetry: (assistantMsgId: string, userContent: string) => void;
+  onSendSuggestion: (text: string) => void;
   onShowSources: (sources: NonNullable<import("@/lib/chat/types").Message["sources"]>) => void;
 }
 
-export function MessageList({ onRetry, onShowSources }: MessageListProps) {
+export function MessageList({ onRetry, onSendSuggestion, onShowSources }: MessageListProps) {
   const messages = useChatStore((s) => s.messages);
   const isStreaming = useChatStore((s) => s.isStreaming);
   const sessionId = useChatStore((s) => s.sessionId);
 
   const handleRetry = useCallback(
-    (idx: number) => {
+    (msgId: string, idx: number) => {
       const prevUser = [...messages].slice(0, idx).reverse().find((m) => m.role === "user");
-      if (prevUser) onRetry(prevUser.content);
+      if (prevUser) onRetry(msgId, prevUser.content);
     },
     [messages, onRetry]
   );
@@ -40,7 +41,7 @@ export function MessageList({ onRetry, onShowSources }: MessageListProps) {
             ].map((s) => (
               <button
                 key={s.label}
-                onClick={() => onRetry(s.label)}
+                onClick={() => onSendSuggestion(s.label)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-outline-variant/40 bg-surface-container-low hover:bg-surface-container-high transition-colors text-xs text-on-surface-variant"
               >
                 <Icon name={s.icon} />
@@ -59,7 +60,7 @@ export function MessageList({ onRetry, onShowSources }: MessageListProps) {
               <AgentMessage
                 key={msg.id}
                 message={msg}
-                onRetry={() => handleRetry(idx)}
+                onRetry={() => handleRetry(msg.id, idx)}
                 onShowSources={msg.sources?.length ? () => onShowSources(msg.sources!) : undefined}
               />
             ) : (

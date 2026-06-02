@@ -59,7 +59,7 @@ function readPendingVoiceText(): PendingVoiceText | null {
 
 export default function ChatCore({ initialSessionId }: ChatCoreProps) {
   const showSidebar = useChatStore((s) => s.showSidebar);
-  const { sendMessage } = useChatStream();
+  const { sendMessage, retryMessage } = useChatStream();
   const {
     loadSession,
     startNewSession,
@@ -140,6 +140,13 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
       sendMessage(text, { startNewSession: opts?.startNewSession, imageUrl });
     },
     [sendMessage]
+  );
+
+  const handleRetry = useCallback(
+    (assistantMsgId: string, userContent: string) => {
+      retryMessage(assistantMsgId, userContent);
+    },
+    [retryMessage]
   );
 
   const handleImageSelect = useCallback(
@@ -509,7 +516,11 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
             className="flex-1 w-full px-4 md:px-6 overflow-y-auto no-scrollbar flex flex-col gap-1 pt-4"
           >
             <MessageList
-              onRetry={(text) => {
+              onRetry={(assistantMsgId, userContent) => {
+                markChatActivity();
+                handleRetry(assistantMsgId, userContent);
+              }}
+              onSendSuggestion={(text) => {
                 markChatActivity();
                 handleSend(text);
               }}
