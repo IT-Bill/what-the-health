@@ -167,6 +167,7 @@ export async function checkHealthAnomalies(userId: string) {
               body: rule.template(record.value, record.unit),
               source: "family-health-alert",
               actionUrl: `/discover/family/${membership.familyId}`,
+              priority: "urgent",
               metadata: {
                 alertId: alert.id,
                 familyId: membership.familyId,
@@ -229,6 +230,7 @@ export async function triggerChatConcernAlert(
           body: concern.content,
           source: "family-chat-concern",
           actionUrl: `/discover/family/${membership.familyId}`,
+          priority: "urgent",
           metadata: {
             alertId: alert.id,
             familyId: membership.familyId,

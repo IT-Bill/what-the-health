@@ -17,6 +17,7 @@ import {
 } from "@/lib/voice-events";
 import { getAsrWebSocketUrl, getVoiceUnavailableMessage } from "@/lib/voice-client";
 import { Icon } from "@/components/icon";
+import { NotificationBell } from "@/components/notification-bell";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1349,14 +1350,7 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
         <div className="font-[var(--font-display)] text-2xl font-medium text-primary">
           Mindful
         </div>
-        <a
-          href="/notifications"
-          className="flex items-center justify-center w-9 h-9 rounded-full bg-primary-container text-primary hover:bg-primary-container/80 transition-colors"
-          title="通知中心"
-          aria-label="通知中心"
-        >
-          <Icon name="notifications" />
-        </a>
+        <NotificationBell className="w-9 h-9" />
       </header>
 
       {/* Desktop TopAppBar */}
@@ -1373,14 +1367,7 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
           <Link href="/memory" onClick={prepareRestoreLatestOnReturn} className="text-on-surface-variant hover:opacity-80 transition-opacity h-full flex items-center border-b-2 border-transparent">Memory</Link>
           <Link href="/profile" onClick={prepareRestoreLatestOnReturn} className="text-on-surface-variant hover:opacity-80 transition-opacity h-full flex items-center border-b-2 border-transparent">Profile</Link>
         </nav>
-        <a
-          href="/notifications"
-          className="flex items-center justify-center w-10 h-10 rounded-full bg-primary-container text-primary hover:bg-primary-container/80 transition-colors"
-          title="通知中心"
-          aria-label="通知中心"
-        >
-          <Icon name="notifications" />
-        </a>
+        <NotificationBell />
       </header>
 
       <div className="flex flex-1 min-h-0 overflow-hidden pt-16 md:pt-20">

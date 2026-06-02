@@ -457,6 +457,7 @@ export function createTools(userId: string): AgentTool[] {
               body: content,
               source: "family-chat-concern",
               actionUrl: `/discover/family/${membership.familyId}`,
+              priority: "urgent",
               metadata: {
                 alertId: alert.id,
                 familyId: membership.familyId,
