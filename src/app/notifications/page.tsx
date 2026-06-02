@@ -177,7 +177,7 @@ function NotificationCard({
   onDelete: (id: string) => void;
 }) {
   return (
-    <article className={`relative rounded-2xl px-4 py-4 transition-colors duration-300 ${item.unread ? "bg-secondary-container/25" : ""}`}>
+    <article className={`relative rounded-2xl px-4 py-3 mb-1 transition-colors duration-300 ${item.unread ? "bg-secondary-container/25" : ""}`}>
       <div className="flex items-start gap-3">
         <div className="mt-1.5 w-2 flex-shrink-0">
           {item.unread && <span className="block w-2 h-2 rounded-full bg-secondary" />}
