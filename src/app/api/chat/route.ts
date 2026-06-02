@@ -20,21 +20,22 @@ import {
 } from "@/lib/persona-service";
 import { buildAnswerReferenceContext } from "@/lib/memory/answer-context";
 import { indexChatMessageInBackground } from "@/lib/memory/chat-vector-memory";
-import { buildRoleSystemPrompt, type AgentRole } from "@/lib/agent-role";
+import { buildRoleSystemPrompt, isValidAgentRole } from "@/lib/agent-role";
+import { buildGoalParameterSetupState } from "@/lib/goal-parameter-setup";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MODEL: Model<"openai-completions"> = {
-  id: "GLM-5.1",
-  name: "GLM-5.1 (AI Ping)",
+  id: "Kimi-K2.6",
+  name: "Kimi K2.6 (AI Ping)",
   api: "openai-completions",
   provider: "aiping",
   baseUrl: "https://aiping.cn/api/v1",
   reasoning: true,
-  input: ["text"],
+  input: ["text", "image"],
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-  contextWindow: 128000,
+  contextWindow: 256000,
   maxTokens: 32000,
 };
 
@@ -56,7 +57,19 @@ const EXTRA_BODY = {
 
 function agentMsgToWire(m: AgentMessage): { role: string; text: string } | null {
   if (m.role === "user") {
-    return { role: "user", text: m.content as string };
+    const content = m.content;
+    if (typeof content === "string") {
+      return { role: "user", text: content };
+    }
+    // Array content: extract text parts
+    if (Array.isArray(content)) {
+      const text = content
+        .filter((c) => c.type === "text")
+        .map((c) => (c as { text: string }).text)
+        .join("");
+      return { role: "user", text };
+    }
+    return { role: "user", text: "" };
   }
   if (m.role === "assistant") {
     const text = m.content
@@ -76,10 +89,10 @@ function agentMsgToWire(m: AgentMessage): { role: string; text: string } | null 
 }
 
 function wireToAgentMsgs(
-  msgs: { role: "user" | "assistant"; text: string }[]
+  msgs: { role: "user" | "assistant"; text: string; imageUrl?: string | null }[]
 ): AgentMessage[] {
   return msgs
-    .filter((m) => m.text.trim())
+    .filter((m) => m.text.trim() || m.imageUrl)
     .map((m) => {
       if (m.role === "user") {
         return { role: "user", content: m.text, timestamp: Date.now() };
@@ -102,6 +115,22 @@ function wireToAgentMsgs(
         timestamp: Date.now(),
       } as AgentMessage;
     });
+}
+
+async function imageUrlToBase64(imageUrl: string): Promise<{ data: string; mimeType: string } | null> {
+  try {
+    // imageUrl is like "/api/assets/chat/xxx.jpg"
+    // Need to resolve to full URL for fetch
+    const url = imageUrl.startsWith("http") ? imageUrl : `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}${imageUrl}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const buffer = Buffer.from(await res.arrayBuffer());
+    const base64 = buffer.toString("base64");
+    const contentType = res.headers.get("content-type") || "image/jpeg";
+    return { data: base64, mimeType: contentType };
+  } catch {
+    return null;
+  }
 }
 
 function sse(data: unknown): string {
@@ -381,7 +410,7 @@ export async function POST(request: Request) {
   }
   const userId = payload.userId;
 
-  let body: { message?: string; sessionId?: string };
+  let body: { message?: string; sessionId?: string; imageUrl?: string };
   try {
     body = await request.json();
   } catch {
@@ -391,8 +420,8 @@ export async function POST(request: Request) {
     });
   }
 
-  const userMessageText = body.message?.trim();
-  if (!userMessageText) {
+  const userMessageText = body.message?.trim() || "";
+  if (!userMessageText && !body.imageUrl) {
     return new Response(sse({ type: "error", message: "消息不能为空" }), {
       status: 400,
       headers: { "Content-Type": "text/event-stream" },
@@ -401,7 +430,7 @@ export async function POST(request: Request) {
 
   // Resolve or create session
   let sessionId = body.sessionId;
-  let existingMessages: { role: "user" | "assistant"; text: string }[] = [];
+  let existingMessages: { role: "user" | "assistant"; text: string; imageUrl?: string | null }[] = [];
 
   if (sessionId) {
     const session = await prisma.chatSession.findUnique({
@@ -414,6 +443,7 @@ export async function POST(request: Request) {
       existingMessages = session.messages.map((m) => ({
         role: m.role.toLowerCase() as "user" | "assistant",
         text: m.content,
+        imageUrl: m.imageUrl,
       }));
     } else {
       sessionId = undefined;
@@ -433,6 +463,7 @@ export async function POST(request: Request) {
       sessionId,
       role: "user",
       content: userMessageText,
+      imageUrl: body.imageUrl || undefined,
     },
   });
   indexChatMessageInBackground({
@@ -450,7 +481,7 @@ export async function POST(request: Request) {
     where: { id: sessionId },
     data: {
       updatedAt: new Date(),
-      ...(msgCount <= 2 ? { title: userMessageText.slice(0, 30) } : {}),
+      ...(msgCount <= 2 ? { title: userMessageText.slice(0, 30) || "[图片]" } : {}),
     },
   });
 
@@ -461,14 +492,52 @@ export async function POST(request: Request) {
   // Fetch user's agent role preference (only for new sessions)
   const userPrefs = await prisma.user.findUnique({
     where: { id: userId },
-    select: { agentRole: true },
+    select: {
+      agentRole: true,
+      gender: true,
+      heightCm: true,
+      weightKg: true,
+      targetWeightKg: true,
+      targetBodyFatPct: true,
+      dailyActiveCalories: true,
+      dailyExerciseMinutes: true,
+      dailyStepGoal: true,
+      dailyActiveHours: true,
+      primaryGoal: true,
+      primaryGoals: true,
+    },
   });
 
   // Build Alice-style layered context: persona + health goals/data + recent chat + vector memory.
   const answerReferenceContext = await buildAnswerReferenceContext(userId, userMessageText);
-  const rolePrompt = buildRoleSystemPrompt(userPrefs?.agentRole as AgentRole | undefined);
+  const agentRole = userPrefs?.agentRole;
+  let normalizedAgentRole: Parameters<typeof buildRoleSystemPrompt>[0] = null;
+  if (agentRole && isValidAgentRole(agentRole)) {
+    normalizedAgentRole = agentRole;
+  }
+  const rolePrompt = buildRoleSystemPrompt(normalizedAgentRole);
+  const goalParameterSetup = userPrefs
+    ? buildGoalParameterSetupState(userPrefs)
+    : null;
+  const goalParameterPrompt = goalParameterSetup && goalParameterSetup.requiresParameters
+    ? goalParameterSetup.missingPrerequisiteFields.length > 0
+      ? [
+          "目标参数尚未设置完成。",
+          "在继续常规建议前，先调用 manage_goal_parameter_setup 的 inspect 确认缺口，然后只追问当前最缺的 1 项基础信息。",
+          `当前缺少的基础信息：${goalParameterSetup.missingPrerequisiteFields.join(", ")}。`,
+          "等用户回复数字后，立刻调用 manage_goal_parameter_setup 的 save 保存；如果身高、体重和主要目标齐了，再把 applyRecommendations 设为 true。",
+        ].join("\n")
+      : goalParameterSetup.missingParameterFields.length > 0
+        ? [
+            "用户的主要目标已经确定，但目标参数还没补齐。",
+            "在给深入建议前，先调用 manage_goal_parameter_setup 的 inspect，然后主动邀请用户现在完成剩余目标参数设置。",
+            `当前缺少的目标参数：${goalParameterSetup.missingParameterFields.join(", ")}。`,
+            "如果用户同意，就调用 manage_goal_parameter_setup 的 save，并优先用 applyRecommendations=true 自动补齐仍为空的参数。",
+          ].join("\n")
+        : ""
+    : "";
   const systemPrompt = await buildSystemPrompt(
-    `${rolePrompt}\n\n${answerReferenceContext}`,
+    `${rolePrompt}${goalParameterPrompt ? `\n\n${goalParameterPrompt}` : ""}\n\n${answerReferenceContext}`,
     userId
   );
 
@@ -649,8 +718,17 @@ export async function POST(request: Request) {
         }
       });
 
+      // Prepare image content for current message if present
+      let imageContent: { type: "image"; data: string; mimeType: string }[] | undefined;
+      if (body.imageUrl) {
+        const img = await imageUrlToBase64(body.imageUrl);
+        if (img) {
+          imageContent = [{ type: "image", data: img.data, mimeType: img.mimeType }];
+        }
+      }
+
       try {
-        await agent.prompt(userMessageText);
+        await agent.prompt(userMessageText, imageContent);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "未知错误";
         controller.enqueue(sse({ type: "error", message: msg }));

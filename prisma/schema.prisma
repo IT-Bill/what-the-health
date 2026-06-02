@@ -183,6 +183,12 @@ model User {
   birthday     DateTime? @db.Date
   heightCm     Int?
   weightKg     Float?
+  targetWeightKg      Float?
+  targetBodyFatPct    Float?
+  dailyActiveCalories Int?
+  dailyExerciseMinutes Int?
+  dailyStepGoal       Int?
+  dailyActiveHours    Float?
   memberSince  DateTime  @default(now())
 
   // Preferences (design _5)
@@ -190,7 +196,8 @@ model User {
   // Credit balance for the wellness shop (design _6)
   credits              Int     @default(0)
 
-  primaryGoal GoalType?
+  primaryGoal  GoalType?
+  primaryGoals String[] @default([])
   /// AI companion personality role: gentle | coach | sage
   agentRole   String?
   /// Showcase users have their Memory data publicly visible as demos.
@@ -404,6 +411,8 @@ model ChatMessage {
   sessionId    String
   role         ChatRole
   content      String
+  /// URL to uploaded image (e.g. /api/assets/chat/xxx.jpg)
+  imageUrl     String?  @map("image_url")
   /// Optional reasoning/thinking trace kept separate from the visible content.
   reasoning      String?
   /// JSON-serialized ToolCallInfo[] for display in the thinking section.

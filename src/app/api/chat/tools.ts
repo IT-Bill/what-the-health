@@ -1,5 +1,11 @@
 import { Type } from "@sinclair/typebox";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
+import { getPrimaryGoalLabels } from "@/lib/primary-goals";
+import {
+  buildGoalParameterRecommendations,
+  buildGoalParameterSetupState,
+  type GoalParameterField,
+} from "@/lib/goal-parameter-setup";
 import { prisma } from "@/lib/prisma";
 import { getOrCreatePersona } from "@/lib/persona-service";
 import { searchPostsByVector } from "@/lib/posts/post-vector-search";
@@ -65,12 +71,172 @@ export function createTools(userId: string): AgentTool[] {
           weightKg: true,
           memberSince: true,
           primaryGoal: true,
+          primaryGoals: true,
         },
       });
       if (!user) throw new Error("用户不存在");
+      const primaryGoalLabels = getPrimaryGoalLabels(user.primaryGoals, user.primaryGoal);
       return {
-        content: [{ type: "text" as const, text: JSON.stringify(user, null, 2) }],
-        details: user,
+        content: [{ type: "text" as const, text: JSON.stringify({ ...user, primaryGoalLabels }, null, 2) }],
+        details: { ...user, primaryGoalLabels },
+      };
+    },
+  };
+
+  const manageGoalParameterSetupTool: AgentTool = {
+    name: "manage_goal_parameter_setup",
+    label: "设置目标参数",
+    description:
+      "帮助用户在聊天里完成目标参数设置。先用 inspect 查看用户当前缺少哪些信息。" +
+      "如果主要目标需要参数，但缺少身高或体重，先向用户提问并拿到 cm / kg 数字，再用 save 保存。" +
+      "一旦身高、体重和主要目标齐全，就可以在 save 时把 applyRecommendations 设为 true，自动为仍为空的目标参数填入推荐值。" +
+      "除非用户明确要求覆盖，否则不要覆盖已有参数。",
+    parameters: Type.Object({
+      action: Type.Union([Type.Literal("inspect"), Type.Literal("save")]),
+      heightCm: Type.Optional(Type.Number({ description: "身高，单位 cm" })),
+      weightKg: Type.Optional(Type.Number({ description: "体重，单位 kg" })),
+      targetWeightKg: Type.Optional(Type.Number({ description: "目标体重，单位 kg" })),
+      targetBodyFatPct: Type.Optional(Type.Number({ description: "目标体脂，单位 %" })),
+      dailyActiveCalories: Type.Optional(Type.Number({ description: "每日活动热量，单位 kcal" })),
+      dailyExerciseMinutes: Type.Optional(Type.Number({ description: "每日运动时间，单位 min" })),
+      dailyStepGoal: Type.Optional(Type.Number({ description: "每日步数" })),
+      dailyActiveHours: Type.Optional(Type.Number({ description: "每日活动小时数，单位 h" })),
+      applyRecommendations: Type.Optional(
+        Type.Boolean({
+          description: "保存后，是否自动为仍为空的参数填入推荐值",
+          default: true,
+        }),
+      ),
+      overwriteExisting: Type.Optional(
+        Type.Boolean({
+          description: "是否覆盖已有参数。默认 false。",
+          default: false,
+        }),
+      ),
+    }),
+    execute: async (_toolCallId, params) => {
+      const input = params as {
+        action: "inspect" | "save";
+        heightCm?: number;
+        weightKg?: number;
+        targetWeightKg?: number;
+        targetBodyFatPct?: number;
+        dailyActiveCalories?: number;
+        dailyExerciseMinutes?: number;
+        dailyStepGoal?: number;
+        dailyActiveHours?: number;
+        applyRecommendations?: boolean;
+        overwriteExisting?: boolean;
+      };
+
+      const select = {
+        id: true,
+        gender: true,
+        heightCm: true,
+        weightKg: true,
+        targetWeightKg: true,
+        targetBodyFatPct: true,
+        dailyActiveCalories: true,
+        dailyExerciseMinutes: true,
+        dailyStepGoal: true,
+        dailyActiveHours: true,
+        primaryGoal: true,
+        primaryGoals: true,
+      } as const;
+
+      const currentUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select,
+      });
+
+      if (!currentUser) {
+        throw new Error("用户不存在");
+      }
+
+      if (input.action === "inspect") {
+        const setup = buildGoalParameterSetupState(currentUser);
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(setup, null, 2) }],
+          details: setup,
+        };
+      }
+
+      const explicitFields: Partial<Record<GoalParameterField | "heightCm" | "weightKg", number | null>> = {};
+      if (input.heightCm !== undefined) explicitFields.heightCm = input.heightCm > 0 ? Math.round(input.heightCm) : null;
+      if (input.weightKg !== undefined) explicitFields.weightKg = input.weightKg > 0 ? input.weightKg : null;
+      if (input.targetWeightKg !== undefined) explicitFields.targetWeightKg = input.targetWeightKg > 0 ? input.targetWeightKg : null;
+      if (input.targetBodyFatPct !== undefined) explicitFields.targetBodyFatPct = input.targetBodyFatPct > 0 ? input.targetBodyFatPct : null;
+      if (input.dailyActiveCalories !== undefined) explicitFields.dailyActiveCalories = input.dailyActiveCalories > 0 ? Math.round(input.dailyActiveCalories) : null;
+      if (input.dailyExerciseMinutes !== undefined) explicitFields.dailyExerciseMinutes = input.dailyExerciseMinutes > 0 ? Math.round(input.dailyExerciseMinutes) : null;
+      if (input.dailyStepGoal !== undefined) explicitFields.dailyStepGoal = input.dailyStepGoal > 0 ? Math.round(input.dailyStepGoal) : null;
+      if (input.dailyActiveHours !== undefined) explicitFields.dailyActiveHours = input.dailyActiveHours > 0 ? input.dailyActiveHours : null;
+
+      const candidateProfile = {
+        ...currentUser,
+        ...explicitFields,
+      };
+
+      const explicitGoalFields = new Set(Object.keys(explicitFields));
+      const autoFilledRecommendations: GoalParameterField[] = [];
+      const data: Record<string, number | null> = { ...explicitFields };
+
+      if (input.applyRecommendations !== false) {
+        for (const recommendation of buildGoalParameterRecommendations(candidateProfile)) {
+          const currentValue = candidateProfile[recommendation.field];
+          const shouldApply =
+            !explicitGoalFields.has(recommendation.field) &&
+            (input.overwriteExisting === true || currentValue == null);
+
+          if (!shouldApply) {
+            continue;
+          }
+
+          data[recommendation.field] = recommendation.value;
+          autoFilledRecommendations.push(recommendation.field);
+        }
+      }
+
+      if (Object.keys(data).length === 0) {
+        const setup = buildGoalParameterSetupState(currentUser);
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ updated: false, setup }, null, 2) }],
+          details: { updated: false, setup },
+        };
+      }
+
+      const updatedUser = await prisma.user.update({
+        where: { id: userId },
+        data,
+        select,
+      });
+
+      const setup = buildGoalParameterSetupState(updatedUser);
+      const recommendations = buildGoalParameterRecommendations(updatedUser).filter((item) =>
+        autoFilledRecommendations.includes(item.field),
+      );
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify(
+              {
+                updated: true,
+                savedFields: Object.keys(data),
+                autoFilledRecommendations: recommendations,
+                setup,
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+        details: {
+          updated: true,
+          savedFields: Object.keys(data),
+          autoFilledRecommendations: recommendations,
+          setup,
+        },
       };
     },
   };
@@ -539,6 +705,7 @@ export function createTools(userId: string): AgentTool[] {
   return [
     getUserPersonaTool,
     getUserProfileTool,
+    manageGoalParameterSetupTool,
     getRecentMoodCheckinsTool,
     getGoalsAndHabitsTool,
     getWellnessReportsTool,

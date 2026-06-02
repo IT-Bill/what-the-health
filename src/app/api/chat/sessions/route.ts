@@ -32,7 +32,7 @@ export async function GET() {
         messages: {
           orderBy: { createdAt: "desc" },
           take: 1,
-          select: { content: true, role: true, createdAt: true },
+          select: { content: true, imageUrl: true, role: true, createdAt: true },
         },
       },
     });
@@ -44,7 +44,7 @@ export async function GET() {
         pinned: s.pinned,
         messageCount: s._count.messages,
         updatedAt: s.updatedAt.toISOString(),
-        lastMessage: s.messages[0]?.content.slice(0, 60) ?? null,
+        lastMessage: (s.messages[0]?.content.slice(0, 60) || (s.messages[0]?.imageUrl ? "[图片]" : null)) ?? null,
       })),
     });
   } catch (error) {

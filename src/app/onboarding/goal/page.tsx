@@ -1,45 +1,95 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icon";
-
-interface GoalOption {
-  id: string;
-  title: string;
-  description: string;
-  image: string;
-}
-
-const goalOptions: GoalOption[] = [
-  {
-    id: "build_muscle",
-    title: "Build Muscle",
-    description: "Enhance strength and physical resilience.",
-    image: "/api/assets/static/pages/goal-muscle.jpg",
-  },
-  {
-    id: "lose_weight",
-    title: "Lose Weight",
-    description: "Achieve balance and lightness in your body.",
-    image: "/api/assets/static/pages/goal-weight.jpg",
-  },
-  {
-    id: "healthy_habits",
-    title: "Healthy Habits",
-    description: "Cultivate consistency and long-term wellbeing.",
-    image: "/api/assets/static/pages/goal-habits.jpg",
-  },
-];
+import {
+  PRIMARY_GOAL_OPTIONS,
+  getStoredPrimaryGoals,
+  requiresPrimaryGoalParameters,
+  type PrimaryGoalId,
+} from "@/lib/primary-goals";
 
 export default function OnboardingGoalPage() {
   const router = useRouter();
-  const [selectedGoal, setSelectedGoal] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [selectedGoals, setSelectedGoals] = useState<PrimaryGoalId[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetch("/api/me")
+      .then(async (res) => {
+        if (!res.ok) {
+          throw new Error("unauthorized");
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (!data.user) {
+          throw new Error("missing-user");
+        }
+        setUserId(data.user.id);
+        setSelectedGoals(getStoredPrimaryGoals(data.user.primaryGoals, data.user.primaryGoal));
+      })
+      .catch(() => router.replace("/login"))
+      .finally(() => setLoading(false));
+  }, [router]);
+
+  function toggleGoal(goalId: PrimaryGoalId) {
+    setSelectedGoals((current) =>
+      current.includes(goalId)
+        ? current.filter((value) => value !== goalId)
+        : [...current, goalId],
+    );
+  }
+
+  async function handleSubmit() {
+    if (!userId || selectedGoals.length === 0) {
+      setError("请至少选择一个目标。");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+
+    try {
+      const response = await fetch("/api/user", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: userId, primaryGoals: selectedGoals }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || "保存失败，请稍后重试。");
+        return;
+      }
+
+      const nextPath = requiresPrimaryGoalParameters(selectedGoals, null)
+        ? "/profile/personal-info?next=goal-params"
+        : "/profile/personal-info";
+      router.replace(nextPath);
+      router.refresh();
+    } catch {
+      setError("网络错误，请稍后重试。");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-surface flex items-center justify-center">
+        <span className="text-on-surface-variant">加载中...</span>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen flex flex-col pb-32 relative">
-      {/* TopAppBar */}
-      <header className="w-full top-0 sticky bg-surface flex items-center justify-between px-6 py-4 z-40">
+    <div className="min-h-screen flex flex-col bg-surface pb-32">
+      <header className="sticky top-0 z-40 flex items-center justify-between bg-surface px-6 py-4">
         <button
           onClick={() => router.back()}
           aria-label="Close"
@@ -53,75 +103,74 @@ export default function OnboardingGoalPage() {
         <div className="w-10" />
       </header>
 
-      {/* Main Content */}
-      <main className="flex-grow flex flex-col items-center px-6 md:px-16 pt-12 md:pt-24 max-w-4xl mx-auto w-full">
-        <div className="text-center mb-16 md:mb-24">
-          <h2 className="font-[var(--font-display)] text-3xl md:text-4xl font-medium text-on-surface mb-4">
-            What is your primary goal?
+      <main className="flex-1 w-full max-w-5xl mx-auto px-6 md:px-12 pt-10 md:pt-16">
+        <div className="mx-auto max-w-2xl text-center">
+          <h2 className="font-[var(--font-display)] text-3xl md:text-5xl font-medium text-on-surface">
+            选择你的主要目标
           </h2>
-          <p className="text-lg text-on-surface-variant max-w-lg mx-auto leading-relaxed">
-            Select the path that best aligns with your current wellness journey.
-            We&apos;ll tailor your experience accordingly.
+          <p className="mt-4 text-base md:text-lg leading-8 text-on-surface-variant">
+            参考这个方向，我们会为你准备更贴近当下状态的内容与建议。支持多选。
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full md:w-5/6 mx-auto">
-          {goalOptions.map((goal, index) => (
-            <label
-              key={goal.id}
-              className={`group relative cursor-pointer ${
-                index === 2 ? "md:col-span-2 md:w-1/2 md:mx-auto" : ""
-              }`}
-            >
-              <input
-                type="radio"
-                name="goal"
-                value={goal.id}
-                checked={selectedGoal === goal.id}
-                onChange={() => setSelectedGoal(goal.id)}
-                className="peer sr-only"
-              />
-              <div className="h-full bg-primary-container rounded-2xl md:rounded-3xl p-8 ambient-shadow transition-all duration-500 ease-out border border-transparent peer-checked:border-secondary peer-checked:bg-surface-container-low hover:bg-surface-container-low flex flex-col items-center justify-center text-center gap-6">
-                <div className="w-24 h-24 rounded-full bg-surface flex items-center justify-center mb-2 shadow-sm group-hover:scale-105 transition-transform duration-500 overflow-hidden">
-                  <img
-                    src={goal.image}
-                    alt={goal.title}
-                    className="w-full h-full object-cover rounded-full opacity-80 mix-blend-multiply"
-                  />
+        <div className="mt-10 grid grid-cols-2 gap-4 md:mt-14 md:grid-cols-4 md:gap-6">
+          {PRIMARY_GOAL_OPTIONS.map((goal) => {
+            const selected = selectedGoals.includes(goal.id);
+
+            return (
+              <button
+                key={goal.id}
+                type="button"
+                onClick={() => toggleGoal(goal.id)}
+                className={`relative flex min-h-44 flex-col rounded-[1.75rem] border p-5 text-left transition-all duration-300 md:min-h-52 md:p-6 ${
+                  selected
+                    ? "border-secondary bg-secondary-container"
+                    : "border-transparent bg-primary-container hover:bg-surface-container-low"
+                }`}
+              >
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-surface text-primary shadow-sm md:h-14 md:w-14">
+                  <Icon name={goal.icon} size={26} />
                 </div>
-                <div>
-                  <h3 className="font-[var(--font-display)] text-2xl font-medium text-on-surface mb-2">
-                    {goal.title}
-                  </h3>
-                  <p className="text-base text-on-surface-variant">
-                    {goal.description}
-                  </p>
-                </div>
-                {/* Check indicator */}
-                <div className="absolute top-6 right-6 w-6 h-6 rounded-full border-2 border-outline-variant peer-checked:border-secondary peer-checked:bg-secondary flex items-center justify-center transition-colors">
-                  <Icon name="check" className="text-white text-[16px] opacity-0 peer-checked:opacity-100" />
-                </div>
-              </div>
-            </label>
-          ))}
+                <h3 className="mt-6 font-[var(--font-display)] text-lg md:text-xl font-medium text-on-surface">
+                  {goal.title}
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-on-surface-variant">
+                  {goal.description}
+                </p>
+                <span
+                  className={`absolute right-4 top-4 flex h-6 w-6 items-center justify-center rounded-full border text-white ${
+                    selected
+                      ? "border-secondary bg-secondary"
+                      : "border-outline-variant bg-transparent text-transparent"
+                  }`}
+                >
+                  <Icon name="check" size={14} />
+                </span>
+              </button>
+            );
+          })}
         </div>
+
+        {error ? (
+          <p className="mt-6 text-center text-sm text-error">{error}</p>
+        ) : null}
       </main>
 
-      {/* Bottom Navigation Bar */}
-      <nav className="fixed bottom-0 left-0 w-full z-50 flex justify-between items-center px-6 py-4 bg-surface/80 backdrop-blur-xl border-t border-outline-variant/30">
+      <nav className="fixed bottom-0 left-0 z-50 flex w-full items-center justify-between border-t border-outline-variant/30 bg-surface/85 px-6 py-4 backdrop-blur-xl">
         <button
           onClick={() => router.back()}
-          className="flex flex-col items-center justify-center text-on-surface-variant px-6 py-2 hover:opacity-80 transition-opacity text-sm font-medium"
+          className="flex flex-col items-center justify-center px-6 py-2 text-sm font-medium text-on-surface-variant hover:opacity-80 transition-opacity"
         >
           <Icon name="arrow_back" />
-          Back
+          返回
         </button>
         <button
-          onClick={() => router.push("/")}
-          className="flex flex-col items-center justify-center bg-primary text-on-primary rounded-full px-6 py-2 hover:bg-primary/90 transition-all duration-300 active:scale-95 text-sm font-medium"
+          onClick={handleSubmit}
+          disabled={saving || selectedGoals.length === 0}
+          className="flex flex-col items-center justify-center rounded-full bg-primary px-6 py-2 text-sm font-medium text-on-primary transition-all duration-300 hover:bg-primary/90 disabled:opacity-50"
         >
           <Icon name="arrow_forward" />
-          Next
+          {saving ? "保存中" : "完成"}
         </button>
       </nav>
     </div>

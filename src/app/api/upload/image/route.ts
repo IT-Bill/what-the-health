@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   const prefix = searchParams.get("prefix") || "uploads";
 
   // Only allow safe prefixes
-  const allowedPrefixes = ["posts", "uploads"];
+  const allowedPrefixes = ["posts", "uploads", "chat"];
   if (!allowedPrefixes.includes(prefix)) {
     return Response.json({ error: "无效的上传类型" }, { status: 400 });
   }
