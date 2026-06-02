@@ -6,20 +6,6 @@ import { getSessionUser } from "@/lib/session-user";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function hasNotificationSecret(request: Request) {
-  const expected = process.env.NOTIFICATION_API_SECRET;
-  if (!expected) {
-    return false;
-  }
-
-  const authHeader = request.headers.get("authorization");
-  const bearerToken = authHeader?.startsWith("Bearer ")
-    ? authHeader.slice("Bearer ".length)
-    : null;
-  const provided = bearerToken ?? request.headers.get("x-notification-secret");
-  return provided === expected;
-}
-
 export async function GET(request: Request) {
   const sessionUser = await getSessionUser();
   if (!sessionUser) {
@@ -62,18 +48,17 @@ export async function POST(request: Request) {
   }
 
   const sessionUser = await getSessionUser();
-  const trustedCaller = hasNotificationSecret(request);
   const targetsSelf =
     sessionUser &&
     ((!body.userId && !body.username) ||
       body.userId === sessionUser.userId ||
       body.username === sessionUser.username);
 
-  if (!sessionUser && !trustedCaller) {
-    return Response.json({ error: "需要登录或提供通知密钥" }, { status: 401 });
+  if (!sessionUser) {
+    return Response.json({ error: "未登录" }, { status: 401 });
   }
 
-  if (!targetsSelf && !trustedCaller) {
+  if (!targetsSelf) {
     return Response.json({ error: "无权向其他用户发送通知" }, { status: 403 });
   }
 
