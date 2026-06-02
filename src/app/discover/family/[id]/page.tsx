@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { Icon } from "@/components/icon";
+import { ALERT_RULE_INFO, SEVERITY_META } from "@/lib/alert-rules-info";
 
 interface FamilyMember {
   id: string;
@@ -72,6 +73,7 @@ export default function FamilyDetailPage() {
   const [copied, setCopied] = useState(false);
   const [healthData, setHealthData] = useState<HealthViewData | null>(null);
   const [healthLoading, setHealthLoading] = useState(false);
+  const [showAlertRules, setShowAlertRules] = useState(false);
 
   useEffect(() => {
     fetchFamily();
@@ -163,6 +165,13 @@ export default function FamilyDetailPage() {
           <Icon name="arrow_back" size={24} />
         </Link>
         <h1 className="font-[var(--font-display)] text-xl font-medium text-on-surface ml-2">{family.name}</h1>
+        <button
+          onClick={() => setShowAlertRules(true)}
+          className="ml-auto w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-variant/30 transition-colors"
+          title="预警规则说明"
+        >
+          <Icon name="help_outline" size={20} />
+        </button>
       </header>
 
       <main className="flex-1 px-6 py-6 max-w-screen-md mx-auto w-full flex flex-col gap-6 pb-24">
@@ -371,6 +380,53 @@ export default function FamilyDetailPage() {
           </section>
         )}
       </main>
+
+      {/* Alert Rules Sheet */}
+      {showAlertRules && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-inverse-surface/30 backdrop-blur-sm" onClick={() => setShowAlertRules(false)}>
+          <div className="bg-surface w-full sm:w-[480px] sm:rounded-2xl rounded-t-2xl max-h-[85vh] overflow-y-auto flex flex-col animate-[fadeIn_0.2s_ease]" onClick={(e) => e.stopPropagation()}>
+            <div className="sticky top-0 bg-surface px-6 pt-5 pb-3 flex items-center justify-between border-b border-outline-variant/10">
+              <div>
+                <h2 className="text-base font-medium text-on-surface">健康预警规则</h2>
+                <p className="text-xs text-on-surface-variant mt-0.5">检测到以下指标异常时，关怀者将收到通知</p>
+              </div>
+              <button onClick={() => setShowAlertRules(false)} className="text-on-surface-variant hover:text-on-surface p-1">
+                <Icon name="close" size={20} />
+              </button>
+            </div>
+            <div className="px-6 py-4 flex flex-col gap-2">
+              {(["critical", "warning", "info"] as const).map((severity) => {
+                const meta = SEVERITY_META[severity];
+                const rules = ALERT_RULE_INFO.filter((r) => r.severity === severity);
+                return (
+                  <section key={severity}>
+                    <div className={`flex items-center gap-2 py-2 mb-1`}>
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${meta.dot}`} />
+                      <span className={`text-xs font-medium uppercase tracking-widest ${meta.color}`}>{meta.label}</span>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      {rules.map((rule, i) => (
+                        <div key={i} className={`rounded-xl px-4 py-3 ${meta.bg}`}>
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm font-medium text-on-surface">{rule.title}</p>
+                            <span className="text-[11px] text-on-surface-variant bg-surface/60 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">
+                              {rule.metricLabel} {rule.condition}
+                            </span>
+                          </div>
+                          <p className="text-xs text-on-surface-variant mt-1 leading-relaxed">{rule.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+            <div className="px-6 pb-6 pt-2">
+              <p className="text-[11px] text-outline text-center">同类预警在 2 小时内不重复发送</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Invite Dialog */}
       {showInvite && (
