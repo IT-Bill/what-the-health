@@ -15,6 +15,7 @@ export async function POST() {
     where: {
       userId: sessionUser.userId,
       deliveredAt: null,
+      priority: "urgent",
     },
     orderBy: { createdAt: "asc" },
   });

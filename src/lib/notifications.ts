@@ -1,8 +1,11 @@
+export type NotificationPriority = "normal" | "urgent";
+
 export type NotificationItem = {
   id: string;
   title: string;
   body: string;
   unread: boolean;
+  priority: NotificationPriority;
   source: string | null;
   actionUrl: string | null;
   metadata: unknown | null;
@@ -41,6 +44,7 @@ type NotificationRecordLike = {
   source: string | null;
   actionUrl: string | null;
   metadata: unknown | null;
+  priority?: string | null;
   deliveredAt: Date | string | null;
   readAt: Date | string | null;
   createdAt: Date | string;
@@ -61,6 +65,7 @@ export function toNotificationItem(notification: NotificationRecordLike): Notifi
     title: notification.title,
     body: notification.body,
     unread: notification.readAt == null,
+    priority: (notification.priority as NotificationPriority) ?? "normal",
     source: notification.source,
     actionUrl: notification.actionUrl,
     metadata: notification.metadata,
