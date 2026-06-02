@@ -30,6 +30,12 @@ type InteractionMemoryForContext = {
   createdAt: Date;
 };
 
+type DietaryLogForContext = {
+  mealType: string;
+  rawInput: string;
+  totalCalories: number | null;
+};
+
 export interface AnswerReferenceContextInput {
   healthGoal: string | null;
   activeGoals: string[];
@@ -37,6 +43,7 @@ export interface AnswerReferenceContextInput {
   chatMessages: ChatMessageForContext[];
   vectorMemories: VectorMemoryForContext[];
   interactionMemories?: InteractionMemoryForContext[];
+  dietaryLogs?: DietaryLogForContext[];
   now?: Date;
 }
 
@@ -85,6 +92,20 @@ export function formatAnswerReferenceContext(input: AnswerReferenceContextInput)
     lines.push("- 暂无");
   }
 
+  lines.push("", "## 今日饮食记录");
+  if (input.dietaryLogs?.length) {
+    input.dietaryLogs.forEach((log) => {
+      const mealLabel = getMealTypeLabel(log.mealType);
+      let text = `- ${mealLabel}: ${log.rawInput}`;
+      if (log.totalCalories) {
+        text += `（约 ${Math.round(log.totalCalories)} kcal）`;
+      }
+      lines.push(text);
+    });
+  } else {
+    lines.push("- 今日尚未记录饮食");
+  }
+
   lines.push("", "## 近期互动偏好/点赞历史");
   if (input.interactionMemories?.length) {
     input.interactionMemories.slice(0, 12).forEach((memory) => {
@@ -113,7 +134,7 @@ export async function buildAnswerReferenceContext(userId: string, query: string)
   const since24h = new Date(now.getTime() - DAY_MS);
   const since7d = new Date(now.getTime() - 7 * DAY_MS);
 
-  const [user, activeGoals, healthRecords, chatMessages, interactionMemories, vectorMemories] = await Promise.all([
+  const [user, activeGoals, healthRecords, chatMessages, interactionMemories, vectorMemories, dietaryLogs] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: { primaryGoal: true, primaryGoals: true },
@@ -155,6 +176,15 @@ export async function buildAnswerReferenceContext(userId: string, query: string)
       select: { source: true, note: true, metadata: true, createdAt: true },
     }),
     searchRelevantMemories(userId, query),
+    prisma.dietaryLog.findMany({
+      where: {
+        userId,
+        logDate: { gte: since24h },
+      },
+      orderBy: { loggedAt: "desc" },
+      take: 10,
+      select: { mealType: true, rawInput: true, totalCalories: true },
+    }),
   ]);
 
   return formatAnswerReferenceContext({
@@ -168,6 +198,11 @@ export async function buildAnswerReferenceContext(userId: string, query: string)
     })),
     vectorMemories,
     interactionMemories,
+    dietaryLogs: dietaryLogs.map((log) => ({
+      mealType: log.mealType,
+      rawInput: log.rawInput,
+      totalCalories: log.totalCalories,
+    })),
     now,
   });
 }
@@ -205,4 +240,14 @@ function getInteractionSummary(metadata: unknown): string | null {
   const trimmed = summary.trim();
   if (!trimmed) return null;
   return trimmed.length > 180 ? `${trimmed.slice(0, 180)}...` : trimmed;
+}
+
+function getMealTypeLabel(mealType: string): string {
+  switch (mealType) {
+    case "breakfast": return "早餐";
+    case "lunch": return "午餐";
+    case "dinner": return "晚餐";
+    case "snack": return "加餐";
+    default: return mealType;
+  }
 }

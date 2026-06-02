@@ -22,6 +22,13 @@ import { buildAnswerReferenceContext } from "@/lib/memory/answer-context";
 import { indexChatMessageInBackground } from "@/lib/memory/chat-vector-memory";
 import { buildRoleSystemPrompt, isValidAgentRole } from "@/lib/agent-role";
 import { buildGoalParameterSetupState } from "@/lib/goal-parameter-setup";
+import {
+  buildDietaryContext,
+  buildWearableContext,
+  buildTimeContext,
+  buildHealthProfileContext,
+} from "@/lib/dietary-context";
+import { extractAndUpdateDietaryLog } from "@/lib/dietary-extraction";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -509,7 +516,19 @@ export async function POST(request: Request) {
   });
 
   // Build Alice-style layered context: persona + health goals/data + recent chat + vector memory.
-  const answerReferenceContext = await buildAnswerReferenceContext(userId, userMessageText);
+  const [
+    answerReferenceContext,
+    dietaryContext,
+    wearableContext,
+    healthProfileContext,
+  ] = await Promise.all([
+    buildAnswerReferenceContext(userId, userMessageText),
+    buildDietaryContext(userId),
+    buildWearableContext(userId),
+    buildHealthProfileContext(userId),
+  ]);
+  const timeContext = buildTimeContext();
+
   const agentRole = userPrefs?.agentRole;
   let normalizedAgentRole: Parameters<typeof buildRoleSystemPrompt>[0] = null;
   if (agentRole && isValidAgentRole(agentRole)) {
@@ -536,8 +555,37 @@ export async function POST(request: Request) {
           ].join("\n")
         : ""
     : "";
+
+  // Onboarding prompt: instruct model to proactively collect/update health profile
+  const onboardingPrompt = healthProfileContext
+    ? [
+        "用户已有部分健康档案。当用户提到新的饮食偏好、过敏、健康状况、职业、作息、烹饪习惯等信息时，",
+        "主动调用 manage_onboarding 工具的 save 更新档案；",
+        "如果想查看当前档案完整度，可以调用 manage_onboarding 的 inspect。",
+        "不要在回复中说'记下来了'却不调用工具——信息只有调用工具才能真正保存。",
+      ].join("")
+    : [
+        "用户还没有健康档案。",
+        "当用户提到饮食偏好、食物过敏、健康状况、职业类型、作息、烹饪习惯、口味偏好等个人信息时，",
+        "主动调用 manage_onboarding 工具：先用 inspect 查看当前缺口，再追问最缺的 1-2 项，",
+        "用户回复后立刻用 save 保存到健康档案。",
+        "不要在回复中说'记下来了'却不调用工具——信息只有调用工具才能真正保存。",
+      ].join("");
+
+  // Layered context blocks (ordered: role → goals → time → wearable → dietary → profile → memories)
+  const contextParts = [
+    rolePrompt,
+    goalParameterPrompt || null,
+    onboardingPrompt || null,
+    timeContext,
+    wearableContext || null,
+    dietaryContext,
+    healthProfileContext || null,
+    answerReferenceContext,
+  ].filter(Boolean) as string[];
+
   const systemPrompt = await buildSystemPrompt(
-    `${rolePrompt}${goalParameterPrompt ? `\n\n${goalParameterPrompt}` : ""}\n\n${answerReferenceContext}`,
+    contextParts.join("\n\n"),
     userId
   );
 
@@ -622,10 +670,16 @@ export async function POST(request: Request) {
             // Persist assistant message
             await persistAssistant();
 
-            // P2: Fire-and-forget persona memory extraction
             const allMessages = agent.state.messages.slice();
-            extractAndUpdatePersona(payload.userId, allMessages, process.env.AIPING_API_KEY!)
+            const apiKey = process.env.AIPING_API_KEY!;
+
+            // P2: Fire-and-forget persona memory extraction
+            extractAndUpdatePersona(payload.userId, allMessages, apiKey)
               .catch((err) => console.error("[Persona] Background extraction error:", err));
+
+            // P2-Dietary: Fire-and-forget dietary extraction + evaluation
+            extractAndUpdateDietaryLog(payload.userId, allMessages, apiKey)
+              .catch((err) => console.error("[Dietary] Background extraction error:", err));
 
             controller.enqueue(sse({ type: "agent_end" }));
             controller.close();
