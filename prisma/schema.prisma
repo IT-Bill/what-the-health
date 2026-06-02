@@ -169,6 +169,21 @@ enum InsightType {
   milestone  // 里程碑/成就
 }
 
+/// Meal type for dietary logs.
+enum MealType {
+  breakfast
+  lunch
+  dinner
+  snack
+}
+
+/// How the user's meal was prepared / sourced.
+enum CookingMethod {
+  home_cooked
+  takeout
+  cafeteria
+}
+
 // ---------------------------------------------------------------------------
 // Core
 // ---------------------------------------------------------------------------
@@ -226,6 +241,11 @@ model User {
   creditTransactions CreditTransaction[]
   healthImports      HealthImport[]
   healthRecords      HealthRecord[]
+
+  // Health profile & plans
+  healthProfile   UserHealthProfile?
+  healthPlans     HealthPlan[]
+  dietaryLogs     DietaryLog[]
 
   // Friend system
   sentFriendRequests     Friendship[] @relation("FriendshipRequester")
@@ -329,6 +349,92 @@ model UserPersona {
   updatedAt DateTime @updatedAt
 
   @@map("user_personas")
+}
+
+// ---------------------------------------------------------------------------
+// User Health Profile — structured health & lifestyle data collected during onboarding
+// ---------------------------------------------------------------------------
+
+model UserHealthProfile {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Diet & allergies
+  dietaryPreference   String?  // omnivore, vegetarian, vegan, keto, etc.
+  foodAllergies       String[] @default([])
+  foodIntolerances    String[] @default([])
+  tastePreferences    String[] @default([]) // e.g. spicy, sweet, light
+  dislikedFoods       String[] @default([])
+
+  // Health & exercise constraints
+  medicalConditions   String[] @default([])
+  medications         String[] @default([])
+  exerciseConstraints String[] @default([]) // injuries, limitations
+
+  // Lifestyle (key factors for dietary recommendations)
+  occupationType      String?  // sedentary, light, moderate, heavy
+  workSchedule        String?  // day, night, shift, flexible
+  cookingSkill        String?  // beginner, intermediate, advanced
+  cookingFrequency    String?  // daily, few_times_week, rarely
+
+  hasWearable         Boolean  @default(false)
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("user_health_profiles")
+}
+
+// ---------------------------------------------------------------------------
+// Dietary Log — automatic & explicit meal records with AI evaluation
+// ---------------------------------------------------------------------------
+
+model DietaryLog {
+  id               String        @id @default(cuid())
+  userId           String
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  mealType         MealType
+  logDate          DateTime      @db.Date
+  loggedAt         DateTime      @default(now())
+
+  rawInput         String        // User's original description
+  parsedFoods      Json?         // [{ name, amount, unit, estimatedCalories, nutrients: { protein, carb, fat } }]
+  totalCalories    Float?
+
+  cookingMethod    CookingMethod?
+  location         String?       // home, office, restaurant, commute
+
+  // AI evaluation
+  aiEvaluation     Json?         // { score, feedback, suggestions, nutritionBalance }
+
+  // Wearable snapshot at time of logging
+  wearableSnapshot Json?         // { steps, activeCalories, sleepScore }
+
+  @@index([userId, logDate])
+  @@index([userId, mealType, logDate])
+  @@map("dietary_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Health Plan — AI-generated personalized plan (weight-loss, etc.)
+// ---------------------------------------------------------------------------
+
+model HealthPlan {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  planData    Json     // { calorieTarget, macroSplit, mealStructure, exercisePlan, principles }
+  planText    String?  // Human-readable plan text
+  isActive    Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId, isActive])
+  @@map("health_plans")
 }
 
 /// A daily emotional check-in (design _1 mood selection).

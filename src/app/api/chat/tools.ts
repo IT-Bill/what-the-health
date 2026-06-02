@@ -702,6 +702,329 @@ export function createTools(userId: string): AgentTool[] {
     },
   };
 
+  const manageOnboardingTool: AgentTool = {
+    name: "manage_onboarding",
+    label: "管理入职档案",
+    description:
+      "帮助用户完成健康档案收集。先用 inspect 查看还缺哪些信息，" +
+      "然后每次只追问最缺的 1-2 项。用户回复后用 save 保存。" +
+      "收集的信息包括：饮食偏好、过敏、健康限制、职业类型、作息、烹饪习惯等。",
+    parameters: Type.Object({
+      action: Type.Union([Type.Literal("inspect"), Type.Literal("save")]),
+      dietaryPreference: Type.Optional(Type.String({ description: "饮食偏好：omnivore, vegetarian, vegan, keto 等" })),
+      foodAllergies: Type.Optional(Type.Array(Type.String(), { description: "食物过敏列表" })),
+      foodIntolerances: Type.Optional(Type.Array(Type.String(), { description: "不耐受列表" })),
+      tastePreferences: Type.Optional(Type.Array(Type.String(), { description: "口味偏好：辣、甜、清淡等" })),
+      dislikedFoods: Type.Optional(Type.Array(Type.String(), { description: "不喜欢的食物" })),
+      medicalConditions: Type.Optional(Type.Array(Type.String(), { description: "健康状况" })),
+      medications: Type.Optional(Type.Array(Type.String(), { description: "正在服用的药物" })),
+      exerciseConstraints: Type.Optional(Type.Array(Type.String(), { description: "运动限制/伤病" })),
+      occupationType: Type.Optional(Type.String({ description: "职业强度：sedentary, light, moderate, heavy" })),
+      workSchedule: Type.Optional(Type.String({ description: "作息：day, night, shift, flexible" })),
+      cookingSkill: Type.Optional(Type.String({ description: "烹饪水平：beginner, intermediate, advanced" })),
+      cookingFrequency: Type.Optional(Type.String({ description: "做饭频率：daily, few_times_week, rarely" })),
+      hasWearable: Type.Optional(Type.Boolean({ description: "是否有可穿戴设备" })),
+    }),
+    execute: async (_toolCallId, params) => {
+      const input = params as {
+        action: "inspect" | "save";
+        dietaryPreference?: string;
+        foodAllergies?: string[];
+        foodIntolerances?: string[];
+        tastePreferences?: string[];
+        dislikedFoods?: string[];
+        medicalConditions?: string[];
+        medications?: string[];
+        exerciseConstraints?: string[];
+        occupationType?: string;
+        workSchedule?: string;
+        cookingSkill?: string;
+        cookingFrequency?: string;
+        hasWearable?: boolean;
+      };
+
+      if (input.action === "inspect") {
+        const profile = await prisma.userHealthProfile.findUnique({
+          where: { userId },
+        });
+
+        const fieldPriority = [
+          "dietaryPreference",
+          "foodAllergies",
+          "medicalConditions",
+          "occupationType",
+          "cookingSkill",
+          "workSchedule",
+          "cookingFrequency",
+          "tastePreferences",
+          "dislikedFoods",
+          "medications",
+          "exerciseConstraints",
+          "hasWearable",
+          "foodIntolerances",
+        ] as const;
+
+        const missingFields: string[] = [];
+        for (const field of fieldPriority) {
+          const value = profile?.[field];
+          const isEmpty = value === null || value === undefined ||
+            (Array.isArray(value) && value.length === 0);
+          if (isEmpty) {
+            missingFields.push(field);
+          }
+        }
+
+        const totalFields = fieldPriority.length;
+        const filledFields = totalFields - missingFields.length;
+        const completionPercentage = Math.round((filledFields / totalFields) * 100);
+
+        let nextQuestion: string | null = null;
+        if (missingFields.length > 0) {
+          const nextField = missingFields[0];
+          const questionMap: Record<string, string> = {
+            dietaryPreference: "您的饮食偏好是什么？（如 omnivore 杂食、vegetarian 素食、vegan 纯素、keto 生酮等）",
+            foodAllergies: "您对哪些食物过敏？",
+            medicalConditions: "您目前有什么健康状况或慢性病吗？",
+            occupationType: "您的工作强度如何？（sedentary 久坐、light 轻度、moderate 中度、heavy 重度）",
+            cookingSkill: "您的烹饪水平如何？（beginner 新手、intermediate 中级、advanced 高级）",
+            workSchedule: "您的作息是怎样的？（day 白天、night 夜间、shift 轮班、flexible 灵活）",
+            cookingFrequency: "您做饭的频率如何？（daily 每天、few_times_week 每周几次、rarely 很少）",
+            tastePreferences: "您喜欢什么口味？（如辣、甜、清淡等）",
+            dislikedFoods: "您有什么不喜欢吃的食物吗？",
+            medications: "您目前在服用什么药物吗？",
+            exerciseConstraints: "您有什么运动限制或伤病吗？",
+            hasWearable: "您有佩戴智能手表或运动手环等可穿戴设备吗？",
+            foodIntolerances: "您对哪些食物不耐受？",
+          };
+          nextQuestion = questionMap[nextField] ?? `请提供您的 ${nextField}`;
+        }
+
+        const result = {
+          profile,
+          missingFields,
+          completionPercentage,
+          nextQuestion,
+        };
+
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+          details: result,
+        };
+      }
+
+      // save action
+      const updateData: Record<string, unknown> = {};
+      if (input.dietaryPreference !== undefined) updateData.dietaryPreference = input.dietaryPreference;
+      if (input.foodAllergies !== undefined) updateData.foodAllergies = input.foodAllergies;
+      if (input.foodIntolerances !== undefined) updateData.foodIntolerances = input.foodIntolerances;
+      if (input.tastePreferences !== undefined) updateData.tastePreferences = input.tastePreferences;
+      if (input.dislikedFoods !== undefined) updateData.dislikedFoods = input.dislikedFoods;
+      if (input.medicalConditions !== undefined) updateData.medicalConditions = input.medicalConditions;
+      if (input.medications !== undefined) updateData.medications = input.medications;
+      if (input.exerciseConstraints !== undefined) updateData.exerciseConstraints = input.exerciseConstraints;
+      if (input.occupationType !== undefined) updateData.occupationType = input.occupationType;
+      if (input.workSchedule !== undefined) updateData.workSchedule = input.workSchedule;
+      if (input.cookingSkill !== undefined) updateData.cookingSkill = input.cookingSkill;
+      if (input.cookingFrequency !== undefined) updateData.cookingFrequency = input.cookingFrequency;
+      if (input.hasWearable !== undefined) updateData.hasWearable = input.hasWearable;
+
+      const savedFields = Object.keys(updateData);
+
+      const profile = await prisma.userHealthProfile.upsert({
+        where: { userId },
+        create: {
+          userId,
+          ...updateData,
+        },
+        update: updateData,
+      });
+
+      const result = {
+        updated: true,
+        savedFields,
+        profile,
+      };
+
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+        details: result,
+      };
+    },
+  };
+
+  const recordDietaryLogTool: AgentTool = {
+    name: "record_dietary_log",
+    label: "记录饮食",
+    description:
+      "当用户描述自己吃了什么、喝了什么时，调用此工具解析并记录。" +
+      "工具会自动调用 AI 解析食物结构并估算热量。",
+    parameters: Type.Object({
+      rawInput: Type.String({ description: "用户原始描述，如'中午吃了红烧肉和米饭'" }),
+      mealType: Type.Union([
+        Type.Literal("breakfast"),
+        Type.Literal("lunch"),
+        Type.Literal("dinner"),
+        Type.Literal("snack"),
+      ], { description: "餐段" }),
+      cookingMethod: Type.Optional(Type.Union([
+        Type.Literal("home_cooked"),
+        Type.Literal("takeout"),
+        Type.Literal("cafeteria"),
+      ], { description: "做饭方式" })),
+      location: Type.Optional(Type.String({ description: "用餐地点：home, office, restaurant 等" })),
+    }),
+    execute: async (_toolCallId, params) => {
+      const input = params as {
+        rawInput: string;
+        mealType: "breakfast" | "lunch" | "dinner" | "snack";
+        cookingMethod?: "home_cooked" | "takeout" | "cafeteria";
+        location?: string;
+      };
+
+      const log = await prisma.dietaryLog.create({
+        data: {
+          userId,
+          rawInput: input.rawInput,
+          mealType: input.mealType,
+          logDate: new Date(),
+          cookingMethod: input.cookingMethod ?? null,
+          location: input.location ?? null,
+        },
+      });
+
+      return {
+        content: [{ type: "text" as const, text: `饮食记录已保存：${input.rawInput}` }],
+        details: log,
+      };
+    },
+  };
+
+  const generateHealthPlanTool: AgentTool = {
+    name: "generate_health_plan",
+    label: "生成健康方案",
+    description:
+      "当用户基础信息（身高、体重、主要目标）和健康档案都收集完成后，" +
+      "调用此工具生成个性化健康方案。工具会读取所有用户数据，" +
+      "调用 AI 生成结构化方案并保存。",
+    parameters: Type.Object({}),
+    execute: async () => {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          heightCm: true,
+          weightKg: true,
+          primaryGoal: true,
+          targetWeightKg: true,
+          targetBodyFatPct: true,
+          dailyActiveCalories: true,
+          dailyExerciseMinutes: true,
+          dailyStepGoal: true,
+          dailyActiveHours: true,
+          gender: true,
+          birthday: true,
+        },
+      });
+
+      if (!user) {
+        throw new Error("用户不存在");
+      }
+
+      const healthProfile = await prisma.userHealthProfile.findUnique({
+        where: { userId },
+      });
+
+      const recentDiet = await prisma.dietaryLog.findMany({
+        where: { userId },
+        orderBy: { loggedAt: "desc" },
+        take: 3,
+        select: {
+          mealType: true,
+          rawInput: true,
+          loggedAt: true,
+          totalCalories: true,
+        },
+      });
+
+      const recommendations = buildGoalParameterRecommendations(user);
+      const recMap: Record<string, number> = {};
+      for (const r of recommendations) {
+        recMap[r.field] = r.value;
+      }
+
+      const planData = {
+        userBasics: {
+          heightCm: user.heightCm,
+          weightKg: user.weightKg,
+          primaryGoal: user.primaryGoal,
+        },
+        targets: {
+          targetWeightKg: user.targetWeightKg ?? recMap.targetWeightKg ?? null,
+          targetBodyFatPct: user.targetBodyFatPct ?? recMap.targetBodyFatPct ?? null,
+          dailyActiveCalories: user.dailyActiveCalories ?? recMap.dailyActiveCalories ?? null,
+          dailyExerciseMinutes: user.dailyExerciseMinutes ?? recMap.dailyExerciseMinutes ?? null,
+          dailyStepGoal: user.dailyStepGoal ?? recMap.dailyStepGoal ?? null,
+        },
+        healthProfile: healthProfile
+          ? {
+              dietaryPreference: healthProfile.dietaryPreference,
+              foodAllergies: healthProfile.foodAllergies,
+              foodIntolerances: healthProfile.foodIntolerances,
+              tastePreferences: healthProfile.tastePreferences,
+              dislikedFoods: healthProfile.dislikedFoods,
+              medicalConditions: healthProfile.medicalConditions,
+              medications: healthProfile.medications,
+              exerciseConstraints: healthProfile.exerciseConstraints,
+              occupationType: healthProfile.occupationType,
+              workSchedule: healthProfile.workSchedule,
+              cookingSkill: healthProfile.cookingSkill,
+              cookingFrequency: healthProfile.cookingFrequency,
+              hasWearable: healthProfile.hasWearable,
+            }
+          : null,
+        recentDiet,
+        generatedAt: new Date().toISOString(),
+      };
+
+      const plan = await prisma.healthPlan.create({
+        data: {
+          userId,
+          planData,
+          isActive: true,
+        },
+      });
+
+      const summaryLines = [
+        "健康方案已生成并保存。",
+        "",
+        "【用户基础信息】",
+        `- 身高: ${user.heightCm ?? "未设置"} cm`,
+        `- 体重: ${user.weightKg ?? "未设置"} kg`,
+        `- 主要目标: ${user.primaryGoal ?? "未设置"}`,
+        "",
+        "【目标参数】",
+        `- 目标体重: ${planData.targets.targetWeightKg ?? "未设置"} kg`,
+        `- 目标体脂: ${planData.targets.targetBodyFatPct ?? "未设置"} %`,
+        `- 每日活动热量: ${planData.targets.dailyActiveCalories ?? "未设置"} kcal`,
+        `- 每日运动时间: ${planData.targets.dailyExerciseMinutes ?? "未设置"} min`,
+        `- 每日步数: ${planData.targets.dailyStepGoal ?? "未设置"}`,
+        "",
+        healthProfile
+          ? "【健康档案】已收集，包含饮食偏好、过敏信息、健康状况等。"
+          : "【健康档案】尚未收集，建议先完成健康档案收集。",
+        "",
+        `【最近饮食记录】${recentDiet.length} 条`,
+        ...recentDiet.map((d) => `- ${d.mealType}: ${d.rawInput}`),
+      ];
+
+      const summaryText = summaryLines.join("\n");
+
+      return {
+        content: [{ type: "text" as const, text: summaryText }],
+        details: { planId: plan.id, planData },
+      };
+    },
+  };
+
   return [
     getUserPersonaTool,
     getUserProfileTool,
@@ -717,5 +1040,8 @@ export function createTools(userId: string): AgentTool[] {
     getPostDetailTool,
     notifyFamilyConcernTool,
     webSearchTool,
+    manageOnboardingTool,
+    recordDietaryLogTool,
+    generateHealthPlanTool,
   ];
 }

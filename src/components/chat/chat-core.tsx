@@ -1845,6 +1845,7 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
                 ) : (
                   <button
                     onClick={isRecording ? stopVoiceRecording : startVoiceRecording}
+                    onContextMenu={(e) => e.preventDefault()}
                     disabled={isStreaming}
                     className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all ${
                       isRecording ? "bg-error text-on-error" : "text-on-surface-variant hover:bg-surface-container-low"
