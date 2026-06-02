@@ -1,12 +1,39 @@
 /**
  * LLM-powered report narrative and insight generation.
- * Calls AI Ping (GLM-5.1) directly via OpenAI-compatible API.
+ * Uses pi-ai (completeSimple) with Kimi-K2.6.
  */
+import type { Model } from "@earendil-works/pi-ai";
+import { completeSimple } from "@earendil-works/pi-ai";
 import type { AggregatedPeriodData } from "./aggregator";
 import { calculateOverallScore } from "./aggregator";
 
-const API_BASE = "https://aiping.cn/api/v1";
-const API_MODEL = "GLM-5.1";
+const REPORT_MODEL: Model<"openai-completions"> = {
+  id: "Kimi-K2.6",
+  name: "Kimi K2.6 (AI Ping)",
+  api: "openai-completions",
+  provider: "aiping",
+  baseUrl: "https://aiping.cn/api/v1",
+  reasoning: true,
+  input: ["text"],
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+  contextWindow: 256000,
+  maxTokens: 32000,
+};
+
+const EXTRA_BODY = {
+  enable_thinking: true,
+  provider: {
+    only: [],
+    order: [],
+    sort: null,
+    input_price_range: [],
+    output_price_range: [],
+    input_length_range: [],
+    output_length_range: [],
+    throughput_range: [],
+    latency_range: [],
+  },
+};
 
 interface ReportStats {
   icon: string;
@@ -133,34 +160,38 @@ function buildReportData(agg: AggregatedPeriodData) {
 }
 
 /**
- * Call AI Ping API directly (bypasses pi-ai which has issues with reasoning models).
+ * Call LLM via pi-ai completeSimple.
  */
 async function callLLM(systemPrompt: string, userPrompt: string, apiKey: string): Promise<string> {
-  const res = await fetch(`${API_BASE}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: API_MODEL,
+  const response = await completeSimple(
+    REPORT_MODEL,
+    {
+      systemPrompt,
       messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
+        {
+          role: "user",
+          content: userPrompt,
+          timestamp: Date.now(),
+        },
       ],
-      max_tokens: 16000,
-    }),
-  });
+    },
+    {
+      maxTokens: 16000,
+      apiKey,
+      onPayload: (payload) => ({
+        ...(payload as Record<string, unknown>),
+        ...EXTRA_BODY,
+      }),
+    }
+  );
 
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${await res.text()}`);
-  }
-
-  const json = await res.json() as {
-    choices: { message: { content: string; reasoning_content?: string } }[];
-  };
-
-  return json.choices?.[0]?.message?.content || "";
+  return (
+    response.content
+      .filter((c) => c.type === "text")
+      .map((c) => (c as { text: string }).text)
+      .join("")
+      .trim() || ""
+  );
 }
 
 /**

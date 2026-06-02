@@ -54,7 +54,8 @@
     "sharp": "^0.34.5",
     "tailwindcss-animate": "^1.0.7",
     "uuid": "^14.0.0",
-    "ws": "^8.21.0"
+    "ws": "^8.21.0",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -71,6 +72,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "prisma": "^7.8.0",
+    "puppeteer": "^25.1.0",
     "tailwindcss": "^4",
     "tsx": "^4.22.3",
     "typescript": "^5"

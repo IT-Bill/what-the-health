@@ -14,20 +14,20 @@ import {
 // ---------------------------------------------------------------------------
 
 const MEMORY_MODEL: Model<"openai-completions"> = {
-  id: "GLM-5.1",
-  name: "GLM-5.1 (AI Ping)",
+  id: "Kimi-K2.6",
+  name: "Kimi K2.6 (AI Ping)",
   api: "openai-completions",
   provider: "aiping",
   baseUrl: "https://aiping.cn/api/v1",
-  reasoning: false,
+  reasoning: true,
   input: ["text"],
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-  contextWindow: 128000,
-  maxTokens: 8000,
+  contextWindow: 256000,
+  maxTokens: 32000,
 };
 
 const EXTRA_BODY = {
-  enable_thinking: false,
+  enable_thinking: true,
   provider: {
     only: [],
     order: [],

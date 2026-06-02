@@ -39,6 +39,7 @@ export async function GET(
           role: m.role,
           content: m.content,
           imageUrl: m.imageUrl ?? undefined,
+          reasoning: m.reasoning ?? undefined,
           toolCallsJson: m.toolCallsJson ?? undefined,
           createdAt: m.createdAt.toISOString(),
         })),

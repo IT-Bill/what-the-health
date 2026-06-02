@@ -44,10 +44,13 @@ const MODEL: Model<"openai-completions"> = {
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
   contextWindow: 256000,
   maxTokens: 32000,
+  compat: {
+    thinkingFormat: "qwen",
+    supportsReasoningEffort: false,
+  },
 };
 
 const EXTRA_BODY = {
-  enable_thinking: false,
   provider: {
     only: [],
     order: [],
@@ -595,21 +598,26 @@ export async function POST(request: Request) {
     initialState: {
       systemPrompt,
       model: MODEL,
-      thinkingLevel: "off",
+      thinkingLevel: "medium",
       tools: userTools,
       messages: wireToAgentMsgs(existingMessages),
     },
-    onPayload: (payload) => ({
-      ...(payload as Record<string, unknown>),
-      ...EXTRA_BODY,
-    }),
+    onPayload: (payload) => {
+      const final = { ...(payload as Record<string, unknown>), ...EXTRA_BODY };
+      console.log("[API Payload] enable_thinking:", final.enable_thinking, "reasoning_effort:", final.reasoning_effort);
+      return final;
+    },
+    onResponse: (response) => {
+      console.log("[API Response] status:", response.status, "headers:", JSON.stringify(response.headers));
+    },
     getApiKey: () => process.env.AIPING_API_KEY,
     convertToLlm,
     transformContext,
   });
 
-  // Accumulate assistant text for DB persistence
+  // Accumulate assistant text / reasoning for DB persistence
   let assistantText = "";
+  let assistantReasoning = "";
   let assistantModel = "";
   let assistantTokens = { input: 0, output: 0 };
   let persisted = false;
@@ -625,6 +633,7 @@ export async function POST(request: Request) {
         model: assistantModel || undefined,
         inputTokens: assistantTokens.input || undefined,
         outputTokens: assistantTokens.output || undefined,
+        reasoning: assistantReasoning || undefined,
         toolCallsJson: toolExecutions.length > 0 ? JSON.stringify(toolExecutions) : undefined,
       },
     });
@@ -711,10 +720,24 @@ export async function POST(request: Request) {
             break;
           }
           case "message_update": {
+            console.log("[msg_update]", event.assistantMessageEvent.type);
             if (event.assistantMessageEvent.type === "text_delta") {
               const delta = event.assistantMessageEvent.delta;
               assistantText += delta;
               controller.enqueue(sse({ type: "text_delta", delta }));
+            }
+            if (event.assistantMessageEvent.type === "thinking_delta") {
+              const delta = (event.assistantMessageEvent as { delta: string }).delta;
+              console.log("[thinking_delta]", delta.slice(0, 50));
+              assistantReasoning += delta;
+              controller.enqueue(sse({ type: "reasoning_delta", delta }));
+            }
+            if (event.assistantMessageEvent.type === "thinking_end") {
+              const content = (event.assistantMessageEvent as { content: string }).content;
+              console.log("[thinking_end]", content?.slice(0, 50));
+              if (content && !assistantReasoning) {
+                assistantReasoning = content;
+              }
             }
             break;
           }
@@ -727,6 +750,15 @@ export async function POST(request: Request) {
                 input: msg.usage?.input ?? 0,
                 output: msg.usage?.output ?? 0,
               };
+              // Fallback: extract thinking from message content if delta events missed it
+              if (!assistantReasoning) {
+                const thinkingParts = msg.content
+                  .filter((c) => c.type === "thinking")
+                  .map((c) => (c as { thinking: string }).thinking);
+                if (thinkingParts.length > 0) {
+                  assistantReasoning = thinkingParts.join("");
+                }
+              }
             }
             if (wire) {
               controller.enqueue(sse({ type: "message_end", message: wire }));
