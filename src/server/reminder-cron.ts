@@ -27,8 +27,8 @@ schedule("*/5 * * * *", () => {
   void triggerCheck();
 });
 
-// Also run immediately on startup
-void triggerCheck();
+// Also run on startup, but wait for Next.js to be ready
+setTimeout(() => void triggerCheck(), 10000);
 
 // Keep process alive
 setInterval(() => {}, 60000);
