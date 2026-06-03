@@ -611,6 +611,14 @@ export async function POST(request: Request) {
     contextParts.push(skillsText);
   }
 
+  // Quick reply guidance
+  contextParts.push(
+    "当你需要用户提供更多信息才能给出准确建议时（例如：询问症状部位、饮食偏好、目标类型、时间安排等），" +
+    "调用 ask_for_more_info 工具，提供 2-4 个简短选项。" +
+    "在你的回复文本中自然地提出问题，选项会以按钮形式显示在回复下方供用户点击。" +
+    "不要在回复文本中重复列举选项内容。"
+  );
+
   const systemPrompt = await buildSystemPrompt(
     contextParts.join("\n\n"),
     userId
@@ -821,6 +829,11 @@ export async function POST(request: Request) {
               if (toolExecutions[idx].name === "web_search" && !event.isError) {
                 const details = (result as { details?: { results?: unknown[] } } | undefined)?.details;
                 if (details?.results) ssePayload.sources = details.results;
+              }
+              // Pass quick reply options to the client
+              if (toolExecutions[idx].name === "ask_for_more_info" && !event.isError) {
+                const details = (result as { details?: { options?: string[] } } | undefined)?.details;
+                if (details?.options) ssePayload.quickReplies = details.options;
               }
               controller.enqueue(sse(ssePayload));
             }
