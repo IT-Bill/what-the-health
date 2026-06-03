@@ -649,6 +649,7 @@ export async function POST(request: Request) {
   // Accumulate assistant text / reasoning for DB persistence
   let assistantText = "";
   let assistantReasoning = "";
+  const collectedPostCards: unknown[] = [];
   let assistantModel = "";
   let assistantTokens = { input: 0, output: 0 };
   let persisted = false;
@@ -666,6 +667,7 @@ export async function POST(request: Request) {
         outputTokens: assistantTokens.output || undefined,
         reasoning: assistantReasoning || undefined,
         toolCallsJson: toolExecutions.length > 0 ? JSON.stringify(toolExecutions) : undefined,
+        postCardsJson: collectedPostCards.length > 0 ? JSON.stringify(collectedPostCards) : undefined,
       },
     });
     indexChatMessageInBackground({
@@ -829,6 +831,14 @@ export async function POST(request: Request) {
               if (toolExecutions[idx].name === "ask_for_more_info" && !event.isError) {
                 const details = (result as { details?: { options?: string[] } } | undefined)?.details;
                 if (details?.options) ssePayload.quickReplies = details.options;
+              }
+              // Pass post cards to the client for inline rendering
+              if (toolExecutions[idx].name === "search_posts" && !event.isError) {
+                const posts = (result as { details?: unknown[] } | undefined)?.details;
+                if (Array.isArray(posts) && posts.length > 0) {
+                  ssePayload.postCards = posts;
+                  collectedPostCards.push(...posts);
+                }
               }
               controller.enqueue(sse(ssePayload));
             }

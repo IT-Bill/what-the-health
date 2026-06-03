@@ -44,6 +44,7 @@ export function useChatSession() {
               imageUrl?: string;
               reasoning?: string;
               toolCallsJson?: string;
+              postCardsJson?: string;
             }) => ({
               id: m.id,
               role: m.role === "user" ? "user" : "agent",
@@ -51,6 +52,7 @@ export function useChatSession() {
               imageUrl: m.imageUrl ?? undefined,
               reasoning: m.reasoning ?? undefined,
               toolCalls: m.toolCallsJson ? JSON.parse(m.toolCallsJson) : undefined,
+              postCards: m.postCardsJson ? JSON.parse(m.postCardsJson) : undefined,
             })
           );
           store.setMessages(nextMessages);

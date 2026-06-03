@@ -41,6 +41,7 @@ export async function GET(
           imageUrl: m.imageUrl ?? undefined,
           reasoning: m.reasoning ?? undefined,
           toolCallsJson: m.toolCallsJson ?? undefined,
+          postCardsJson: m.postCardsJson ?? undefined,
           createdAt: m.createdAt.toISOString(),
         })),
       },
