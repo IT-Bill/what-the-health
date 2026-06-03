@@ -8,11 +8,12 @@ import { Icon } from "@/components/icon";
 
 interface MessageListProps {
   onRetry: (assistantMsgId: string, userContent: string) => void;
+  onEdit: (userMsgId: string, newContent: string) => void;
   onSendSuggestion: (text: string) => void;
   onShowSources: (sources: NonNullable<import("@/lib/chat/types").Message["sources"]>) => void;
 }
 
-export function MessageList({ onRetry, onSendSuggestion, onShowSources }: MessageListProps) {
+export function MessageList({ onRetry, onEdit, onSendSuggestion, onShowSources }: MessageListProps) {
   const messages = useChatStore((s) => s.messages);
   const isStreaming = useChatStore((s) => s.isStreaming);
   const sessionId = useChatStore((s) => s.sessionId);
@@ -64,7 +65,7 @@ export function MessageList({ onRetry, onSendSuggestion, onShowSources }: Messag
                 onShowSources={msg.sources?.length ? () => onShowSources(msg.sources!) : undefined}
               />
             ) : (
-              <UserBubble key={msg.id} message={msg} />
+              <UserBubble key={msg.id} message={msg} onEdit={(text) => onEdit(msg.id, text)} />
             )
           )}
         </>

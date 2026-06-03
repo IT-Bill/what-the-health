@@ -157,6 +157,35 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
     [retryMessage]
   );
 
+  const handleEdit = useCallback(
+    (userMsgId: string, newContent: string) => {
+      const state = useChatStore.getState();
+      const messages = state.messages;
+
+      const userMsgIndex = messages.findIndex((m) => m.id === userMsgId);
+      if (userMsgIndex === -1) return;
+
+      // Update user message content in-place
+      const updatedMessages = messages.map((m, idx) =>
+        idx === userMsgIndex ? { ...m, content: newContent } : m
+      );
+      state.setMessages(updatedMessages);
+
+      // Find the next assistant message and regenerate it
+      const assistantMsg = messages
+        .slice(userMsgIndex + 1)
+        .find((m) => m.role === "agent");
+
+      if (assistantMsg) {
+        retryMessage(assistantMsg.id, newContent);
+      } else {
+        // No assistant reply yet — just send
+        sendMessage(newContent);
+      }
+    },
+    [sendMessage, retryMessage]
+  );
+
   const handleImageSelect = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -542,6 +571,10 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
               onRetry={(assistantMsgId, userContent) => {
                 markChatActivity();
                 handleRetry(assistantMsgId, userContent);
+              }}
+              onEdit={(userMsgId, newContent) => {
+                markChatActivity();
+                handleEdit(userMsgId, newContent);
               }}
               onSendSuggestion={(text) => {
                 markChatActivity();
