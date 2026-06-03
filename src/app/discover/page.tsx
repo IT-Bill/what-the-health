@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { AppShell } from "@/components/app-shell";
 import type { PostCard } from "@/lib/post-types";
 import { Icon } from "@/components/icon";
 import { useUser } from "@/lib/swr";
@@ -45,6 +46,13 @@ export default function DiscoverPage() {
   }, [activeCategory, searchQuery]);
 
   return (
+    <AppShell
+      topAppBarProps={{
+        title: "发现",
+        leftIcon: "alarm_clock",
+        leftHref: "/reminders",
+      }}
+    >
     <div className="flex flex-col gap-6 animate-[fadeIn_0.3s_ease] relative">
       {/* Search */}
       <div className="relative">
@@ -105,6 +113,7 @@ export default function DiscoverPage() {
         </Link>
       )}
     </div>
+    </AppShell>
   );
 }
 

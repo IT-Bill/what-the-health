@@ -10,6 +10,8 @@ import {
   BrainCircuit,
   Calendar,
   CalendarDays,
+  Clock,
+  AlarmClock,
   Check,
   CheckCircle,
   ChevronDown,
@@ -185,6 +187,8 @@ const ICON_MAP: Record<string, LucideIcon> = {
   calendar_month: Calendar,
   calendar_view_week: CalendarDays,
   timeline: Timer,
+  clock: Clock,
+  alarm_clock: AlarmClock,
 
   // Data & Charts
   data_usage: Clipboard,
