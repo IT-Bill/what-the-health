@@ -3,6 +3,7 @@
 import useSWR, { mutate } from "swr";
 import type { SWRConfiguration } from "swr";
 import { swrFetcher } from "@/lib/swr-config";
+import type { NotificationItem } from "@/lib/notifications";
 
 // ---------------------------------------------------------------------------
 // Types (mirror what the APIs return)
@@ -70,6 +71,13 @@ export function useSessionMessages(sessionId?: string) {
   );
 }
 
+export function useNotifications(opts?: { refreshInterval?: number }) {
+  return useSWR<{ notifications: NotificationItem[] }>(
+    "/api/notifications",
+    { ...defaultOpts, refreshInterval: opts?.refreshInterval ?? 0 }
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Mutations (call after create/update/delete to revalidate)
 // ---------------------------------------------------------------------------
@@ -80,6 +88,10 @@ export function refreshSessions() {
 
 export function refreshSessionMessages(sessionId: string) {
   return mutate(`/api/chat/sessions/${sessionId}/messages`);
+}
+
+export function refreshNotifications() {
+  return mutate("/api/notifications");
 }
 
 export { mutate };
