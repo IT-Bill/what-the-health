@@ -10,11 +10,13 @@ interface AgentMessageProps {
   message: Message;
   onRetry?: () => void;
   onShowSources?: () => void;
+  onQuickReply?: (text: string) => void;
 }
 
-export function AgentMessage({ message, onRetry, onShowSources }: AgentMessageProps) {
+export function AgentMessage({ message, onRetry, onShowSources, onQuickReply }: AgentMessageProps) {
   const [copied, setCopied] = useState(false);
   const hasSources = (message.sources?.length ?? 0) > 0;
+  const hasQuickReplies = !message.isStreaming && (message.quickReplies?.length ?? 0) > 0;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(message.content).then(() => {
@@ -38,6 +40,22 @@ export function AgentMessage({ message, onRetry, onShowSources }: AgentMessagePr
       <div className="text-on-surface text-base leading-relaxed">
         <MarkdownContent text={message.content} />
       </div>
+      {/* Quick reply chips */}
+      {hasQuickReplies && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {message.quickReplies!.map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => onQuickReply?.(opt)}
+              className="px-3 py-1.5 rounded-full border border-secondary/40 bg-secondary-container/30 text-sm text-on-secondary-container hover:bg-secondary-container/60 transition-colors"
+            >
+              {opt}
+            </button>
+          ))}
+          <span className="self-center text-xs text-on-surface-variant/50">或在输入框输入</span>
+        </div>
+      )}
       {/* Action bar */}
       {!message.isStreaming && message.content && (
         <div className="flex items-center gap-0.5 mt-2 -ml-1.5">

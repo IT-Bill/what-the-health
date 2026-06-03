@@ -37,6 +37,7 @@ export interface Message {
   preToolText?: string;
   turnCount?: number;
   sources?: SearchSource[];
+  quickReplies?: string[];
 }
 
 export interface PendingImage {

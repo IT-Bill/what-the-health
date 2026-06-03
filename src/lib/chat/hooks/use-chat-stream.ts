@@ -101,6 +101,7 @@ export function useChatStream() {
         case "tool_end": {
           const tool = event.tool as ToolCallInfo;
           const sources = event.sources as SearchSource[] | undefined;
+          const quickReplies = event.quickReplies as string[] | undefined;
           const msg = store.getMessageById(assistantId);
           if (!msg) break;
           const updated = (msg.toolCalls ?? []).map((t) =>
@@ -109,10 +110,12 @@ export function useChatStream() {
           const nextSources = sources
             ? [...(msg.sources ?? []), ...sources]
             : msg.sources;
-          store.updateMessage(assistantId, {
+          const update: Parameters<typeof store.updateMessage>[1] = {
             toolCalls: updated,
             sources: nextSources,
-          });
+          };
+          if (quickReplies) update.quickReplies = quickReplies;
+          store.updateMessage(assistantId, update);
           break;
         }
         case "message_end": {
@@ -237,7 +240,7 @@ export function useChatStream() {
 
         const nextMessages = options.startNewSession
           ? [userMsg, assistantMsg]
-          : [...state.messages, userMsg, assistantMsg];
+          : [...state.messages.map((m) => ({ ...m, quickReplies: undefined })), userMsg, assistantMsg];
 
         if (options.startNewSession) {
           state.setSessionId(undefined);

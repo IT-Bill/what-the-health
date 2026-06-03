@@ -1324,6 +1324,35 @@ export function createTools(userId: string): AgentTool[] {
     },
   };
 
+  const askForMoreInfoTool: AgentTool = {
+    name: "ask_for_more_info",
+    label: "追问用户",
+    description:
+      "当你需要更多信息才能给出准确回答时调用。提供 2-4 个简洁的快捷选项让用户快速回复。" +
+      "例如：询问症状部位、饮食偏好、目标类型等。" +
+      "调用后，这些选项会以可点击按钮的形式出现在你的回复下方。" +
+      "同时在你的回复文本中自然地提出问题，选项作为辅助。",
+    parameters: Type.Object({
+      question: Type.String({ description: "你想追问的问题（会体现在你的回复文本中，不需要重复显示）" }),
+      options: Type.Array(
+        Type.String({ description: "简短选项文本，最多50个字" }),
+        { description: "2-4 个快捷回复选项", minItems: 2, maxItems: 4 }
+      ),
+    }),
+    execute: async (_toolCallId, params) => {
+      const input = params as { question: string; options: string[] };
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify({ question: input.question, options: input.options }),
+          },
+        ],
+        details: { question: input.question, options: input.options },
+      };
+    },
+  };
+
   return [
     getUserPersonaTool,
     getUserProfileTool,
@@ -1348,5 +1377,6 @@ export function createTools(userId: string): AgentTool[] {
     saveTreatmentPlanTool,
     getActiveTreatmentPlansTool,
     setMedicationReminderTool,
+    askForMoreInfoTool,
   ];
 }

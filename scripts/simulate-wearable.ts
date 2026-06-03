@@ -43,7 +43,7 @@ const SECRET   = process.env.DEVICE_API_SECRET ?? "dev-device-secret-local";
 // Scenario definitions
 // ---------------------------------------------------------------------------
 
-interface Record {
+interface HealthRecord {
   metric: string;
   value: number;
   unit: string;
@@ -56,8 +56,8 @@ interface Scenario {
   rule: string;
   severity: "critical" | "warning" | "info";
   description: string;
-  alert: Omit<Record, "timestamp" | "endTimestamp">[];
-  normal: Omit<Record, "timestamp" | "endTimestamp">[];
+  alert: Omit<HealthRecord, "timestamp" | "endTimestamp">[];
+  normal: Omit<HealthRecord, "timestamp" | "endTimestamp">[];
 }
 
 const SCENARIOS: Scenario[] = [
@@ -133,7 +133,7 @@ async function runScenario(scenario: Scenario, useNormal: boolean) {
   const variant = useNormal ? "normal" : "alert";
   const rawRecords = useNormal ? scenario.normal : scenario.alert;
 
-  const records: Record[] = rawRecords.map((r) => ({
+  const records: HealthRecord[] = rawRecords.map((r) => ({
     ...r,
     timestamp:    ts,
     endTimestamp: ts,

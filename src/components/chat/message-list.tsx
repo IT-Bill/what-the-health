@@ -63,6 +63,7 @@ export function MessageList({ onRetry, onEdit, onSendSuggestion, onShowSources }
                 message={msg}
                 onRetry={() => handleRetry(msg.id, idx)}
                 onShowSources={msg.sources?.length ? () => onShowSources(msg.sources!) : undefined}
+                onQuickReply={onSendSuggestion}
               />
             ) : (
               <UserBubble key={msg.id} message={msg} onEdit={(text) => onEdit(msg.id, text)} />
