@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+import Link from "next/link";
 import { Copy, RotateCcw, BookOpen, Check } from "lucide-react";
 import { Volume2, VolumeX } from "lucide-react";
 import { MarkdownContent } from "./markdown-content";
 import { ThinkingProcess } from "./thinking-process";
-import type { Message } from "@/lib/chat/types";
+import type { Message, PostCardMini } from "@/lib/chat/types";
 
 interface AgentMessageProps {
   message: Message;
@@ -20,6 +21,7 @@ export function AgentMessage({ message, onRetry, onShowSources, onQuickReply }: 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const hasSources = (message.sources?.length ?? 0) > 0;
   const hasQuickReplies = !message.isStreaming && (message.quickReplies?.length ?? 0) > 0;
+  const hasPostCards = !message.isStreaming && (message.postCards?.length ?? 0) > 0;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(message.content).then(() => {
@@ -95,6 +97,14 @@ export function AgentMessage({ message, onRetry, onShowSources, onQuickReply }: 
           <span className="self-center text-xs text-on-surface-variant/50">或在输入框输入</span>
         </div>
       )}
+      {/* Post cards */}
+      {hasPostCards && (
+        <div className="mt-3 flex flex-col gap-2">
+          {message.postCards!.map((post) => (
+            <PostCardChip key={post.id} post={post} />
+          ))}
+        </div>
+      )}
       {/* Action bar */}
       {!message.isStreaming && message.content && (
         <div className="flex items-center gap-0.5 mt-2 -ml-1.5">
@@ -139,5 +149,26 @@ export function AgentMessage({ message, onRetry, onShowSources, onQuickReply }: 
         </div>
       )}
     </div>
+  );
+}
+
+function PostCardChip({ post }: { post: PostCardMini }) {
+  return (
+    <Link
+      href={`/discover/post/${post.id}`}
+      className="flex items-center gap-3 rounded-2xl bg-surface-container-low border border-outline-variant/20 hover:bg-surface-container transition-colors overflow-hidden"
+    >
+      {post.coverImage && (
+        <div className="w-16 h-16 flex-shrink-0 overflow-hidden">
+          <img src={post.coverImage} alt={post.title} className="w-full h-full object-cover" />
+        </div>
+      )}
+      <div className="flex-1 min-w-0 py-2 pr-3 pl-3">
+        <p className="text-sm font-medium text-on-surface line-clamp-2 leading-snug">{post.title}</p>
+        <p className="text-xs text-on-surface-variant mt-0.5">
+          {post.author.name} · {post.readMinutes} min
+        </p>
+      </div>
+    </Link>
   );
 }

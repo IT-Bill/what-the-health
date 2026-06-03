@@ -102,6 +102,7 @@ export function useChatStream() {
           const tool = event.tool as ToolCallInfo;
           const sources = event.sources as SearchSource[] | undefined;
           const quickReplies = event.quickReplies as string[] | undefined;
+          const postCards = event.postCards as import("@/lib/chat/types").PostCardMini[] | undefined;
           const msg = store.getMessageById(assistantId);
           if (!msg) break;
           const updated = (msg.toolCalls ?? []).map((t) =>
@@ -110,9 +111,13 @@ export function useChatStream() {
           const nextSources = sources
             ? [...(msg.sources ?? []), ...sources]
             : msg.sources;
+          const nextPostCards = postCards
+            ? [...(msg.postCards ?? []), ...postCards]
+            : msg.postCards;
           const update: Parameters<typeof store.updateMessage>[1] = {
             toolCalls: updated,
             sources: nextSources,
+            postCards: nextPostCards,
           };
           if (quickReplies) update.quickReplies = quickReplies;
           store.updateMessage(assistantId, update);
@@ -240,7 +245,7 @@ export function useChatStream() {
 
         const nextMessages = options.startNewSession
           ? [userMsg, assistantMsg]
-          : [...state.messages.map((m) => ({ ...m, quickReplies: undefined })), userMsg, assistantMsg];
+          : [...state.messages.map((m) => ({ ...m, quickReplies: undefined, postCards: undefined })), userMsg, assistantMsg];
 
         if (options.startNewSession) {
           state.setSessionId(undefined);

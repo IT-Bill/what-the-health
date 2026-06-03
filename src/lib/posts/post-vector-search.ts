@@ -124,6 +124,7 @@ export async function searchPostsByVector(options: {
       excerpt: true,
       category: true,
       categoryIcon: true,
+      coverImage: true,
       readMinutes: true,
       publishedAt: true,
       viewCount: true,
