@@ -1025,6 +1025,287 @@ export function createTools(userId: string): AgentTool[] {
     },
   };
 
+  // ---------------------------------------------------------------------------
+  // Symptom Triage Tools
+  // ---------------------------------------------------------------------------
+
+  const saveSymptomRecordTool: AgentTool = {
+    name: "save_symptom_record",
+    label: "保存症状记录",
+    description:
+      "将用户在症状问诊流程中描述的症状信息结构化保存到数据库。" +
+      "在 Phase 3（信息确认后）调用。",
+    parameters: Type.Object({
+      symptomDescription: Type.String({ description: "用户描述的核心症状" }),
+      bodyPart: Type.Optional(Type.String({ description: "身体部位" })),
+      duration: Type.Optional(Type.String({ description: "持续时间" })),
+      severity: Type.Optional(Type.Union(
+        [Type.Literal("mild"), Type.Literal("moderate"), Type.Literal("severe")],
+        { description: "严重程度" }
+      )),
+      triggers: Type.Optional(Type.Array(Type.String(), { description: "诱发/缓解因素" })),
+      associatedSymptoms: Type.Optional(Type.Array(Type.String(), { description: "伴随症状" })),
+      notes: Type.Optional(Type.String({ description: "完整病史摘要" })),
+    }),
+    execute: async (_toolCallId, params) => {
+      const input = params as {
+        symptomDescription: string;
+        bodyPart?: string;
+        duration?: string;
+        severity?: "mild" | "moderate" | "severe";
+        triggers?: string[];
+        associatedSymptoms?: string[];
+        notes?: string;
+      };
+
+      const record = await prisma.symptomRecord.create({
+        data: {
+          userId,
+          symptomDescription: input.symptomDescription,
+          bodyPart: input.bodyPart ?? null,
+          duration: input.duration ?? null,
+          severity: input.severity ?? null,
+          triggers: input.triggers ?? [],
+          associatedSymptoms: input.associatedSymptoms ?? [],
+          notes: input.notes ?? null,
+        },
+      });
+
+      return {
+        content: [{ type: "text" as const, text: `症状记录已保存 (id: ${record.id})` }],
+        details: record,
+      };
+    },
+  };
+
+  const getRecentSymptomRecordsTool: AgentTool = {
+    name: "get_recent_symptom_records",
+    label: "获取近期症状记录",
+    description: "获取用户最近的症状记录，用于生成病历或回顾病史。",
+    parameters: Type.Object({
+      limit: Type.Number({ description: "返回多少条（默认5）", default: 5, minimum: 1, maximum: 20 }),
+      activeOnly: Type.Boolean({ description: "仅返回当前活跃的症状", default: true }),
+    }),
+    execute: async (_toolCallId, params) => {
+      const input = params as { limit?: number; activeOnly?: boolean };
+      const records = await prisma.symptomRecord.findMany({
+        where: {
+          userId,
+          ...(input.activeOnly !== false ? { isActive: true } : {}),
+        },
+        orderBy: { createdAt: "desc" },
+        take: input.limit ?? 5,
+      });
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: records.length === 0
+              ? "用户暂无症状记录。"
+              : JSON.stringify(records, null, 2),
+          },
+        ],
+        details: records,
+      };
+    },
+  };
+
+  const generateMedicalRecordTool: AgentTool = {
+    name: "generate_medical_record",
+    label: "生成病历",
+    description:
+      "根据用户症状记录和基本信息，生成结构化的病历文档并保存。" +
+      "当用户要求'整理病历'、'生成病情描述'时调用。",
+    parameters: Type.Object({
+      title: Type.String({ description: "病历标题，如'胸痛问诊记录'" }),
+      chiefComplaint: Type.String({ description: "主诉" }),
+      presentIllness: Type.Optional(Type.String({ description: "现病史 JSON 字符串" })),
+      pastHistory: Type.Optional(Type.String({ description: "既往史" })),
+      recommendedDepartments: Type.Optional(Type.Array(Type.String(), { description: "推荐科室" })),
+      formattedRecord: Type.String({ description: "完整格式化的病历文本" }),
+      symptomRecordIds: Type.Optional(Type.Array(Type.String(), { description: "关联症状记录 ID" })),
+    }),
+    execute: async (_toolCallId, params) => {
+      const input = params as {
+        title: string;
+        chiefComplaint: string;
+        presentIllness?: string;
+        pastHistory?: string;
+        recommendedDepartments?: string[];
+        formattedRecord: string;
+        symptomRecordIds?: string[];
+      };
+
+      const record = await prisma.medicalRecord.create({
+        data: {
+          userId,
+          title: input.title,
+          chiefComplaint: input.chiefComplaint,
+          presentIllness: input.presentIllness ? JSON.parse(input.presentIllness) : undefined,
+          pastHistory: input.pastHistory ?? null,
+          recommendedDepartments: input.recommendedDepartments ?? [],
+          formattedRecord: input.formattedRecord,
+          symptomRecordIds: input.symptomRecordIds ?? [],
+        },
+      });
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `病历已生成并保存 (id: ${record.id})\n\n${input.formattedRecord}`,
+          },
+        ],
+        details: record,
+      };
+    },
+  };
+
+  // ---------------------------------------------------------------------------
+  // Compliance Management Tools
+  // ---------------------------------------------------------------------------
+
+  const saveTreatmentPlanTool: AgentTool = {
+    name: "save_treatment_plan",
+    label: "保存治疗方案",
+    description:
+      "保存用户的诊断结果、治疗方案、用药信息、忌口禁忌等。" +
+      "当用户提到诊断结果或医嘱时调用。",
+    parameters: Type.Object({
+      diagnosis: Type.String({ description: "诊断名称" }),
+      treatment: Type.String({ description: "治疗方案/医嘱描述" }),
+      medications: Type.Optional(Type.String({ description: "用药信息 JSON 字符串 [{name, dosage, frequency, duration, notes}]" })),
+      dietaryRestrictions: Type.Optional(Type.Array(Type.String(), { description: "忌口列表" })),
+      activityRestrictions: Type.Optional(Type.Array(Type.String(), { description: "活动禁忌" })),
+      followUpInstructions: Type.Optional(Type.String({ description: "复诊说明" })),
+      durationDays: Type.Optional(Type.Number({ description: "预计疗程天数" })),
+      nextFollowUpDate: Type.Optional(Type.String({ description: "下次复诊日期 (ISO 格式)" })),
+    }),
+    execute: async (_toolCallId, params) => {
+      const input = params as {
+        diagnosis: string;
+        treatment: string;
+        medications?: string;
+        dietaryRestrictions?: string[];
+        activityRestrictions?: string[];
+        followUpInstructions?: string;
+        durationDays?: number;
+        nextFollowUpDate?: string;
+      };
+
+      const endDate = input.durationDays
+        ? new Date(Date.now() + input.durationDays * 24 * 60 * 60 * 1000)
+        : undefined;
+
+      const plan = await prisma.treatmentPlan.create({
+        data: {
+          userId,
+          diagnosis: input.diagnosis,
+          treatment: input.treatment,
+          medications: input.medications ? JSON.parse(input.medications) : undefined,
+          dietaryRestrictions: input.dietaryRestrictions ?? [],
+          activityRestrictions: input.activityRestrictions ?? [],
+          followUpInstructions: input.followUpInstructions ?? null,
+          durationDays: input.durationDays ?? null,
+          startDate: new Date(),
+          endDate: endDate ?? null,
+          nextFollowUpDate: input.nextFollowUpDate ? new Date(input.nextFollowUpDate) : null,
+        },
+      });
+
+      return {
+        content: [{ type: "text" as const, text: `治疗方案已保存 (id: ${plan.id})` }],
+        details: plan,
+      };
+    },
+  };
+
+  const getActiveTreatmentPlansTool: AgentTool = {
+    name: "get_active_treatment_plans",
+    label: "获取活跃治疗方案",
+    description:
+      "获取用户当前进行中的治疗方案。在提供饮食/运动建议前调用，" +
+      "以检查是否有医嘱约束需要遵守。",
+    parameters: Type.Object({}),
+    execute: async () => {
+      const plans = await prisma.treatmentPlan.findMany({
+        where: {
+          userId,
+          status: "active",
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text:
+              plans.length === 0
+                ? "用户当前没有进行中的治疗方案。"
+                : JSON.stringify(plans, null, 2),
+          },
+        ],
+        details: plans,
+      };
+    },
+  };
+
+  const setMedicationReminderTool: AgentTool = {
+    name: "set_medication_reminder",
+    label: "设置用药提醒",
+    description:
+      "为用户设置用药或复诊提醒。当用户同意设置提醒时调用。",
+    parameters: Type.Object({
+      title: Type.String({ description: "提醒标题，如'服用阿莫西林'" }),
+      description: Type.Optional(Type.String({ description: "剂量说明" })),
+      frequency: Type.Union(
+        [
+          Type.Literal("daily"),
+          Type.Literal("twice_daily"),
+          Type.Literal("three_times_daily"),
+          Type.Literal("weekly"),
+          Type.Literal("custom"),
+        ],
+        { description: "提醒频率" }
+      ),
+      reminderTimes: Type.Array(Type.String(), { description: "提醒时间 [\"08:00\", \"20:00\"]" }),
+      startDate: Type.String({ description: "开始日期 (ISO 格式)" }),
+      endDate: Type.Optional(Type.String({ description: "结束日期 (ISO 格式)" })),
+      treatmentPlanId: Type.Optional(Type.String({ description: "关联治疗方案 ID" })),
+    }),
+    execute: async (_toolCallId, params) => {
+      const input = params as {
+        title: string;
+        description?: string;
+        frequency: "daily" | "twice_daily" | "three_times_daily" | "weekly" | "custom";
+        reminderTimes: string[];
+        startDate: string;
+        endDate?: string;
+        treatmentPlanId?: string;
+      };
+
+      const reminder = await prisma.medicationReminder.create({
+        data: {
+          userId,
+          title: input.title,
+          description: input.description ?? null,
+          frequency: input.frequency,
+          reminderTimes: input.reminderTimes,
+          startDate: new Date(input.startDate),
+          endDate: input.endDate ? new Date(input.endDate) : null,
+          treatmentPlanId: input.treatmentPlanId ?? null,
+        },
+      });
+
+      return {
+        content: [{ type: "text" as const, text: `提醒已设置：${input.title}，${input.reminderTimes.join(", ")}` }],
+        details: reminder,
+      };
+    },
+  };
+
   return [
     getUserPersonaTool,
     getUserProfileTool,
@@ -1043,5 +1324,11 @@ export function createTools(userId: string): AgentTool[] {
     manageOnboardingTool,
     recordDietaryLogTool,
     generateHealthPlanTool,
+    saveSymptomRecordTool,
+    getRecentSymptomRecordsTool,
+    generateMedicalRecordTool,
+    saveTreatmentPlanTool,
+    getActiveTreatmentPlansTool,
+    setMedicationReminderTool,
   ];
 }

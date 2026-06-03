@@ -51,17 +51,12 @@ export function ToolCallCard({ toolCall }: ToolCallCardProps) {
       </button>
 
       {isOpen && (
-        <div className="px-2.5 pb-2 space-y-2">
+        <div className="px-2.5 pb-2">
           {toolCall.result && (toolCall.status === "done" || toolCall.status === "error") ? (
-            <div>
-              <div className="text-[10px] font-mono text-on-surface-variant/25 uppercase tracking-widest mb-1.5 select-none">
-                result
-              </div>
-              <div className="rounded bg-surface-container-lowest p-2">
-                <pre className="text-xs text-on-surface-variant/70 whitespace-pre-wrap break-words font-sans">
-                  {toolCall.result}
-                </pre>
-              </div>
+            <div className="rounded bg-surface-container-lowest p-2">
+              <pre className="text-xs text-on-surface-variant/60 whitespace-pre-wrap break-words font-sans">
+                {toolCall.result}
+              </pre>
             </div>
           ) : toolCall.status === "running" ? (
             <div className="text-xs text-on-surface-variant/50">运行中...</div>
