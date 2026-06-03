@@ -603,8 +603,8 @@ export async function POST(request: Request) {
       messages: wireToAgentMsgs(existingMessages),
     },
     onPayload: (payload) => {
-      const final = { ...(payload as Record<string, unknown>), ...EXTRA_BODY };
-      console.log("[API Payload] enable_thinking:", final.enable_thinking, "reasoning_effort:", final.reasoning_effort);
+      const final = { ...(payload as Record<string, unknown>), ...EXTRA_BODY } as Record<string, unknown>;
+      console.log("[API Payload] enable_thinking:", final["enable_thinking"], "reasoning_effort:", final["reasoning_effort"]);
       return final;
     },
     onResponse: (response) => {
