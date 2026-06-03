@@ -80,7 +80,7 @@ export async function POST(
           title: `${comment.author.name} 评论了你的帖子`,
           body: `《${post.title}》：${content.slice(0, 50)}${content.length > 50 ? "…" : ""}`,
           source: "post-comment",
-          actionUrl: `/discover/${id}#comment-${comment.id}`,
+          actionUrl: `/discover/post/${id}#comment-${comment.id}`,
           metadata: {
             actorId: sessionUser.userId,
             postId: id,
@@ -100,7 +100,7 @@ export async function POST(
           title: `${comment.author.name} 回复了你的评论`,
           body: `在《${post.title}》中：${content.slice(0, 50)}${content.length > 50 ? "…" : ""}`,
           source: "post-comment-reply",
-          actionUrl: `/discover/${id}#comment-${comment.id}`,
+          actionUrl: `/discover/post/${id}#comment-${comment.id}`,
           metadata: {
             actorId: sessionUser.userId,
             postId: id,

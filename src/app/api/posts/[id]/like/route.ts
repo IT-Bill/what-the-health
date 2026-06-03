@@ -50,7 +50,7 @@ export async function POST(
           title: `${actor.name} 赞了你的帖子`,
           body: `《${post.title}》收到了一个新的赞。`,
           source: "post-like",
-          actionUrl: `/discover/${post.id}`,
+          actionUrl: `/discover/post/${post.id}`,
           metadata: {
             actorId: actor.id,
             postId: post.id,

@@ -89,7 +89,7 @@ export default function NewPostPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        router.push(`/discover/${data.id}`);
+        router.push(`/discover/post/${data.id}`);
       } else {
         const err = await res.json();
         alert(err.error || "发布失败");
@@ -115,7 +115,7 @@ export default function NewPostPage() {
       {/* Header */}
       <header className="sticky top-0 z-50 bg-surface/80 backdrop-blur-xl flex items-center justify-between px-6 h-14 border-b border-outline-variant/20">
         <Link
-          href="/discover"
+          href="/discover/post"
           className="text-on-surface hover:opacity-70 transition-opacity flex items-center gap-1"
         >
           <Icon name="close" />

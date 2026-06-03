@@ -60,7 +60,7 @@ export async function POST(
           title: `${actor.name} 赞了你的评论`,
           body: `《${comment.post.title}》下的评论“${toSnippet(comment.body)}”收到了一个赞。`,
           source: "comment-like",
-          actionUrl: `/discover/${comment.postId}`,
+          actionUrl: `/discover/post/${comment.postId}`,
           metadata: {
             actorId: actor.id,
             commentId: comment.id,
