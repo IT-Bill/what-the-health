@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import type { PostCard } from "@/lib/post-types";
 import { Icon } from "@/components/icon";
+import { useUser } from "@/lib/swr";
 
 const CATEGORIES = [
   { id: "all", label: "全部" },
@@ -18,11 +19,8 @@ export default function DiscoverPage() {
   const [activeCategory, setActiveCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-
-  useEffect(() => {
-    fetch("/api/me").then((r) => { if (r.ok) setIsLoggedIn(true); }).catch(() => {});
-  }, []);
+  const { data: userData } = useUser();
+  const isLoggedIn = !!userData?.user;
 
   useEffect(() => {
     let cancelled = false;

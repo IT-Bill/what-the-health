@@ -248,6 +248,12 @@ model User {
   healthPlans     HealthPlan[]
   dietaryLogs     DietaryLog[]
 
+  // Symptom triage & medical records
+  symptomRecords   SymptomRecord[]
+  medicalRecords   MedicalRecord[]
+  treatmentPlans   TreatmentPlan[]
+  medicationReminders MedicationReminder[]
+
   // Friend system
   sentFriendRequests     Friendship[] @relation("FriendshipRequester")
   receivedFriendRequests Friendship[] @relation("FriendshipAddressee")
@@ -954,6 +960,26 @@ enum AlertLevel {
   high   // 高度关注
 }
 
+enum SymptomSeverity {
+  mild     // 轻微
+  moderate // 中等
+  severe   // 严重
+}
+
+enum TreatmentStatus {
+  active     // 进行中
+  completed  // 已完成
+  cancelled  // 已取消
+}
+
+enum ReminderFrequency {
+  daily
+  twice_daily
+  three_times_daily
+  weekly
+  custom
+}
+
 /// 家庭
 model Family {
   id          String   @id @default(cuid())
@@ -1019,4 +1045,144 @@ model FamilyAlert {
   @@index([familyId, createdAt])
   @@index([sourceUserId, createdAt])
   @@map("family_alerts")
+}
+
+// ---------------------------------------------------------------------------
+// Symptom Triage & Medical Records
+// ---------------------------------------------------------------------------
+
+/// Single symptom record captured during a chat triage session.
+model SymptomRecord {
+  id                  String           @id @default(cuid())
+  userId              String
+  user                User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// What the user described (free-form)
+  symptomDescription  String
+  /// Affected body part / area
+  bodyPart            String?
+  /// How long it has been going on
+  duration            String?
+  /// mild | moderate | severe
+  severity            SymptomSeverity?
+  /// Things that trigger or relieve it
+  triggers            String[]         @default([])
+  /// Associated symptoms (e.g. "nausea", "fever")
+  associatedSymptoms  String[]         @default([])
+  /// When the symptom started
+  onsetDate           DateTime?        @db.Date
+  /// Whether the symptom is currently active
+  isActive            Boolean          @default(true)
+  /// Free-form notes
+  notes               String?
+  /// Link to the chat session where this was recorded
+  sessionId           String?
+
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  @@index([userId, isActive, createdAt])
+  @@index([userId, bodyPart])
+  @@map("symptom_records")
+}
+
+/// Structured medical record generated from symptom triage.
+model MedicalRecord {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Human-readable title, e.g. "胸痛问诊记录"
+  title         String
+  /// Chief complaint (主诉)
+  chiefComplaint String
+  /// History of present illness (现病史) — structured JSON
+  presentIllness Json?
+  /// Past medical history relevant to this case
+  pastHistory   String?
+  /// Recommended department(s)
+  recommendedDepartments String[] @default([])
+  /// The full formatted record for doctor presentation
+  formattedRecord String
+  /// Related symptom record IDs
+  symptomRecordIds String[] @default([])
+  /// Whether the user has "presented" this to a doctor (for tracking)
+  presentedToDoctor Boolean @default(false)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId, createdAt])
+  @@map("medical_records")
+}
+
+/// Treatment plan / doctor's orders captured from user input or documents.
+model TreatmentPlan {
+  id            String          @id @default(cuid())
+  userId        String
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Diagnosis name
+  diagnosis     String
+  /// Treatment description / doctor's orders
+  treatment     String
+  /// Medications prescribed
+  medications   Json?           // [{ name, dosage, frequency, duration, notes }]
+  /// Dietary restrictions (忌口)
+  dietaryRestrictions String[]  @default([])
+  /// Activity restrictions (禁忌)
+  activityRestrictions String[] @default([])
+  /// Follow-up /复诊 instructions
+  followUpInstructions String?
+  /// 检查报告 URLs
+  reportUrls    String[]        @default([])
+  /// Duration of treatment
+  durationDays  Int?
+  /// active | completed | cancelled
+  status        TreatmentStatus @default(active)
+  /// When the treatment started
+  startDate     DateTime?       @db.Date
+  /// When the treatment should end
+  endDate       DateTime?       @db.Date
+  /// Next follow-up appointment date
+  nextFollowUpDate DateTime?    @db.Date
+
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([userId, status, createdAt])
+  @@index([userId, nextFollowUpDate])
+  @@map("treatment_plans")
+}
+
+/// Medication / check-in reminder schedule.
+model MedicationReminder {
+  id            String            @id @default(cuid())
+  userId        String
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// What to remind: medication name, check-in type, etc.
+  title         String
+  /// Reminder description / dosage info
+  description   String?
+  /// daily | twice_daily | three_times_daily | weekly | custom
+  frequency     ReminderFrequency
+  /// Specific times of day (e.g. ["08:00", "20:00"])
+  reminderTimes String[]          @default([])
+  /// Start date of the reminder schedule
+  startDate     DateTime          @db.Date
+  /// End date (optional — e.g. 7-day course)
+  endDate       DateTime?         @db.Date
+  /// Whether this reminder is currently active
+  isActive      Boolean           @default(true)
+  /// Last time a reminder was sent
+  lastRemindedAt DateTime?
+  /// Related treatment plan
+  treatmentPlanId String?
+
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([userId, isActive, startDate])
+  @@map("medication_reminders")
 }

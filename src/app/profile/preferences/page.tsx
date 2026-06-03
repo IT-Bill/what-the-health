@@ -4,11 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/icon";
 import { AGENT_ROLES, type AgentRole, DEFAULT_AGENT_ROLE } from "@/lib/agent-role";
-
-interface User {
-  id: string;
-  agentRole?: string | null;
-}
+import { useUser } from "@/lib/swr";
 
 interface PrefItem {
   id: string;
@@ -25,7 +21,8 @@ const prefItems: PrefItem[] = [
 ];
 
 export default function PreferencesPage() {
-  const [user, setUser] = useState<User | null>(null);
+  const { data: userData } = useUser();
+  const user = userData?.user ?? null;
   const [selectedRole, setSelectedRole] = useState<AgentRole>(DEFAULT_AGENT_ROLE);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
@@ -34,18 +31,10 @@ export default function PreferencesPage() {
   });
 
   useEffect(() => {
-    fetch("/api/me")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.user) {
-          setUser(data.user);
-          if (data.user.agentRole) {
-            setSelectedRole(data.user.agentRole as AgentRole);
-          }
-        }
-      })
-      .catch(console.error);
-  }, []);
+    if (user?.agentRole) {
+      setSelectedRole(user.agentRole as AgentRole);
+    }
+  }, [user?.agentRole]);
 
   function toggleItem(id: string) {
     setToggles((prev) => ({ ...prev, [id]: !prev[id] }));

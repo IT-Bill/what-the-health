@@ -66,15 +66,17 @@ export function BottomNavBar() {
   }, [pathname, router]);
 
   const submitVoiceText = useCallback((text: string) => {
-    const payload: PendingVoiceText = { text, startNewSession: true };
     if (pathname === "/chat" || pathname?.startsWith("/chat/")) {
+      // Already on chat page — send directly in current session
       window.dispatchEvent(
         new CustomEvent<VoiceSubmitEventDetail>(VOICE_SUBMIT_EVENT, {
-          detail: payload,
+          detail: { text, startNewSession: false },
         })
       );
       return;
     }
+    // From other pages — navigate to chat and start a new session
+    const payload: PendingVoiceText = { text, startNewSession: true };
     sessionStorage.setItem(PENDING_VOICE_TEXT_KEY, JSON.stringify(payload));
     router.push("/chat");
   }, [pathname, router]);
@@ -284,6 +286,7 @@ export function BottomNavBar() {
           onTouchStart={startPress}
           onTouchEnd={endPress}
           onTouchCancel={endPress}
+          onContextMenu={(e) => e.preventDefault()}
           aria-label="Voice input - long press to speak"
         >
           <Mic size={24} fill="currentColor" />

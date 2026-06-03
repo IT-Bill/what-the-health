@@ -76,6 +76,11 @@
   --spacing-section-gap: 80px;
 }
 
+/* Always reserve scrollbar gutter so layout doesn't shift when content grows */
+html {
+  overflow-y: scroll;
+}
+
 /* Noise texture background */
 body {
   background-color: #fcf9f8;
@@ -116,12 +121,13 @@ body {
   border: 1px solid rgba(200, 199, 190, 0.3);
 }
 
-/* Prevent text selection on long press */
+/* Prevent text selection and system touch callout on long press */
 .no-select {
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
   user-select: none;
+  -webkit-touch-callout: none;
 }
 
 /* Waveform animation for voice input */

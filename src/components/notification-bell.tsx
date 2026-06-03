@@ -1,36 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import { Icon } from "./icon";
+import { useNotifications } from "@/lib/swr";
 
 const POLL_INTERVAL_MS = 30 * 1000;
 
 export function NotificationBell({ className }: { className?: string }) {
-  const [unread, setUnread] = useState(0);
-
-  useEffect(() => {
-    async function fetchUnread() {
-      try {
-        const res = await fetch("/api/notifications", { cache: "no-store" });
-        if (!res.ok) return;
-        const data = await res.json();
-        const count = (data.notifications ?? []).filter((n: { unread: boolean }) => n.unread).length;
-        setUnread(count);
-      } catch {
-        // ignore
-      }
-    }
-
-    void fetchUnread();
-    const timer = setInterval(fetchUnread, POLL_INTERVAL_MS);
-    const onFocus = () => void fetchUnread();
-    window.addEventListener("focus", onFocus);
-    return () => {
-      clearInterval(timer);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, []);
+  const { data } = useNotifications({ refreshInterval: POLL_INTERVAL_MS });
+  const unread = (data?.notifications ?? []).filter((n) => n.unread).length;
 
   return (
     <Link
