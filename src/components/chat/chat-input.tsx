@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import { Camera, Image, FileText } from "lucide-react";
+import { Camera, Image, FileText, X } from "lucide-react";
 import { Icon } from "@/components/icon";
 import { useChatStore } from "@/lib/chat/store";
 
@@ -144,7 +144,25 @@ export function ChatInput({
             >
               <Icon name="stop" size={20} />
             </button>
-          ) : hasInput && !isRecordingProp ? (
+          ) : isRecordingProp ? (
+            <div className="flex items-center gap-1">
+              {/* Cancel recording */}
+              <button
+                onClick={() => { onCleanupRecording(); }}
+                className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-colors"
+                title="取消录音"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              {/* Stop & send */}
+              <button
+                onClick={onStopVoiceRecording}
+                className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-error text-on-error hover:opacity-90 transition-all"
+              >
+                <Icon name="stop" size={20} />
+              </button>
+            </div>
+          ) : hasInput ? (
             <button
               onClick={onSend}
               className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-on-surface text-surface hover:opacity-90 transition-all"
@@ -153,13 +171,11 @@ export function ChatInput({
             </button>
           ) : (
             <button
-              onClick={isRecordingProp ? onStopVoiceRecording : onStartVoiceRecording}
+              onClick={onStartVoiceRecording}
               onContextMenu={(e) => e.preventDefault()}
-              className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all ${
-                isRecordingProp ? "bg-error text-on-error" : "text-on-surface-variant hover:bg-surface-container-low"
-              }`}
+              className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-all"
             >
-              <Icon name={isRecordingProp ? "stop" : "mic_none"} size={20} />
+              <Icon name="mic_none" size={20} />
             </button>
           )}
         </div>

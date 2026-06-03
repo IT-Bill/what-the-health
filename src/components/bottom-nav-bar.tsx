@@ -36,6 +36,9 @@ export function BottomNavBar() {
   const [transcript, setTranscript] = useState("");
   const [volumeBars, setVolumeBars] = useState<number[]>(Array(5).fill(0.15));
 
+  const [isCancelZone, setIsCancelZone] = useState(false);
+  const startYRef = useRef<number>(0);
+  const CANCEL_THRESHOLD = 80; // px upward swipe to cancel
   const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isListeningRef = useRef(false);
   const shouldSendRef = useRef(false);
@@ -186,7 +189,13 @@ export function BottomNavBar() {
   }, [cleanupASR, submitVoiceText]);
 
   const startPress = useCallback((e: React.TouchEvent | React.MouseEvent) => {
-    if (e.type === "touchstart") e.preventDefault();
+    if (e.type === "touchstart") {
+      e.preventDefault();
+      startYRef.current = (e as React.TouchEvent).touches[0].clientY;
+    } else {
+      startYRef.current = (e as React.MouseEvent).clientY;
+    }
+    setIsCancelZone(false);
     pressTimerRef.current = setTimeout(() => {
       isListeningRef.current = true;
       shouldSendRef.current = false;
@@ -197,16 +206,40 @@ export function BottomNavBar() {
     }, 300);
   }, [startASR]);
 
+  const onMovePress = useCallback((e: React.TouchEvent | React.MouseEvent) => {
+    if (!isListeningRef.current) return;
+    e.preventDefault();
+    const currentY = e.type === "touchmove"
+      ? (e as React.TouchEvent).touches[0].clientY
+      : (e as React.MouseEvent).clientY;
+    const diff = startYRef.current - currentY;
+    setIsCancelZone(diff > CANCEL_THRESHOLD);
+  }, []);
+
   const endPress = useCallback((e: React.TouchEvent | React.MouseEvent) => {
     if (e.type === "touchend") e.preventDefault();
     if (pressTimerRef.current) { clearTimeout(pressTimerRef.current); pressTimerRef.current = null; }
 
     if (!isListeningRef.current) return;
     isListeningRef.current = false;
+
+    const cancelled = isCancelZone;
+    setIsCancelZone(false);
+
+    if (cancelled) {
+      // Cancel — discard transcript
+      shouldSendRef.current = false;
+      cleanupASR();
+      setIsListening(false);
+      setVolumeBars(Array(5).fill(0.15));
+      transcriptRef.current = "";
+      setTranscript("");
+      return;
+    }
+
     shouldSendRef.current = true;
 
-    // Flush remaining audio then send end — proxy will close the connection,
-    // triggering ws.onclose which handles navigation
+    // Flush remaining audio then send end
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
       const chunks = audioChunksRef.current.splice(0);
@@ -221,12 +254,19 @@ export function BottomNavBar() {
       }
       ws.send(JSON.stringify({ type: "end" }));
     } else {
-      // No WS connection, just clean up
       cleanupASR();
       setIsListening(false);
       setVolumeBars(Array(5).fill(0.15));
     }
-  }, [cleanupASR]);
+  }, [cleanupASR, isCancelZone]);
+
+  // Block page scroll/overscroll while recording
+  useEffect(() => {
+    if (!isListening) return;
+    const prevent = (e: TouchEvent) => e.preventDefault();
+    document.addEventListener("touchmove", prevent, { passive: false });
+    return () => document.removeEventListener("touchmove", prevent);
+  }, [isListening]);
 
   // Cleanup on unmount
   useEffect(() => () => cleanupASR(), [cleanupASR]);
@@ -239,19 +279,25 @@ export function BottomNavBar() {
           isListening ? "translate-y-0" : "-translate-y-full"
         }`}
       >
-        <div className="bg-surface/90 backdrop-blur-xl rounded-2xl shadow-lg border border-outline-variant/30 p-6 flex flex-col items-center gap-4">
+        <div className={`bg-surface/90 backdrop-blur-xl rounded-2xl shadow-lg border transition-colors duration-200 p-6 flex flex-col items-center gap-4 ${
+          isCancelZone ? "border-error/60 bg-error/10" : "border-outline-variant/30"
+        }`}>
           <div className="flex items-end gap-1 h-10">
             {volumeBars.map((v, i) => (
               <div
                 key={i}
-                className="w-1.5 rounded-full bg-secondary transition-all duration-75"
+                className={`w-1.5 rounded-full transition-all duration-75 ${isCancelZone ? "bg-error" : "bg-secondary"}`}
                 style={{ height: `${Math.max(6, v * 36)}px` }}
               />
             ))}
           </div>
           <p className="text-base text-on-surface min-h-[1.5rem] text-center">
-            {transcript || <span className="text-on-surface-variant italic">正在聆听...</span>}
+            {isCancelZone
+              ? <span className="text-error font-medium">松开取消</span>
+              : transcript || <span className="text-on-surface-variant italic">正在聆听...</span>
+            }
           </p>
+          <p className="text-xs text-on-surface-variant/60">上划取消</p>
         </div>
       </div>
 
@@ -277,13 +323,15 @@ export function BottomNavBar() {
 
         {/* Center Voice Button */}
         <button
-          className={`no-select flex items-center justify-center rounded-full w-14 h-14 -translate-y-4 shadow-lg transition-all duration-300 active:scale-95 flex-shrink-0 ${
+          className={`no-select touch-none flex items-center justify-center rounded-full w-14 h-14 -translate-y-4 shadow-lg transition-all duration-300 active:scale-95 flex-shrink-0 ${
             isListening ? "bg-secondary-fixed-dim text-on-secondary-fixed scale-110" : "bg-secondary text-on-secondary"
           }`}
           onMouseDown={startPress}
+          onMouseMove={onMovePress}
           onMouseUp={endPress}
           onMouseLeave={endPress}
           onTouchStart={startPress}
+          onTouchMove={onMovePress}
           onTouchEnd={endPress}
           onTouchCancel={endPress}
           onContextMenu={(e) => e.preventDefault()}
