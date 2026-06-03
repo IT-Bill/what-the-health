@@ -591,13 +591,13 @@ export async function POST(request: Request) {
     "设置后自然告诉用户，如'我帮你设好了每天测血压的提醒'，不要过度解释工具调用。",
   ].join("\n");
 
-  // Layered context blocks (ordered: role → goals → time → wearable → dietary → profile → memories)
+  // Layered context blocks (ordered: time → role → goals → onboarding → reminder → wearable → dietary → profile → memories)
   const contextParts = [
+    timeContext,
     rolePrompt,
     goalParameterPrompt || null,
     onboardingPrompt || null,
     reminderPrompt,
-    timeContext,
     wearableContext || null,
     dietaryContext,
     healthProfileContext || null,
