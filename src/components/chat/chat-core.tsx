@@ -66,7 +66,7 @@ function readPendingVoiceText(): PendingVoiceText | null {
 
 export default function ChatCore({ initialSessionId }: ChatCoreProps) {
   const showSidebar = useChatStore((s) => s.showSidebar);
-  const { sendMessage, retryMessage } = useChatStream();
+  const { sendMessage, retryMessage, cancelStream } = useChatStream();
   const {
     loadSession,
     startNewSession,
@@ -137,7 +137,7 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
       const text = (overrideText ?? state.input).trim();
       const imageUrl = state.pendingImage?.url;
 
-      if ((!text && !imageUrl) || state.isStreaming) return;
+      if (!text && !imageUrl) return;
 
       if (state.pendingImage) {
         URL.revokeObjectURL(state.pendingImage.previewUrl);
@@ -563,6 +563,9 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
             onSend={() => {
               markChatActivity();
               handleSend();
+            }}
+            onCancel={() => {
+              cancelStream();
             }}
             onImageSelect={handleImageSelect}
             onStartVoiceRecording={startRecording}
