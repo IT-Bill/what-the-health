@@ -30,11 +30,13 @@ export function UserBubble({ message, onEdit }: UserBubbleProps) {
 
   const handleConfirm = useCallback(() => {
     const trimmed = editText.trim();
-    if (trimmed && trimmed !== message.content) {
+    // Always resend on confirm — editing is an explicit "regenerate" intent,
+    // even if the text is unchanged.
+    if (trimmed) {
       onEdit?.(trimmed);
     }
     setIsEditing(false);
-  }, [editText, message.content, onEdit]);
+  }, [editText, onEdit]);
 
   const handleCancel = useCallback(() => {
     setIsEditing(false);
@@ -43,6 +45,8 @@ export function UserBubble({ message, onEdit }: UserBubbleProps) {
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      // Ignore Enter while an IME is composing (e.g. selecting Pinyin candidates)
+      if (e.nativeEvent.isComposing || e.keyCode === 229) return;
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         handleConfirm();

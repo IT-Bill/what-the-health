@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icon";
 import { PrimaryGoalSelectorDialog } from "@/components/primary-goal-selector-dialog";
 import {
@@ -48,10 +47,10 @@ function formatDateForInput(dateStr?: string): string {
 }
 
 export default function PersonalInfoPage() {
-  const router = useRouter();
   const { data: userData, isLoading } = useUser();
   const user = userData?.user ?? null;
   const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saved" | "error">("idle");
   const [form, setForm] = useState<Partial<User>>({});
   const [goalDialogOpen, setGoalDialogOpen] = useState(false);
   const [goalParameterStepActive, setGoalParameterStepActive] = useState(false);
@@ -86,6 +85,7 @@ export default function PersonalInfoPage() {
   async function handleSave() {
     if (!user) return;
     setSaving(true);
+    setSaveStatus("idle");
     try {
       const res = await fetch("/api/user", {
         method: "PATCH",
@@ -108,14 +108,30 @@ export default function PersonalInfoPage() {
       const data = await res.json();
       if (res.ok && data.user) {
         setGoalParameterStepActive(false);
+        setSaveStatus("saved");
+        // Revalidate cached user data so the rest of the app reflects the change
+        void refreshUser();
+      } else {
+        setSaveStatus("error");
       }
+    } catch {
+      setSaveStatus("error");
     } finally {
       setSaving(false);
     }
   }
 
+  // Auto-clear the "已保存" badge after a short delay
+  useEffect(() => {
+    if (saveStatus !== "saved") return;
+    const timer = setTimeout(() => setSaveStatus("idle"), 2500);
+    return () => clearTimeout(timer);
+  }, [saveStatus]);
+
   function handleChange(key: keyof User, value: string | number) {
     setForm((prev) => ({ ...prev, [key]: value }));
+    // Clear any prior save result once the user starts editing again
+    setSaveStatus("idle");
   }
 
   const primaryGoalLabels = user
@@ -322,10 +338,30 @@ export default function PersonalInfoPage() {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="w-full mt-6 flex justify-center py-4 px-8 rounded-full text-sm font-medium tracking-wide text-on-primary bg-inverse-surface hover:bg-on-background transition-all duration-300 disabled:opacity-50"
+          className={`w-full mt-6 flex items-center justify-center gap-2 py-4 px-8 rounded-full text-sm font-medium tracking-wide transition-all duration-300 disabled:opacity-50 ${
+            saveStatus === "saved"
+              ? "bg-secondary-container text-on-secondary-container"
+              : "text-on-primary bg-inverse-surface hover:bg-on-background"
+          }`}
         >
-          {saving ? "保存中..." : "保存"}
+          {saving ? (
+            "保存中..."
+          ) : saveStatus === "saved" ? (
+            <>
+              <Icon name="check" size={18} />
+              已保存
+            </>
+          ) : (
+            "保存"
+          )}
         </button>
+
+        {saveStatus === "error" && (
+          <p className="mt-3 text-center text-sm text-error">
+            保存失败，请稍后再试。
+          </p>
+        )}
+
       </main>
 
       {user ? (

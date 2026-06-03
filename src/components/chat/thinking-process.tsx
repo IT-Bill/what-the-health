@@ -18,7 +18,8 @@ export function ThinkingProcess({
   isStreaming,
   turnCount,
 }: ThinkingProcessProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  // Start open if message is currently streaming; state persists after streaming ends
+  const [isOpen, setIsOpen] = useState(() => !!isStreaming);
 
   const runningTool = toolCalls?.find((t) => t.status === "running");
   const doneToolCount =
