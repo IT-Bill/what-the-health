@@ -12,6 +12,7 @@ import {
   hasPrimaryGoalGroup,
   requiresPrimaryGoalParameters,
 } from "@/lib/primary-goals";
+import { useUser } from "@/lib/swr";
 
 interface User {
   id: string;
@@ -48,8 +49,8 @@ function formatDateForInput(dateStr?: string): string {
 
 export default function PersonalInfoPage() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: userData, isLoading } = useUser();
+  const user = userData?.user ?? null;
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<Partial<User>>({});
   const [goalDialogOpen, setGoalDialogOpen] = useState(false);
@@ -65,29 +66,22 @@ export default function PersonalInfoPage() {
   }, []);
 
   useEffect(() => {
-    fetch("/api/me")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.user) {
-          setUser(data.user);
-          setForm({
-            name: data.user.name || "",
-            gender: data.user.gender || "",
-            birthday: formatDateForInput(data.user.birthday),
-            heightCm: data.user.heightCm ?? undefined,
-            weightKg: data.user.weightKg ?? undefined,
-            targetWeightKg: data.user.targetWeightKg ?? undefined,
-            targetBodyFatPct: data.user.targetBodyFatPct ?? undefined,
-            dailyActiveCalories: data.user.dailyActiveCalories ?? undefined,
-            dailyExerciseMinutes: data.user.dailyExerciseMinutes ?? undefined,
-            dailyStepGoal: data.user.dailyStepGoal ?? undefined,
-            dailyActiveHours: data.user.dailyActiveHours ?? undefined,
-          });
-        }
-      })
-      .catch(() => setUser(null))
-      .finally(() => setLoading(false));
-  }, []);
+    if (user) {
+      setForm({
+        name: user.name || "",
+        gender: user.gender || "",
+        birthday: formatDateForInput(user.birthday ?? undefined),
+        heightCm: user.heightCm ?? undefined,
+        weightKg: user.weightKg ?? undefined,
+        targetWeightKg: user.targetWeightKg ?? undefined,
+        targetBodyFatPct: user.targetBodyFatPct ?? undefined,
+        dailyActiveCalories: user.dailyActiveCalories ?? undefined,
+        dailyExerciseMinutes: user.dailyExerciseMinutes ?? undefined,
+        dailyStepGoal: user.dailyStepGoal ?? undefined,
+        dailyActiveHours: user.dailyActiveHours ?? undefined,
+      });
+    }
+  }, [user]);
 
   async function handleSave() {
     if (!user) return;
@@ -113,7 +107,6 @@ export default function PersonalInfoPage() {
       });
       const data = await res.json();
       if (res.ok && data.user) {
-        setUser(data.user);
         setGoalParameterStepActive(false);
       }
     } finally {
@@ -140,7 +133,7 @@ export default function PersonalInfoPage() {
     ? hasPrimaryGoalGroup(user.primaryGoals, user.primaryGoal, ACTIVITY_GOAL_IDS)
     : false;
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-surface flex flex-col">
         <Header title="个人信息" />
@@ -182,7 +175,7 @@ export default function PersonalInfoPage() {
         <div className="bg-primary-container rounded-[2rem] p-6 ambient-shadow flex flex-col gap-1">
           <InfoField
             label="邮箱"
-            value={user.username}
+            value={user.username ?? ""}
             readOnly
             onChange={() => {}}
           />
@@ -346,16 +339,6 @@ export default function PersonalInfoPage() {
           description="可多选，保存后会立即同步到你的个人资料。"
           onClose={() => setGoalDialogOpen(false)}
           onSaved={(selection) => {
-            setUser((current) => {
-              if (!current) {
-                return current;
-              }
-              return {
-                ...current,
-                primaryGoal: selection.primaryGoal,
-                primaryGoals: selection.primaryGoals,
-              };
-            });
             setGoalParameterStepActive(
               requiresPrimaryGoalParameters(selection.primaryGoals, selection.primaryGoal),
             );

@@ -9,33 +9,21 @@ import {
   requiresPrimaryGoalParameters,
   type PrimaryGoalId,
 } from "@/lib/primary-goals";
+import { useUser } from "@/lib/swr";
 
 export default function OnboardingGoalPage() {
   const router = useRouter();
-  const [userId, setUserId] = useState<string | null>(null);
+  const { data: userData, isLoading } = useUser();
+  const user = userData?.user ?? null;
   const [selectedGoals, setSelectedGoals] = useState<PrimaryGoalId[]>([]);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("/api/me")
-      .then(async (res) => {
-        if (!res.ok) {
-          throw new Error("unauthorized");
-        }
-        return res.json();
-      })
-      .then((data) => {
-        if (!data.user) {
-          throw new Error("missing-user");
-        }
-        setUserId(data.user.id);
-        setSelectedGoals(getStoredPrimaryGoals(data.user.primaryGoals, data.user.primaryGoal));
-      })
-      .catch(() => router.replace("/login"))
-      .finally(() => setLoading(false));
-  }, [router]);
+    if (user) {
+      setSelectedGoals(getStoredPrimaryGoals(user.primaryGoals, user.primaryGoal));
+    }
+  }, [user]);
 
   function toggleGoal(goalId: PrimaryGoalId) {
     setSelectedGoals((current) =>
@@ -46,7 +34,7 @@ export default function OnboardingGoalPage() {
   }
 
   async function handleSubmit() {
-    if (!userId || selectedGoals.length === 0) {
+    if (!user?.id || selectedGoals.length === 0) {
       setError("请至少选择一个目标。");
       return;
     }
@@ -58,7 +46,7 @@ export default function OnboardingGoalPage() {
       const response = await fetch("/api/user", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: userId, primaryGoals: selectedGoals }),
+        body: JSON.stringify({ id: user.id, primaryGoals: selectedGoals }),
       });
       const data = await response.json();
 
@@ -79,7 +67,7 @@ export default function OnboardingGoalPage() {
     }
   }
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-surface flex items-center justify-center">
         <span className="text-on-surface-variant">加载中...</span>

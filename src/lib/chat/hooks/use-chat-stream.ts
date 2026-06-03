@@ -2,6 +2,7 @@
 
 import { useCallback, useRef } from "react";
 import { useChatStore } from "@/lib/chat/store";
+import { refreshSessions } from "@/lib/swr";
 import type { Message, SearchSource, ToolCallInfo } from "@/lib/chat/types";
 
 // ---------------------------------------------------------------------------
@@ -31,7 +32,8 @@ function isAbortError(err: unknown): boolean {
 // ---------------------------------------------------------------------------
 
 export function useChatStream() {
-  const abortRef = useRef<AbortController | null>(null);
+  const activeControllerRef = useRef<AbortController | null>(null);
+  const activePromiseRef = useRef<Promise<void> | null>(null);
   const assistantAccRef = useRef("");
   const reasoningAccRef = useRef("");
   const thinkingStartRef = useRef<number>(0);
@@ -144,43 +146,119 @@ export function useChatStream() {
 
   const sendMessage = useCallback(
     async (text: string, options: SendOptions = {}) => {
-      const state = useChatStore.getState();
-      if (state.isStreaming) return;
+      // Remember if we were streaming before waiting, because isStreaming
+      // will become false after the old stream finishes.
+      const preCancelStreamingId = useChatStore.getState().streamingMessageId;
 
-      const userMsg: Message = {
-        id: `u-${Date.now()}`,
-        role: "user",
-        content: text,
-        imageUrl: options.imageUrl,
-      };
-      const assistantId = `a-${Date.now()}`;
-
-      const assistantMsg: Message = {
-        id: assistantId,
-        role: "agent",
-        content: "",
-        isStreaming: true,
-        toolCalls: [],
-      };
-
-      const nextMessages = options.startNewSession
-        ? [userMsg, assistantMsg]
-        : [...state.messages, userMsg, assistantMsg];
-
-      if (options.startNewSession) {
-        state.setSessionId(undefined);
+      // Cancel and wait for any active stream before proceeding
+      if (activePromiseRef.current) {
+        activeControllerRef.current?.abort();
+        await activePromiseRef.current;
       }
-      state.setMessages(nextMessages);
-      state.setIsStreaming(true);
-      state.setCurrentAgentState("thinking");
-      state.setError(null);
-      state.setStreamingMessageId(assistantId);
-      assistantAccRef.current = "";
-      reasoningAccRef.current = "";
-      thinkingStartRef.current = Date.now();
+
+      const state = useChatStore.getState();
+
+      let assistantId: string;
+
+      if (preCancelStreamingId && !options.startNewSession) {
+        // Interrupt-and-resend: reuse the assistant message slot
+        const oldAssistantId = preCancelStreamingId;
+        assistantId = `a-${Date.now()}`;
+
+        const messages = state.messages;
+        const assistantIndex = messages.findIndex((m) => m.id === oldAssistantId);
+        const userMsgIndex = assistantIndex > 0 ? assistantIndex - 1 : -1;
+
+        if (userMsgIndex >= 0 && messages[userMsgIndex].role === "user") {
+          // Update the user message with new content, reset assistant in-place
+          const nextMessages = messages.map((m, idx) => {
+            if (idx === userMsgIndex) {
+              return { ...m, content: text, imageUrl: options.imageUrl };
+            }
+            if (m.id === oldAssistantId) {
+              return {
+                ...m,
+                id: assistantId,
+                content: "",
+                isStreaming: true,
+                toolCalls: [],
+                sources: undefined,
+                reasoning: undefined,
+                preToolText: undefined,
+                thinkingDuration: undefined,
+              };
+            }
+            return m;
+          });
+          state.setMessages(nextMessages);
+        } else {
+          // Fallback: append new user msg + assistant
+          const userMsg: Message = {
+            id: `u-${Date.now()}`,
+            role: "user",
+            content: text,
+            imageUrl: options.imageUrl,
+          };
+          const assistantMsg: Message = {
+            id: assistantId,
+            role: "agent",
+            content: "",
+            isStreaming: true,
+            toolCalls: [],
+          };
+          state.setMessages([...messages, userMsg, assistantMsg]);
+        }
+
+        state.setIsStreaming(true);
+        state.setCurrentAgentState("thinking");
+        state.setError(null);
+        state.setStreamingMessageId(assistantId);
+        assistantAccRef.current = "";
+        reasoningAccRef.current = "";
+        thinkingStartRef.current = Date.now();
+      } else {
+        if (state.isStreaming) return;
+
+        const userMsg: Message = {
+          id: `u-${Date.now()}`,
+          role: "user",
+          content: text,
+          imageUrl: options.imageUrl,
+        };
+        assistantId = `a-${Date.now()}`;
+
+        const assistantMsg: Message = {
+          id: assistantId,
+          role: "agent",
+          content: "",
+          isStreaming: true,
+          toolCalls: [],
+        };
+
+        const nextMessages = options.startNewSession
+          ? [userMsg, assistantMsg]
+          : [...state.messages, userMsg, assistantMsg];
+
+        if (options.startNewSession) {
+          state.setSessionId(undefined);
+        }
+        state.setMessages(nextMessages);
+        state.setIsStreaming(true);
+        state.setCurrentAgentState("thinking");
+        state.setError(null);
+        state.setStreamingMessageId(assistantId);
+        assistantAccRef.current = "";
+        reasoningAccRef.current = "";
+        thinkingStartRef.current = Date.now();
+      }
 
       const controller = new AbortController();
-      abortRef.current = controller;
+      activeControllerRef.current = controller;
+
+      let resolveDone: () => void;
+      activePromiseRef.current = new Promise<void>((resolve) => {
+        resolveDone = resolve;
+      });
 
       try {
         const res = await fetch("/api/chat", {
@@ -226,7 +304,9 @@ export function useChatStream() {
         }
       } catch (err) {
         if (isAbortError(err)) {
-          // User cancelled
+          // User cancelled — mark the message as no longer streaming
+          const store = useChatStore.getState();
+          store.updateMessage(assistantId, { isStreaming: false });
         } else {
           const msg =
             err instanceof Error ? err.message : "连接出错，请稍后再试。";
@@ -242,15 +322,12 @@ export function useChatStream() {
         store.setIsStreaming(false);
         store.setCurrentAgentState("idle");
         store.setStreamingMessageId(null);
-        abortRef.current = null;
+        activeControllerRef.current = null;
+        resolveDone!();
+        activePromiseRef.current = null;
 
         // Refresh sessions list
-        fetch("/api/chat/sessions")
-          .then((r) => r.json())
-          .then((data) => {
-            if (data.sessions) useChatStore.getState().setSessions(data.sessions);
-          })
-          .catch(console.error);
+        refreshSessions().catch(console.error);
       }
     },
     [processSseEvent]
@@ -258,6 +335,12 @@ export function useChatStream() {
 
   const retryMessage = useCallback(
     async (assistantMsgId: string, userContent: string) => {
+      // Cancel and wait for any active stream before proceeding
+      if (activePromiseRef.current) {
+        activeControllerRef.current?.abort();
+        await activePromiseRef.current;
+      }
+
       const state = useChatStore.getState();
       if (state.isStreaming) return;
 
@@ -279,7 +362,12 @@ export function useChatStream() {
       thinkingStartRef.current = Date.now();
 
       const controller = new AbortController();
-      abortRef.current = controller;
+      activeControllerRef.current = controller;
+
+      let resolveDone: () => void;
+      activePromiseRef.current = new Promise<void>((resolve) => {
+        resolveDone = resolve;
+      });
 
       try {
         const res = await fetch("/api/chat", {
@@ -324,7 +412,8 @@ export function useChatStream() {
         }
       } catch (err) {
         if (isAbortError(err)) {
-          // User cancelled
+          const store = useChatStore.getState();
+          store.updateMessage(newAssistantId, { isStreaming: false });
         } else {
           const msg =
             err instanceof Error ? err.message : "连接出错，请稍后再试。";
@@ -340,22 +429,19 @@ export function useChatStream() {
         store.setIsStreaming(false);
         store.setCurrentAgentState("idle");
         store.setStreamingMessageId(null);
-        abortRef.current = null;
+        activeControllerRef.current = null;
+        resolveDone!();
+        activePromiseRef.current = null;
 
         // Refresh sessions list
-        fetch("/api/chat/sessions")
-          .then((r) => r.json())
-          .then((data) => {
-            if (data.sessions) useChatStore.getState().setSessions(data.sessions);
-          })
-          .catch(console.error);
+        refreshSessions().catch(console.error);
       }
     },
     [processSseEvent]
   );
 
   const cancelStream = useCallback(() => {
-    abortRef.current?.abort();
+    activeControllerRef.current?.abort();
   }, []);
 
   return { sendMessage, retryMessage, cancelStream };

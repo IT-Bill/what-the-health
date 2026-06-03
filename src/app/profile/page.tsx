@@ -11,6 +11,7 @@ import {
   hasStoredPrimaryGoals,
   requiresPrimaryGoalParameters,
 } from "@/lib/primary-goals";
+import { useUser } from "@/lib/swr";
 
 interface User {
   id: string;
@@ -43,30 +44,21 @@ const menuItems: MenuItem[] = [
 
 export default function ProfilePage() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: userData, isLoading } = useUser();
+  const user = userData?.user ?? null;
   const [goalDialogOpen, setGoalDialogOpen] = useState(false);
 
   useEffect(() => {
-    fetch("/api/me")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.user) {
-          setUser(data.user);
-          if (!hasStoredPrimaryGoals(data.user.primaryGoals, data.user.primaryGoal)) {
-            setGoalDialogOpen(true);
-          }
-        }
-      })
-      .catch(() => setUser(null))
-      .finally(() => setLoading(false));
-  }, []);
+    if (user && !hasStoredPrimaryGoals(user.primaryGoals, user.primaryGoal)) {
+      setGoalDialogOpen(true);
+    }
+  }, [user]);
 
   const primaryGoalLabels = user
     ? getPrimaryGoalLabels(user.primaryGoals, user.primaryGoal)
     : [];
 
-  if (loading) {
+  if (isLoading) {
     return (
       <AppShell>
         <div className="max-w-screen-md mx-auto py-12 flex justify-center">
@@ -145,8 +137,8 @@ export default function ProfilePage() {
                 </div>
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(user.username);
-                    alert("已复制用户名: @" + user.username);
+                    navigator.clipboard.writeText(user.username ?? "");
+                    alert("已复制用户名: @" + (user.username ?? ""));
                   }}
                   className="flex items-center gap-1.5 text-sm text-on-surface-variant hover:text-secondary transition-colors self-start"
                 >
@@ -192,17 +184,6 @@ export default function ProfilePage() {
           description="可多选。我们会根据这些方向个性化推荐内容、习惯和陪伴方式。"
           onClose={() => setGoalDialogOpen(false)}
           onSaved={(selection) => {
-            setUser((current) => {
-              if (!current) {
-                return current;
-              }
-              return {
-                ...current,
-                primaryGoal: selection.primaryGoal,
-                primaryGoals: selection.primaryGoals,
-              };
-            });
-
             if (requiresPrimaryGoalParameters(selection.primaryGoals, selection.primaryGoal)) {
               router.push("/profile/personal-info?next=goal-params");
             }

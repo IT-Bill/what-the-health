@@ -7,6 +7,7 @@ import { useChatStore } from "@/lib/chat/store";
 
 interface ChatInputProps {
   onSend: () => void;
+  onCancel: () => void;
   onImageSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onStartVoiceRecording: () => void;
   onStopVoiceRecording: () => void;
@@ -17,6 +18,7 @@ interface ChatInputProps {
 
 export function ChatInput({
   onSend,
+  onCancel,
   onImageSelect,
   onStartVoiceRecording,
   onStopVoiceRecording,
@@ -134,12 +136,18 @@ export function ChatInput({
             />
           )}
 
-          {/* Voice / Send Button */}
-          {hasInput && !isRecordingProp ? (
+          {/* Stop / Send / Voice Button */}
+          {isStreaming ? (
+            <button
+              onClick={onCancel}
+              className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-error text-on-error hover:opacity-90 transition-all"
+            >
+              <Icon name="stop" size={20} />
+            </button>
+          ) : hasInput && !isRecordingProp ? (
             <button
               onClick={onSend}
-              disabled={isStreaming}
-              className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-on-surface text-surface hover:opacity-90 transition-all disabled:opacity-40"
+              className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-on-surface text-surface hover:opacity-90 transition-all"
             >
               <Icon name="arrow_upward" />
             </button>
@@ -147,10 +155,9 @@ export function ChatInput({
             <button
               onClick={isRecordingProp ? onStopVoiceRecording : onStartVoiceRecording}
               onContextMenu={(e) => e.preventDefault()}
-              disabled={isStreaming}
               className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all ${
                 isRecordingProp ? "bg-error text-on-error" : "text-on-surface-variant hover:bg-surface-container-low"
-              } disabled:opacity-40`}
+              }`}
             >
               <Icon name={isRecordingProp ? "stop" : "mic_none"} size={20} />
             </button>

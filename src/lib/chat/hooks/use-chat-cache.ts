@@ -11,6 +11,7 @@ import type { Message } from "@/lib/chat/types";
 const CHAT_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const CHAT_SESSION_LIST_CACHE_KEY = "wth:chat-session-list-cache";
 const CHAT_SESSION_MESSAGES_PREFIX = "wth:chat-session-messages:";
+const CHAT_CACHE_OWNER_KEY = "wth:chat-cache-owner";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,6 +46,48 @@ interface CachedChatSessionPayload {
 
 function isCacheExpired(savedAt: number): boolean {
   return Date.now() - savedAt > CHAT_CACHE_TTL_MS;
+}
+
+// ---------------------------------------------------------------------------
+// Cache owner isolation — prevent cross-user cache leakage
+// ---------------------------------------------------------------------------
+
+function getCacheOwner(): string | null {
+  try {
+    return localStorage.getItem(CHAT_CACHE_OWNER_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function setCacheOwner(userId: string) {
+  try {
+    localStorage.setItem(CHAT_CACHE_OWNER_KEY, userId);
+  } catch {
+    // ignore
+  }
+}
+
+export function clearAllChatCache() {
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (
+        key?.startsWith(CHAT_SESSION_MESSAGES_PREFIX) ||
+        key === CHAT_SESSION_LIST_CACHE_KEY ||
+        key === CHAT_CACHE_OWNER_KEY
+      ) {
+        localStorage.removeItem(key);
+      }
+    }
+    sessionStorage.removeItem("wth:chat-cached-session");
+  } catch {
+    // ignore
+  }
+}
+
+export function isCacheOwnedBy(userId: string): boolean {
+  return getCacheOwner() === userId;
 }
 
 function normalizeCachedMessages(messages: Message[]): Message[] {
@@ -139,7 +182,7 @@ function setCachedSessionList(sessions: CachedSessionList["sessions"]) {
 // ---------------------------------------------------------------------------
 
 export function useChatCache() {
-  const writeCache = useCallback(() => {
+  const writeCache = useCallback((ownerId?: string) => {
     if (typeof window === "undefined") return;
 
     const state = useChatStore.getState();
@@ -160,6 +203,11 @@ export function useChatCache() {
       savedAt: Date.now(),
     };
     sessionStorage.setItem("wth:chat-cached-session", JSON.stringify(payload));
+
+    // Tag cache with owner to prevent cross-user leakage
+    if (ownerId) {
+      setCacheOwner(ownerId);
+    }
   }, []);
 
   const readCache = useCallback(

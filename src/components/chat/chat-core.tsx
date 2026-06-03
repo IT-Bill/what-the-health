@@ -12,6 +12,7 @@ import {
   useChatCache,
   useVoiceRecording,
 } from "@/lib/chat/hooks";
+import { useUser, refreshSessions } from "@/lib/swr";
 import { MessageList } from "./message-list";
 import { ChatInput } from "./chat-input";
 import { SessionSidebar } from "./session-sidebar";
@@ -25,7 +26,13 @@ import {
   type PendingVoiceText,
   type VoiceSubmitEventDetail,
 } from "@/lib/voice-events";
-import { getCachedSessionMessages, getCachedSessionList, isCacheExpired } from "@/lib/chat/hooks/use-chat-cache";
+import {
+  getCachedSessionMessages,
+  getCachedSessionList,
+  isCacheExpired,
+  isCacheOwnedBy,
+  clearAllChatCache,
+} from "@/lib/chat/hooks/use-chat-cache";
 
 interface ChatCoreProps {
   initialSessionId?: string;
@@ -59,7 +66,7 @@ function readPendingVoiceText(): PendingVoiceText | null {
 
 export default function ChatCore({ initialSessionId }: ChatCoreProps) {
   const showSidebar = useChatStore((s) => s.showSidebar);
-  const { sendMessage, retryMessage } = useChatStream();
+  const { sendMessage, retryMessage, cancelStream } = useChatStream();
   const {
     loadSession,
     startNewSession,
@@ -103,21 +110,22 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
     }
   }, [sessionId]);
 
-  // Auth check
+  // Auth check via SWR
+  const { data: userData } = useUser();
+  const userId = userData?.user?.id;
+
+  // Clear cross-user stale cache when user changes
   useEffect(() => {
-    fetch("/api/me")
-      .then((r) => {
-        if (r.status === 401) window.location.href = "/login";
-      })
-      .catch(() => {
-        window.location.href = "/login";
-      });
-  }, []);
+    if (!userId) return;
+    if (!isCacheOwnedBy(userId)) {
+      clearAllChatCache();
+    }
+  }, [userId]);
 
   // Cache write on unmount
   useEffect(() => {
-    return () => writeCache();
-  }, [writeCache]);
+    return () => writeCache(userId);
+  }, [writeCache, userId]);
 
   // ---------------------------------------------------------------------------
   // Actions
@@ -129,7 +137,7 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
       const text = (overrideText ?? state.input).trim();
       const imageUrl = state.pendingImage?.url;
 
-      if ((!text && !imageUrl) || state.isStreaming) return;
+      if (!text && !imageUrl) return;
 
       if (state.pendingImage) {
         URL.revokeObjectURL(state.pendingImage.previewUrl);
@@ -147,6 +155,35 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
       retryMessage(assistantMsgId, userContent);
     },
     [retryMessage]
+  );
+
+  const handleEdit = useCallback(
+    (userMsgId: string, newContent: string) => {
+      const state = useChatStore.getState();
+      const messages = state.messages;
+
+      const userMsgIndex = messages.findIndex((m) => m.id === userMsgId);
+      if (userMsgIndex === -1) return;
+
+      // Update user message content in-place
+      const updatedMessages = messages.map((m, idx) =>
+        idx === userMsgIndex ? { ...m, content: newContent } : m
+      );
+      state.setMessages(updatedMessages);
+
+      // Find the next assistant message and regenerate it
+      const assistantMsg = messages
+        .slice(userMsgIndex + 1)
+        .find((m) => m.role === "agent");
+
+      if (assistantMsg) {
+        retryMessage(assistantMsg.id, newContent);
+      } else {
+        // No assistant reply yet — just send
+        sendMessage(newContent);
+      }
+    },
+    [sendMessage, retryMessage]
   );
 
   const handleImageSelect = useCallback(
@@ -199,6 +236,8 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
         }
       });
     }
+    // Clear ref so next recording doesn't carry stale text
+    recordingTextRef.current = "";
   }, [stopRecording]);
 
   const exportSession = useCallback(async (sid: string, title: string) => {
@@ -308,6 +347,21 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
     const controller = new AbortController();
 
     async function loadInitialSessions() {
+      // Verify cache ownership before hydrating
+      let currentUserId: string | undefined;
+      try {
+        const meRes = await fetch("/api/me", { signal: controller.signal });
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          currentUserId = meData.user?.id;
+        }
+      } catch {
+        // ignore auth errors
+      }
+      if (currentUserId && !isCacheOwnedBy(currentUserId)) {
+        clearAllChatCache();
+      }
+
       try {
         if (initialSessionId) {
           // Hydrate from cache first
@@ -520,6 +574,10 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
                 markChatActivity();
                 handleRetry(assistantMsgId, userContent);
               }}
+              onEdit={(userMsgId, newContent) => {
+                markChatActivity();
+                handleEdit(userMsgId, newContent);
+              }}
               onSendSuggestion={(text) => {
                 markChatActivity();
                 handleSend(text);
@@ -540,6 +598,9 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
             onSend={() => {
               markChatActivity();
               handleSend();
+            }}
+            onCancel={() => {
+              cancelStream();
             }}
             onImageSelect={handleImageSelect}
             onStartVoiceRecording={startRecording}

@@ -1,75 +1,35 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
 import { AppShell } from "@/components/app-shell";
 import {
   formatNotificationTime,
   type NotificationItem,
-  type NotificationListResponse,
-  type NotificationMutationResponse,
 } from "@/lib/notifications";
 import { Icon } from "@/components/icon";
+import { useNotifications, refreshNotifications } from "@/lib/swr";
 
 const REFRESH_INTERVAL_MS = 5 * 1000;
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, isLoading, error } = useNotifications({
+    refreshInterval: REFRESH_INTERVAL_MS,
+  });
+  const notifications = data?.notifications ?? [];
   const unreadCount = notifications.filter((n) => n.unread).length;
 
-  const loadNotifications = useCallback(async (options?: { silent?: boolean }) => {
-    if (!options?.silent) setLoading(true);
-    try {
-      const response = await fetch("/api/notifications", { cache: "no-store" });
-      if (response.status === 401) {
-        setNotifications([]);
-        setError("请先登录后查看通知。");
-        return;
-      }
-      if (!response.ok) throw new Error("load-failed");
-      const data = (await response.json()) as NotificationListResponse;
-      setNotifications(data.notifications);
-      setError(null);
-    } catch {
-      setError("加载通知失败，请稍后重试。");
-    } finally {
-      if (!options?.silent) setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    const t = window.setTimeout(() => void loadNotifications(), 0);
-    return () => window.clearTimeout(t);
-  }, [loadNotifications]);
-
-  useEffect(() => {
-    const refresh = () => {
-      if (document.visibilityState === "visible") void loadNotifications({ silent: true });
-    };
-    const timer = window.setInterval(refresh, REFRESH_INTERVAL_MS);
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", refresh);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener("focus", refresh);
-      document.removeEventListener("visibilitychange", refresh);
-    };
-  }, [loadNotifications]);
-
-  async function handleMarkRead(id: string) {
+  const handleMarkRead = useCallback(async (id: string) => {
     const response = await fetch(`/api/notifications/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "read" }),
     });
     if (!response.ok) return;
-    const data = (await response.json()) as NotificationMutationResponse;
-    setNotifications((cur) => cur.map((n) => (n.id === id ? data.notification : n)));
-  }
+    await refreshNotifications();
+  }, []);
 
-  async function handleMarkAllRead() {
+  const handleMarkAllRead = useCallback(async () => {
     const unread = notifications.filter((n) => n.unread);
     await Promise.all(
       unread.map((n) =>
@@ -80,20 +40,20 @@ export default function NotificationsPage() {
         })
       )
     );
-    setNotifications((cur) => cur.map((n) => ({ ...n, unread: false, readAt: new Date().toISOString() })));
-  }
+    await refreshNotifications();
+  }, [notifications]);
 
-  async function handleDelete(id: string) {
+  const handleDelete = useCallback(async (id: string) => {
     const response = await fetch(`/api/notifications/${id}`, { method: "DELETE" });
     if (!response.ok) return;
-    setNotifications((cur) => cur.filter((n) => n.id !== id));
-  }
+    await refreshNotifications();
+  }, []);
 
-  async function handleClearAll() {
+  const handleClearAll = useCallback(async () => {
     const response = await fetch("/api/notifications/clear", { method: "POST" });
     if (!response.ok) return;
-    setNotifications([]);
-  }
+    await refreshNotifications();
+  }, []);
 
   return (
     <AppShell topAppBarProps={{ rightAction: "back", rightAriaLabel: "返回上一页" }}>
@@ -103,7 +63,7 @@ export default function NotificationsPage() {
           <h1 className="text-3xl font-[var(--font-display)] text-on-surface">通知中心</h1>
         </header>
 
-        {!loading && !error && notifications.length > 0 && (
+        {!isLoading && !error && notifications.length > 0 && (
           <div className="flex items-center justify-between">
             <span className="text-sm text-on-surface-variant">
               {unreadCount > 0 ? `${unreadCount} 条未读` : "全部已读"}
@@ -129,7 +89,7 @@ export default function NotificationsPage() {
           </div>
         )}
 
-        {loading ? (
+        {isLoading ? (
           <div className="flex flex-col gap-3">
             {[1, 2, 3].map((i) => (
               <div key={i} className="h-24 rounded-2xl bg-surface-container-low animate-pulse" />
@@ -138,10 +98,20 @@ export default function NotificationsPage() {
         ) : error ? (
           <div className="flex flex-col items-center py-16 text-center gap-4">
             <Icon name="notifications_off" size={40} className="text-outline-variant" />
-            <p className="text-sm text-on-surface-variant">{error}</p>
+            <p className="text-sm text-on-surface-variant">
+              {error.message === "未登录" ? "请先登录后查看通知。" : "加载通知失败，请稍后重试。"}
+            </p>
             <div className="flex gap-3">
-              <button type="button" onClick={() => void loadNotifications()} className="rounded-full border border-outline-variant/30 px-4 py-2 text-sm text-on-surface">重试</button>
-              <Link href="/login" className="rounded-full bg-secondary px-4 py-2 text-sm text-on-secondary">去登录</Link>
+              <button
+                type="button"
+                onClick={() => void refreshNotifications()}
+                className="rounded-full border border-outline-variant/30 px-4 py-2 text-sm text-on-surface"
+              >
+                重试
+              </button>
+              <Link href="/login" className="rounded-full bg-secondary px-4 py-2 text-sm text-on-secondary">
+                去登录
+              </Link>
             </div>
           </div>
         ) : notifications.length === 0 ? (
