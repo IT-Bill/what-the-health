@@ -87,6 +87,7 @@ import {
 const ICON_MAP: Record<string, LucideIcon> = {
   // Navigation
   arrow_back: ArrowLeft,
+  arrow_left: ArrowLeft,
   arrow_forward: ArrowRight,
   arrow_upward: ArrowUp,
   chevron_left: ChevronLeft,
@@ -99,6 +100,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
 
   // Actions
   add: Plus,
+  plus: Plus,
   delete: Trash2,
   edit: Pencil,
   edit_note: NotebookPen,
@@ -186,6 +188,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   hourglass_top: Hourglass,
 
   // Calendar & Time
+  calendar: Calendar,
   calendar_month: Calendar,
   calendar_view_week: CalendarDays,
   timeline: Timer,
