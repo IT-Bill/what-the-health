@@ -75,6 +75,8 @@ import {
   Watch,
   Waves,
   Wind,
+  Volume2,
+  VolumeX,
   X,
   Zap,
   type LucideIcon,
