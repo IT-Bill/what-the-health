@@ -25,6 +25,17 @@ export interface ToolCallInfo {
   result?: string;
 }
 
+export interface PostCardMini {
+  id: string;
+  title: string;
+  excerpt: string | null;
+  category: string;
+  categoryIcon: string | null;
+  coverImage: string | null;
+  readMinutes: number;
+  author: { name: string };
+}
+
 export interface Message {
   id: string;
   role: "user" | "agent";
@@ -38,6 +49,7 @@ export interface Message {
   turnCount?: number;
   sources?: SearchSource[];
   quickReplies?: string[];
+  postCards?: PostCardMini[];
 }
 
 export interface PendingImage {
