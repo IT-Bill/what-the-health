@@ -628,12 +628,7 @@ export async function POST(request: Request) {
     },
     onPayload: (payload) => {
       const final = { ...(payload as Record<string, unknown>), ...EXTRA_BODY } as Record<string, unknown>;
-      console.log("[API Payload] keys:", Object.keys(final).filter(k => k.includes('think') || k.includes('reason') || k.includes('enable')));
-      console.log("[API Payload] enable_thinking:", final["enable_thinking"], "reasoning_effort:", final["reasoning_effort"], "thinkingFormat:", MODEL.compat?.thinkingFormat);
       return final;
-    },
-    onResponse: (response) => {
-      console.log("[API Response] status:", response.status, "headers:", JSON.stringify(response.headers));
     },
     getApiKey: () => process.env.AIPING_API_KEY,
     convertToLlm,
@@ -745,7 +740,6 @@ export async function POST(request: Request) {
             break;
           }
           case "message_update": {
-            console.log("[msg_update]", event.assistantMessageEvent.type);
             if (event.assistantMessageEvent.type === "text_delta") {
               const delta = event.assistantMessageEvent.delta;
               assistantText += delta;
@@ -753,13 +747,11 @@ export async function POST(request: Request) {
             }
             if (event.assistantMessageEvent.type === "thinking_delta") {
               const delta = (event.assistantMessageEvent as { delta: string }).delta;
-              console.log("[thinking_delta]", delta.slice(0, 50));
               assistantReasoning += delta;
               controller.enqueue(sse({ type: "reasoning_delta", delta }));
             }
             if (event.assistantMessageEvent.type === "thinking_end") {
               const content = (event.assistantMessageEvent as { content: string }).content;
-              console.log("[thinking_end]", content?.slice(0, 50));
               if (content && !assistantReasoning) {
                 assistantReasoning = content;
               }

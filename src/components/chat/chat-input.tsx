@@ -47,7 +47,13 @@ export function ChatInput({
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    // Ignore Enter while an IME is composing (e.g. selecting Pinyin candidates) —
+    // that Enter is for confirming the candidate, not sending.
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     if (e.key === "Enter" && !e.shiftKey) {
+      // On touch-only devices (mobile), Enter inserts a newline — use the send button instead
+      const isMobile = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+      if (isMobile) return;
       e.preventDefault();
       onSend();
     }

@@ -146,111 +146,42 @@ export function useChatStream() {
 
   const sendMessage = useCallback(
     async (text: string, options: SendOptions = {}) => {
-      // Remember if we were streaming before waiting, because isStreaming
-      // will become false after the old stream finishes.
-      const preCancelStreamingId = useChatStore.getState().streamingMessageId;
-
-      // Cancel and wait for any active stream before proceeding
-      if (activePromiseRef.current) {
-        activeControllerRef.current?.abort();
-        await activePromiseRef.current;
-      }
-
       const state = useChatStore.getState();
 
-      let assistantId: string;
+      // Block new sends while a stream is active. The user must explicitly
+      // stop the current response (cancelStream) before sending again.
+      if (state.isStreaming) return;
 
-      if (preCancelStreamingId && !options.startNewSession) {
-        // Interrupt-and-resend: reuse the assistant message slot
-        const oldAssistantId = preCancelStreamingId;
-        assistantId = `a-${Date.now()}`;
+      const userMsg: Message = {
+        id: `u-${Date.now()}`,
+        role: "user",
+        content: text,
+        imageUrl: options.imageUrl,
+      };
+      const assistantId = `a-${Date.now()}`;
+      const assistantMsg: Message = {
+        id: assistantId,
+        role: "agent",
+        content: "",
+        isStreaming: true,
+        toolCalls: [],
+      };
 
-        const messages = state.messages;
-        const assistantIndex = messages.findIndex((m) => m.id === oldAssistantId);
-        const userMsgIndex = assistantIndex > 0 ? assistantIndex - 1 : -1;
+      const nextMessages = options.startNewSession
+        ? [userMsg, assistantMsg]
+        : [...state.messages, userMsg, assistantMsg];
 
-        if (userMsgIndex >= 0 && messages[userMsgIndex].role === "user") {
-          // Update the user message with new content, reset assistant in-place
-          const nextMessages = messages.map((m, idx) => {
-            if (idx === userMsgIndex) {
-              return { ...m, content: text, imageUrl: options.imageUrl };
-            }
-            if (m.id === oldAssistantId) {
-              return {
-                ...m,
-                id: assistantId,
-                content: "",
-                isStreaming: true,
-                toolCalls: [],
-                sources: undefined,
-                reasoning: undefined,
-                preToolText: undefined,
-                thinkingDuration: undefined,
-              };
-            }
-            return m;
-          });
-          state.setMessages(nextMessages);
-        } else {
-          // Fallback: append new user msg + assistant
-          const userMsg: Message = {
-            id: `u-${Date.now()}`,
-            role: "user",
-            content: text,
-            imageUrl: options.imageUrl,
-          };
-          const assistantMsg: Message = {
-            id: assistantId,
-            role: "agent",
-            content: "",
-            isStreaming: true,
-            toolCalls: [],
-          };
-          state.setMessages([...messages, userMsg, assistantMsg]);
-        }
-
-        state.setIsStreaming(true);
-        state.setCurrentAgentState("thinking");
-        state.setError(null);
-        state.setStreamingMessageId(assistantId);
-        assistantAccRef.current = "";
-        reasoningAccRef.current = "";
-        thinkingStartRef.current = Date.now();
-      } else {
-        if (state.isStreaming) return;
-
-        const userMsg: Message = {
-          id: `u-${Date.now()}`,
-          role: "user",
-          content: text,
-          imageUrl: options.imageUrl,
-        };
-        assistantId = `a-${Date.now()}`;
-
-        const assistantMsg: Message = {
-          id: assistantId,
-          role: "agent",
-          content: "",
-          isStreaming: true,
-          toolCalls: [],
-        };
-
-        const nextMessages = options.startNewSession
-          ? [userMsg, assistantMsg]
-          : [...state.messages, userMsg, assistantMsg];
-
-        if (options.startNewSession) {
-          state.setSessionId(undefined);
-        }
-        state.setMessages(nextMessages);
-        state.setIsStreaming(true);
-        state.setCurrentAgentState("thinking");
-        state.setError(null);
-        state.setStreamingMessageId(assistantId);
-        assistantAccRef.current = "";
-        reasoningAccRef.current = "";
-        thinkingStartRef.current = Date.now();
+      if (options.startNewSession) {
+        state.setSessionId(undefined);
       }
+      state.setMessages(nextMessages);
+      state.setIsStreaming(true);
+      state.setCurrentAgentState("thinking");
+      state.setError(null);
+      state.setStreamingMessageId(assistantId);
+      assistantAccRef.current = "";
+      reasoningAccRef.current = "";
+      thinkingStartRef.current = Date.now();
 
       const controller = new AbortController();
       activeControllerRef.current = controller;

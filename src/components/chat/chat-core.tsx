@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/icon";
 import { NotificationBell } from "@/components/notification-bell";
@@ -17,7 +17,7 @@ import { MessageList } from "./message-list";
 import { ChatInput } from "./chat-input";
 import { SessionSidebar } from "./session-sidebar";
 import { SourcesDrawer } from "./sources-drawer";
-import type { SearchSource } from "@/lib/chat/types";
+import type { Message, SearchSource } from "@/lib/chat/types";
 import {
   CHAT_HAS_ACTIVITY_KEY,
   CHAT_RESTORE_LATEST_KEY,
@@ -94,10 +94,12 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
   const hadPendingVoiceOnMountRef = useRef(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const importFileRef = useRef<HTMLInputElement>(null);
+  const userScrolledUpRef = useRef(false);
 
   const isStreaming = useChatStore((s) => s.isStreaming);
   const error = useChatStore((s) => s.error);
   const sessionId = useChatStore((s) => s.sessionId);
+  const messages = useChatStore((s) => s.messages);
 
   useEffect(() => {
     isStreamingRef.current = isStreaming;
@@ -114,11 +116,23 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
   const { data: userData } = useUser();
   const userId = userData?.user?.id;
 
-  // Clear cross-user stale cache when user changes
+  // Reset store before first paint to prevent stale cross-user data from showing
+  useLayoutEffect(() => {
+    const store = useChatStore.getState();
+    store.clearMessages();
+    store.setSessionId(undefined);
+    store.setSessions([]);
+  }, []);
+
+  // Clear cross-user stale cache and store when user changes
   useEffect(() => {
     if (!userId) return;
     if (!isCacheOwnedBy(userId)) {
       clearAllChatCache();
+      const store = useChatStore.getState();
+      store.clearMessages();
+      store.setSessionId(undefined);
+      store.setSessions([]);
     }
   }, [userId]);
 
@@ -127,6 +141,32 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
     return () => writeCache(userId);
   }, [writeCache, userId]);
 
+  // Track whether user has manually scrolled up
+  useEffect(() => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      userScrolledUpRef.current = el.scrollHeight - el.scrollTop - el.clientHeight > 100;
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // Scroll to bottom on content changes; always scroll on new message, respect user scroll for updates
+  const prevMessagesLengthRef = useRef(0);
+  useEffect(() => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    const isNewMessage = messages.length !== prevMessagesLengthRef.current;
+    prevMessagesLengthRef.current = messages.length;
+    if (isNewMessage) {
+      userScrolledUpRef.current = false;
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    } else if (!userScrolledUpRef.current) {
+      el.scrollTo({ top: el.scrollHeight, behavior: "instant" as ScrollBehavior });
+    }
+  }, [messages]);
+
   // ---------------------------------------------------------------------------
   // Actions
   // ---------------------------------------------------------------------------
@@ -134,6 +174,10 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
   const handleSend = useCallback(
     (overrideText?: string, opts?: { startNewSession?: boolean }) => {
       const state = useChatStore.getState();
+
+      // Block new sends while a response is streaming — user must stop first.
+      if (state.isStreaming) return;
+
       const text = (overrideText ?? state.input).trim();
       const imageUrl = state.pendingImage?.url;
 
@@ -160,30 +204,41 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
   const handleEdit = useCallback(
     (userMsgId: string, newContent: string) => {
       const state = useChatStore.getState();
-      const messages = state.messages;
 
+      // Note: editing intentionally works even while streaming — retryMessage
+      // aborts the active stream first, then regenerates from the edited message.
+      const messages = state.messages;
       const userMsgIndex = messages.findIndex((m) => m.id === userMsgId);
       if (userMsgIndex === -1) return;
 
-      // Update user message content in-place
+      // Update the edited user message content in-place
       const updatedMessages = messages.map((m, idx) =>
         idx === userMsgIndex ? { ...m, content: newContent } : m
       );
-      state.setMessages(updatedMessages);
 
-      // Find the next assistant message and regenerate it
-      const assistantMsg = messages
+      // Regenerate the assistant reply that immediately follows this message
+      const followingAssistant = updatedMessages
         .slice(userMsgIndex + 1)
         .find((m) => m.role === "agent");
 
-      if (assistantMsg) {
-        retryMessage(assistantMsg.id, newContent);
+      if (followingAssistant) {
+        state.setMessages(updatedMessages);
+        retryMessage(followingAssistant.id, newContent);
       } else {
-        // No assistant reply yet — just send
-        sendMessage(newContent);
+        // No reply yet — append a fresh assistant placeholder and stream into it
+        const assistantId = `a-${Date.now()}`;
+        const placeholder: Message = {
+          id: assistantId,
+          role: "agent",
+          content: "",
+          isStreaming: true,
+          toolCalls: [],
+        };
+        state.setMessages([...updatedMessages, placeholder]);
+        retryMessage(assistantId, newContent);
       }
     },
-    [sendMessage, retryMessage]
+    [retryMessage]
   );
 
   const handleImageSelect = useCallback(
