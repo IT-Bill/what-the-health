@@ -26,7 +26,13 @@ import {
   type PendingVoiceText,
   type VoiceSubmitEventDetail,
 } from "@/lib/voice-events";
-import { getCachedSessionMessages, getCachedSessionList, isCacheExpired } from "@/lib/chat/hooks/use-chat-cache";
+import {
+  getCachedSessionMessages,
+  getCachedSessionList,
+  isCacheExpired,
+  isCacheOwnedBy,
+  clearAllChatCache,
+} from "@/lib/chat/hooks/use-chat-cache";
 
 interface ChatCoreProps {
   initialSessionId?: string;
@@ -105,12 +111,21 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
   }, [sessionId]);
 
   // Auth check via SWR
-  useUser();
+  const { data: userData } = useUser();
+  const userId = userData?.user?.id;
+
+  // Clear cross-user stale cache when user changes
+  useEffect(() => {
+    if (!userId) return;
+    if (!isCacheOwnedBy(userId)) {
+      clearAllChatCache();
+    }
+  }, [userId]);
 
   // Cache write on unmount
   useEffect(() => {
-    return () => writeCache();
-  }, [writeCache]);
+    return () => writeCache(userId);
+  }, [writeCache, userId]);
 
   // ---------------------------------------------------------------------------
   // Actions
@@ -301,6 +316,21 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
     const controller = new AbortController();
 
     async function loadInitialSessions() {
+      // Verify cache ownership before hydrating
+      let currentUserId: string | undefined;
+      try {
+        const meRes = await fetch("/api/me", { signal: controller.signal });
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          currentUserId = meData.user?.id;
+        }
+      } catch {
+        // ignore auth errors
+      }
+      if (currentUserId && !isCacheOwnedBy(currentUserId)) {
+        clearAllChatCache();
+      }
+
       try {
         if (initialSessionId) {
           // Hydrate from cache first
