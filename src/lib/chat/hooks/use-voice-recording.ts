@@ -19,6 +19,7 @@ export function useVoiceRecording() {
   const audioChunksRef = useRef<Float32Array[]>([]);
   const sendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordingTextRef = useRef("");
+  const isRecordingRef = useRef(false);
 
   const cleanup = useCallback(() => {
     if (sendIntervalRef.current) {
@@ -51,7 +52,7 @@ export function useVoiceRecording() {
   }, []);
 
   const startRecording = useCallback(async () => {
-    if (isRecording) return;
+    if (isRecordingRef.current) return;
     cleanup();
 
     try {
@@ -133,14 +134,18 @@ export function useVoiceRecording() {
         console.error("[ASR] WebSocket connection failed — is the proxy running? (pnpm asr-proxy)");
         cleanup();
         setIsRecording(false);
+        isRecordingRef.current = false;
         alert("语音服务连接失败，请确保已运行 pnpm asr-proxy");
       };
 
       ws.onclose = () => {
         cleanup();
+        setIsRecording(false);
+        isRecordingRef.current = false;
       };
 
       setIsRecording(true);
+      isRecordingRef.current = true;
       recordingTextRef.current = "";
     } catch (err) {
       console.error("[Voice] Failed to start recording:", err);
@@ -150,10 +155,10 @@ export function useVoiceRecording() {
           : "无法启动录音，请检查麦克风权限";
       alert(message);
     }
-  }, [isRecording, cleanup]);
+  }, [cleanup]);
 
   const stopRecording = useCallback(() => {
-    if (!isRecording) return;
+    if (!isRecordingRef.current) return;
 
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -177,7 +182,8 @@ export function useVoiceRecording() {
 
     cleanup();
     setIsRecording(false);
-  }, [isRecording, cleanup]);
+    isRecordingRef.current = false;
+  }, [cleanup]);
 
   return {
     isRecording,

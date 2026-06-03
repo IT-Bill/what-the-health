@@ -236,6 +236,8 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
         }
       });
     }
+    // Clear ref so next recording doesn't carry stale text
+    recordingTextRef.current = "";
   }, [stopRecording]);
 
   const exportSession = useCallback(async (sid: string, title: string) => {
