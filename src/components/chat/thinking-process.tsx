@@ -55,20 +55,11 @@ export function ThinkingProcess({
         <span>{summary}</span>
       </button>
 
-      {isOpen && (
-        <div className="mt-1.5 ml-4 space-y-2">
-          {hasReasoning && (
-            <div className="font-mono text-xs text-on-surface-variant/50 leading-relaxed whitespace-pre-wrap">
-              {reasoning}
-            </div>
-          )}
-          {toolCalls && toolCalls.length > 0 && (
-            <div className="space-y-1">
-              {toolCalls.map((t) => (
-                <ToolCallCard key={t.id} toolCall={t} />
-              ))}
-            </div>
-          )}
+      {isOpen && toolCalls && toolCalls.length > 0 && (
+        <div className="mt-1.5 ml-4 space-y-1">
+          {toolCalls.map((t) => (
+            <ToolCallCard key={t.id} toolCall={t} />
+          ))}
         </div>
       )}
     </div>

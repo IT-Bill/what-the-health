@@ -28,6 +28,7 @@ import {
   buildTimeContext,
   buildHealthProfileContext,
 } from "@/lib/dietary-context";
+import { loadChatSkills, formatSkillsForSystemPrompt } from "@/lib/chat/skills";
 import { extractAndUpdateDietaryLog } from "@/lib/dietary-extraction";
 
 export const runtime = "nodejs";
@@ -587,6 +588,13 @@ export async function POST(request: Request) {
     answerReferenceContext,
   ].filter(Boolean) as string[];
 
+  // Load and inject skills into system prompt
+  const skills = await loadChatSkills();
+  const skillsText = formatSkillsForSystemPrompt(skills);
+  if (skillsText) {
+    contextParts.push(skillsText);
+  }
+
   const systemPrompt = await buildSystemPrompt(
     contextParts.join("\n\n"),
     userId
@@ -604,7 +612,8 @@ export async function POST(request: Request) {
     },
     onPayload: (payload) => {
       const final = { ...(payload as Record<string, unknown>), ...EXTRA_BODY } as Record<string, unknown>;
-      console.log("[API Payload] enable_thinking:", final["enable_thinking"], "reasoning_effort:", final["reasoning_effort"]);
+      console.log("[API Payload] keys:", Object.keys(final).filter(k => k.includes('think') || k.includes('reason') || k.includes('enable')));
+      console.log("[API Payload] enable_thinking:", final["enable_thinking"], "reasoning_effort:", final["reasoning_effort"], "thinkingFormat:", MODEL.compat?.thinkingFormat);
       return final;
     },
     onResponse: (response) => {
