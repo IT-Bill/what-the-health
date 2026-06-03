@@ -117,15 +117,25 @@ export default function MemoryPage() {
 
   async function handleGenerate() {
     setGenerating(true);
+    const currentPeriodStart = data?.report?.periodStart
+      ? data.report.periodStart.slice(0, 10)
+      : undefined;
     try {
       const res = await fetch("/api/memory/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: periodType }),
+        body: JSON.stringify({
+          type: periodType,
+          periodStart: currentPeriodStart,
+        }),
       });
       if (res.ok) {
-        // Refresh the report data
-        await fetchReport();
+        const json = await res.json() as { report?: { periodStart?: string } };
+        // Refresh to the newly generated report's period
+        const newPeriodStart = json.report?.periodStart
+          ? String(json.report.periodStart).slice(0, 10)
+          : currentPeriodStart;
+        await fetchReport(newPeriodStart);
       }
     } catch {
       // ignore
@@ -186,6 +196,7 @@ export default function MemoryPage() {
           <InsightsView
             reportInsights={data?.report?.insights ?? []}
             globalInsights={data?.globalInsights ?? []}
+            aiUnderstanding={data?.aiUnderstanding ?? { level: 1, percentage: 0, conversationCount: 0 }}
           />
         ) : (
           <ReportView report={data!.report!} periodType={periodType} />
@@ -520,33 +531,126 @@ function ReportView({
 function InsightsView({
   reportInsights,
   globalInsights,
+  aiUnderstanding,
 }: {
   reportInsights: InsightRecord[];
   globalInsights: InsightRecord[];
+  aiUnderstanding: {
+    level: number;
+    percentage: number;
+    conversationCount: number;
+    breakdown?: { dimension: string; weight: number; score: number; filled: string[]; missing: string[] }[];
+  };
 }) {
+  const [showBreakdown, setShowBreakdown] = useState(false);
   const all = [...reportInsights, ...globalInsights];
   const correlations = all.filter((i) => i.type === "correlation");
   const others = all.filter((i) => i.type !== "correlation");
 
+  const levelDesc =
+    aiUnderstanding.level <= 1 ? "刚刚开始了解你" :
+    aiUnderstanding.level === 2 ? "初步了解你的习惯" :
+    aiUnderstanding.level === 3 ? "再聊几次就能解锁更深度的洞察" :
+    aiUnderstanding.level === 4 ? "已经相当了解你了" :
+    "深度了解，洞察更加精准";
+
+  const levelRules = [
+    { label: "Level 1 (0–19%)", desc: "刚注册，几乎没有数据" },
+    { label: "Level 2 (20–39%)", desc: "填写了基础资料或少量互动" },
+    { label: "Level 3 (40–59%)", desc: "健康档案较完整，有对话积累" },
+    { label: "Level 4 (60–79%)", desc: "持续使用，行为数据丰富" },
+    { label: "Level 5 (80–100%)", desc: "全面了解，洞察高度个性化" },
+  ];
+
   return (
     <div className="flex flex-col gap-6 animate-[fadeIn_0.4s_ease]">
       {/* AI understanding level */}
-      <section className="bg-surface-container-low rounded-3xl p-6 md:p-8 border border-outline-variant/20 ambient-shadow text-center">
-        <p className="text-sm text-on-surface-variant uppercase tracking-widest mb-2">
-          AI 对你的了解度
-        </p>
-        <p className="font-[var(--font-display)] text-4xl font-semibold text-on-surface mb-3">
-          Level 3
+      <section className="bg-surface-container-low rounded-3xl p-6 md:p-8 border border-outline-variant/20 ambient-shadow">
+        <div className="flex items-center justify-center gap-2 mb-2">
+          <p className="text-sm text-on-surface-variant uppercase tracking-widest">
+            AI 对你的了解度
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowBreakdown((v) => !v)}
+            className="text-on-surface-variant/50 hover:text-on-surface-variant transition-colors"
+            title="了解评分标准"
+          >
+            <Icon name="help_outline" size={16} />
+          </button>
+        </div>
+        <p className="font-[var(--font-display)] text-4xl font-semibold text-on-surface mb-3 text-center">
+          Level {aiUnderstanding.level}
         </p>
         <div className="w-full max-w-xs mx-auto h-3 bg-surface-variant rounded-full overflow-hidden">
           <div
             className="h-full bg-secondary rounded-full transition-all duration-1000"
-            style={{ width: "78%" }}
+            style={{ width: `${aiUnderstanding.percentage}%` }}
           />
         </div>
-        <p className="text-sm text-on-surface-variant mt-2">
-          78% — 再聊几次就能解锁更深度的洞察
+        <p className="text-sm text-on-surface-variant mt-2 text-center">
+          {aiUnderstanding.percentage}% — {levelDesc}
         </p>
+
+        {/* Expandable breakdown */}
+        {showBreakdown && (
+          <div className="mt-5 flex flex-col gap-5 border-t border-outline-variant/20 pt-5">
+            {/* Level rules */}
+            <div>
+              <p className="text-xs font-medium text-on-surface-variant uppercase tracking-wider mb-2">等级标准</p>
+              <div className="flex flex-col gap-1.5">
+                {levelRules.map((r) => (
+                  <div key={r.label} className={`flex gap-2 text-xs leading-relaxed ${r.label.startsWith(`Level ${aiUnderstanding.level}`) ? "text-on-surface" : "text-on-surface-variant/50"}`}>
+                    <span className={`font-medium flex-shrink-0 ${r.label.startsWith(`Level ${aiUnderstanding.level}`) ? "text-secondary" : ""}`}>{r.label}</span>
+                    <span>{r.desc}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Dimension breakdown */}
+            {aiUnderstanding.breakdown && aiUnderstanding.breakdown.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-on-surface-variant uppercase tracking-wider mb-3">各维度得分</p>
+                <div className="flex flex-col gap-4">
+                  {aiUnderstanding.breakdown.map((dim) => (
+                    <div key={dim.dimension}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm text-on-surface">{dim.dimension}</span>
+                        <span className="text-xs text-on-surface-variant">{dim.score} / {dim.weight}</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-surface-variant rounded-full overflow-hidden mb-2">
+                        <div
+                          className="h-full bg-secondary/70 rounded-full transition-all duration-700"
+                          style={{ width: `${Math.round((dim.score / dim.weight) * 100)}%` }}
+                        />
+                      </div>
+                      {dim.filled.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mb-1">
+                          {dim.filled.map((f) => (
+                            <span key={f} className="inline-flex items-center gap-1 text-[10px] text-secondary bg-secondary/10 px-2 py-0.5 rounded-full">
+                              <span className="w-1 h-1 rounded-full bg-secondary flex-shrink-0" />
+                              {f}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {dim.missing.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {dim.missing.map((m) => (
+                            <span key={m} className="text-[10px] text-on-surface-variant/40 bg-surface-variant/30 px-2 py-0.5 rounded-full">
+                              + {m}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
       {/* Insight Cards */}
@@ -806,6 +910,7 @@ function DemoView({ demos, periodType, activeTab }: { demos: DemoEntry[]; period
             <InsightsView
               reportInsights={selected.insights}
               globalInsights={[]}
+              aiUnderstanding={{ level: 1, percentage: 0, conversationCount: 0 }}
             />
           ) : selected.report ? (
             <ReportView

@@ -1296,30 +1296,103 @@ export function createTools(userId: string): AgentTool[] {
         treatmentPlanId?: string;
       };
 
-      const reminder = await prisma.medicationReminder.create({
-        data: {
-          userId,
-          title: input.title,
-          description: input.description ?? null,
-          frequency: input.frequency,
-          reminderTimes: input.reminderTimes,
-          startDate: new Date(input.startDate),
-          endDate: input.endDate ? new Date(input.endDate) : null,
-          treatmentPlanId: input.treatmentPlanId ?? null,
-        },
-      });
+      // Validate title
+      if (!input.title?.trim()) {
+        throw new Error("提醒标题不能为空");
+      }
 
-      const freqText: Record<string, string> = {
-        daily: "每天",
-        twice_daily: "每天两次",
-        three_times_daily: "每天三次",
-        weekly: "每周",
-        custom: "自定义",
-      };
+      // Validate frequency
+      const validFrequencies = ["daily", "twice_daily", "three_times_daily", "weekly", "custom"];
+      if (!validFrequencies.includes(input.frequency)) {
+        throw new Error(`无效的频率: ${input.frequency}。必须是 daily/twice_daily/three_times_daily/weekly/custom 之一`);
+      }
 
+      // Validate reminderTimes format (must be HH:MM)
+      const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+      if (!Array.isArray(input.reminderTimes) || input.reminderTimes.length === 0) {
+        throw new Error("reminderTimes 必须是非空数组");
+      }
+      for (const t of input.reminderTimes) {
+        if (!timeRegex.test(t)) {
+          throw new Error(`提醒时间格式错误: "${t}"。必须使用 HH:MM 格式，如 "08:00"`);
+        }
+      }
+
+      // Validate startDate
+      const startDate = new Date(input.startDate);
+      if (isNaN(startDate.getTime())) {
+        throw new Error(`开始日期格式错误: "${input.startDate}"。必须使用 YYYY-MM-DD 格式，如 "2026-06-03"`);
+      }
+
+      // Validate endDate if provided
+      let endDate: Date | null = null;
+      if (input.endDate) {
+        endDate = new Date(input.endDate);
+        if (isNaN(endDate.getTime())) {
+          throw new Error(`结束日期格式错误: "${input.endDate}"。必须使用 YYYY-MM-DD 格式`);
+        }
+      }
+
+      try {
+        const reminder = await prisma.medicationReminder.create({
+          data: {
+            userId,
+            title: input.title.trim(),
+            description: input.description?.trim() ?? null,
+            frequency: input.frequency,
+            reminderTimes: input.reminderTimes,
+            startDate,
+            endDate,
+            treatmentPlanId: input.treatmentPlanId ?? null,
+          },
+        });
+
+        const freqText: Record<string, string> = {
+          daily: "每天",
+          twice_daily: "每天两次",
+          three_times_daily: "每天三次",
+          weekly: "每周",
+          custom: "自定义",
+        };
+
+        console.log(`[set_medication_reminder] Created reminder: ${reminder.id} for user ${userId}`);
+
+        return {
+          content: [{ type: "text" as const, text: `已设置提醒「${input.title}」，${freqText[input.frequency]} ${input.reminderTimes.join("、")} 提醒。` }],
+          details: reminder,
+        };
+      } catch (err) {
+        console.error("[set_medication_reminder] DB error:", err);
+        throw new Error(`数据库写入失败: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    },
+  };
+
+  const askForMoreInfoTool: AgentTool = {
+    name: "ask_for_more_info",
+    label: "追问用户",
+    description:
+      "当你需要更多信息才能给出准确回答时调用。提供 2-4 个简洁的快捷选项让用户快速回复。" +
+      "例如：询问症状部位、饮食偏好、目标类型等。" +
+      "调用后，这些选项会以可点击按钮的形式出现在你的回复下方。" +
+      "同时在你的回复文本中自然地提出问题，选项作为辅助。",
+    parameters: Type.Object({
+      question: Type.String({ description: "你想追问的问题（会体现在你的回复文本中，不需要重复显示）" }),
+      options: Type.Array(
+        Type.String({ description: "简短选项文本，最多50个字" }),
+        { description: "2-4 个快捷回复选项", minItems: 2, maxItems: 4 }
+      ),
+    }),
+    execute: async (_toolCallId, params) => {
+      const input = params as { question: string; options: string[] };
       return {
-        content: [{ type: "text" as const, text: `已设置提醒「${input.title}」，${freqText[input.frequency]} ${input.reminderTimes.join("、")} 提醒。` }],
-        details: reminder,
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify({ question: input.question, options: input.options }),
+          },
+        ],
+        details: { question: input.question, options: input.options },
       };
     },
   };
@@ -1348,5 +1421,6 @@ export function createTools(userId: string): AgentTool[] {
     saveTreatmentPlanTool,
     getActiveTreatmentPlansTool,
     setMedicationReminderTool,
+    askForMoreInfoTool,
   ];
 }

@@ -50,7 +50,7 @@ export async function POST(
           title: `${actor.name} 收藏了你的帖子`,
           body: `《${post.title}》被加入了收藏。`,
           source: "post-favorite",
-          actionUrl: `/discover/${post.id}`,
+          actionUrl: `/discover/post/${post.id}`,
           metadata: {
             actorId: actor.id,
             postId: post.id,

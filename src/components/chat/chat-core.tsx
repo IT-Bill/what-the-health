@@ -582,7 +582,7 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
             Chat
           </Link>
           <Link
-            href="/discover"
+            href="/discover/post"
             onClick={prepareRestoreLatestOnReturn}
             className="text-on-surface-variant hover:opacity-80 transition-opacity h-full flex items-center border-b-2 border-transparent"
           >

@@ -578,26 +578,29 @@ export async function POST(request: Request) {
 
   // Reminder prompt: instruct model to proactively set reminders
   const reminderPrompt = [
-    "主动提醒设置：",
-    "当用户在对话中透露任何需要按时执行或定期关注的健康行为时，主动调用 set_medication_reminder 工具创建提醒。",
-    "不需要等用户说'帮我设个提醒'——只要用户提到相关内容就直接设。",
+    "主动提醒设置（强制）：",
+    "当用户在对话中透露任何需要按时执行或定期关注的健康行为时，必须调用 set_medication_reminder 工具创建提醒。",
+    "规则：",
+    "1. 不要只在回复文本中说'我已经帮你设好了'——如果不调用工具，提醒不会真正创建。",
+    "2. 只要用户提到相关内容，立即在回复中生成 toolCall 调用 set_medication_reminder。",
+    "3. tool 调用成功后，再在回复文本中告诉用户已设好。",
+    "4. startDate 格式必须是 YYYY-MM-DD，reminderTimes 格式必须是 HH:MM（如 08:00）。",
     "",
     "触发场景：",
     "- 用药：'医生给我开了降压药'、'每天要吃维生素' → 设 daily 用药提醒",
     "- 监测：'最近血压有点高，要每天测' → 设 daily 监测提醒",
     "- 复诊：'下周三要去复查'、'一个月后复诊' → 设 weekly/custom 提醒，endDate 为复诊日期",
     "- 恢复：'上周做了手术'、'感冒发烧了' → 设 daily/twice_daily 恢复关怀提醒",
-    "",
-    "设置后自然告诉用户，如'我帮你设好了每天测血压的提醒'，不要过度解释工具调用。",
+    "- 健身/运动计划：'明早八点去健身' → 设 daily 运动提醒",
   ].join("\n");
 
-  // Layered context blocks (ordered: role → goals → time → wearable → dietary → profile → memories)
+  // Layered context blocks (ordered: time → role → goals → onboarding → reminder → wearable → dietary → profile → memories)
   const contextParts = [
+    timeContext,
     rolePrompt,
     goalParameterPrompt || null,
     onboardingPrompt || null,
     reminderPrompt,
-    timeContext,
     wearableContext || null,
     dietaryContext,
     healthProfileContext || null,
@@ -610,6 +613,14 @@ export async function POST(request: Request) {
   if (skillsText) {
     contextParts.push(skillsText);
   }
+
+  // Quick reply guidance
+  contextParts.push(
+    "当你需要用户提供更多信息才能给出准确建议时（例如：询问症状部位、饮食偏好、目标类型、时间安排等），" +
+    "调用 ask_for_more_info 工具，提供 2-4 个简短选项。" +
+    "在你的回复文本中自然地提出问题，选项会以按钮形式显示在回复下方供用户点击。" +
+    "不要在回复文本中重复列举选项内容。"
+  );
 
   const systemPrompt = await buildSystemPrompt(
     contextParts.join("\n\n"),
@@ -813,6 +824,11 @@ export async function POST(request: Request) {
               if (toolExecutions[idx].name === "web_search" && !event.isError) {
                 const details = (result as { details?: { results?: unknown[] } } | undefined)?.details;
                 if (details?.results) ssePayload.sources = details.results;
+              }
+              // Pass quick reply options to the client
+              if (toolExecutions[idx].name === "ask_for_more_info" && !event.isError) {
+                const details = (result as { details?: { options?: string[] } } | undefined)?.details;
+                if (details?.options) ssePayload.quickReplies = details.options;
               }
               controller.enqueue(sse(ssePayload));
             }

@@ -18,7 +18,7 @@ interface AnomalyRule {
  * Each rule defines when a single health record value is concerning.
  */
 const ANOMALY_RULES: AnomalyRule[] = [
-  // Critical — always notify (all alert levels)
+  // ── Critical ─────────────────────────────────────────────────────────────
   {
     metric: "heartRate",
     condition: (v) => v > 120 || v < 45,
@@ -29,10 +29,10 @@ const ANOMALY_RULES: AnomalyRule[] = [
   },
   {
     metric: "bloodPressure",
-    condition: (v) => v > 160,
+    condition: (v) => v > 180,
     severity: "critical",
-    title: "血压过高",
-    template: (v, u) => `收缩压达到 ${v} ${u}，建议立即休息并考虑就医。`,
+    title: "血压危急",
+    template: (v, u) => `收缩压达到 ${v} ${u}，属于高血压危象范围，建议立即就医。`,
     minAlertLevel: "low",
   },
   {
@@ -43,8 +43,16 @@ const ANOMALY_RULES: AnomalyRule[] = [
     template: (v, u) => `血氧饱和度仅 ${v}${u}，可能存在缺氧风险，请及时关注。`,
     minAlertLevel: "low",
   },
+  {
+    metric: "diastolicBP",
+    condition: (v) => v > 120,
+    severity: "critical",
+    title: "舒张压危急",
+    template: (v, u) => `舒张压达到 ${v} ${u}，属于高血压危象范围，建议立即就医。`,
+    minAlertLevel: "low",
+  },
 
-  // Warning — notify medium and above
+  // ── Warning ───────────────────────────────────────────────────────────────
   {
     metric: "heartRate",
     condition: (v) => v > 100,
@@ -54,11 +62,35 @@ const ANOMALY_RULES: AnomalyRule[] = [
     minAlertLevel: "medium",
   },
   {
+    metric: "heartRate",
+    condition: (v) => v < 50,
+    severity: "warning",
+    title: "心率偏低",
+    template: (v, u) => `检测到心率 ${v} ${u}，低于正常范围，请留意是否有头晕、乏力等症状。`,
+    minAlertLevel: "medium",
+  },
+  {
+    metric: "bloodPressure",
+    condition: (v) => v > 160,
+    severity: "warning",
+    title: "血压过高",
+    template: (v, u) => `收缩压达到 ${v} ${u}，建议立即休息并考虑就医。`,
+    minAlertLevel: "low",
+  },
+  {
     metric: "bloodPressure",
     condition: (v) => v > 140,
     severity: "warning",
     title: "血压偏高",
-    template: (v, u) => `血压读数 ${v} ${u}，高于正常范围。`,
+    template: (v, u) => `收缩压读数 ${v} ${u}，高于正常范围，建议监测并避免剧烈活动。`,
+    minAlertLevel: "medium",
+  },
+  {
+    metric: "diastolicBP",
+    condition: (v) => v > 90,
+    severity: "warning",
+    title: "舒张压偏高",
+    template: (v, u) => `舒张压 ${v} ${u}，高于正常值（80 mmHg），请注意休息。`,
     minAlertLevel: "medium",
   },
   {
@@ -69,14 +101,38 @@ const ANOMALY_RULES: AnomalyRule[] = [
     template: (v, u) => `血氧 ${v}${u}，低于正常值（95%+），请留意。`,
     minAlertLevel: "medium",
   },
+  {
+    metric: "sleepAnalysis",
+    condition: (v) => v < 4,
+    severity: "warning",
+    title: "睡眠严重不足",
+    template: (v, u) => `昨夜睡眠时长仅 ${v} ${u}，长期睡眠不足会影响心血管健康，请关注。`,
+    minAlertLevel: "medium",
+  },
 
-  // Info — only notify high alert level
+  // ── Info ──────────────────────────────────────────────────────────────────
   {
     metric: "heartRate",
     condition: (v) => v > 90,
     severity: "info",
     title: "心率略高",
     template: (v, u) => `心率 ${v} ${u}，稍高于正常静息范围。`,
+    minAlertLevel: "high",
+  },
+  {
+    metric: "bloodPressure",
+    condition: (v) => v > 130,
+    severity: "info",
+    title: "血压略高",
+    template: (v, u) => `收缩压 ${v} ${u}，略高于理想范围（<130 mmHg），建议低盐饮食并适当运动。`,
+    minAlertLevel: "high",
+  },
+  {
+    metric: "sleepAnalysis",
+    condition: (v) => v < 6,
+    severity: "info",
+    title: "睡眠不足",
+    template: (v, u) => `昨夜睡眠时长 ${v} ${u}，低于建议值（7-9 小时）。`,
     minAlertLevel: "high",
   },
 ];

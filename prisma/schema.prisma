@@ -90,6 +90,7 @@ enum HealthMetricType {
   workout
   weight
   bloodPressure
+  diastolicBP
   bloodOxygen
   calories
   distance

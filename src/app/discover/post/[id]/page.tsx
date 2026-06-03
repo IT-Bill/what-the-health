@@ -49,6 +49,17 @@ export default function PostDetailPage() {
     };
   }, [params?.id]);
 
+  // Scroll to comment anchor once post has loaded
+  useEffect(() => {
+    if (loading) return;
+    const hash = window.location.hash;
+    if (!hash) return;
+    const el = document.querySelector(hash);
+    if (el) {
+      setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
+    }
+  }, [loading]);
+
   async function handleLike() {
     if (!post) return;
     const nextLiked = !liked;
@@ -395,7 +406,7 @@ function CommentItem({
   }
 
   return (
-    <div className="flex gap-3">
+    <div id={`comment-${comment.id}`} className="flex gap-3 scroll-mt-20">
       <div className="w-8 h-8 rounded-full bg-surface-container-high overflow-hidden relative flex-shrink-0">
         {comment.author.avatarUrl ? (
           <img src={comment.author.avatarUrl} alt={comment.author.name} className="absolute inset-0 w-full h-full object-cover" />

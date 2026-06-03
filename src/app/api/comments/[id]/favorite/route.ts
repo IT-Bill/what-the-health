@@ -60,7 +60,7 @@ export async function POST(
           title: `${actor.name} 收藏了你的评论`,
           body: `《${comment.post.title}》下的评论“${toSnippet(comment.body)}”被加入了收藏。`,
           source: "comment-favorite",
-          actionUrl: `/discover/${comment.postId}`,
+          actionUrl: `/discover/post/${comment.postId}`,
           metadata: {
             actorId: actor.id,
             commentId: comment.id,
