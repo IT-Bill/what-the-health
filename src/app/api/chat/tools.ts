@@ -1254,12 +1254,22 @@ export function createTools(userId: string): AgentTool[] {
 
   const setMedicationReminderTool: AgentTool = {
     name: "set_medication_reminder",
-    label: "设置用药提醒",
+    label: "设置健康提醒",
     description:
-      "为用户设置用药或复诊提醒。当用户同意设置提醒时调用。",
+      "为用户设置健康相关的定时提醒。当用户在对话中提到任何需要定期关注或按时执行的健康行为时，主动调用此工具创建提醒，不需要等用户明确说'设个提醒'。\n\n" +
+      "适用场景：\n" +
+      "1. 用药提醒：用户提到医生开了药、正在服药、或需要按时吃药（如'每天一片降压药'）。\n" +
+      "2. 指标监测：用户提到需要定期测量血压、血糖、体温等（如'我最近血压有点高，要每天测'）。\n" +
+      "3. 复诊/复查：用户提到要去看医生、复查、或预约检查（如'下周三要复诊'、'一个月后复查'）。\n" +
+      "4. 恢复关怀：用户提到刚做完手术、生病、或身体不适需要恢复（如'上周做了小手术，还在恢复中'）。\n\n" +
+      "规则：\n" +
+      "- 起始时间：以用户提到的相关时间为起点。如果是'从今天开始'，startDate 用今天。\n" +
+      "- 周期：如果是周期性行为（每天/每周），设定对应 frequency 和 reminderTimes。\n" +
+      "- 单次：如果是明确日期的一次性事件（如下周三复诊），用 weekly 或 custom，endDate 设为该日期。\n" +
+      "- 设置后告诉用户已帮ta设好提醒，用自然语言说明时间和频率。",
     parameters: Type.Object({
-      title: Type.String({ description: "提醒标题，如'服用阿莫西林'" }),
-      description: Type.Optional(Type.String({ description: "剂量说明" })),
+      title: Type.String({ description: "提醒标题，如'服用降压药'、'测血压'、'周三复诊'、'术后恢复关怀'" }),
+      description: Type.Optional(Type.String({ description: "补充说明，如剂量、科室、注意事项" })),
       frequency: Type.Union(
         [
           Type.Literal("daily"),
@@ -1268,11 +1278,11 @@ export function createTools(userId: string): AgentTool[] {
           Type.Literal("weekly"),
           Type.Literal("custom"),
         ],
-        { description: "提醒频率" }
+        { description: "提醒频率。daily=每天一次, twice_daily=每天两次, three_times_daily=每天三次, weekly=每周, custom=自定义" }
       ),
-      reminderTimes: Type.Array(Type.String(), { description: "提醒时间 [\"08:00\", \"20:00\"]" }),
-      startDate: Type.String({ description: "开始日期 (ISO 格式)" }),
-      endDate: Type.Optional(Type.String({ description: "结束日期 (ISO 格式)" })),
+      reminderTimes: Type.Array(Type.String(), { description: "提醒时间数组 [\"08:00\", \"20:00\"]。根据用户生活习惯推断合理时间" }),
+      startDate: Type.String({ description: "开始日期 (ISO 格式 YYYY-MM-DD)，默认今天" }),
+      endDate: Type.Optional(Type.String({ description: "结束日期 (ISO 格式)。明确日期的一次性事件设此字段" })),
       treatmentPlanId: Type.Optional(Type.String({ description: "关联治疗方案 ID" })),
     }),
     execute: async (_toolCallId, params) => {
@@ -1299,8 +1309,16 @@ export function createTools(userId: string): AgentTool[] {
         },
       });
 
+      const freqText: Record<string, string> = {
+        daily: "每天",
+        twice_daily: "每天两次",
+        three_times_daily: "每天三次",
+        weekly: "每周",
+        custom: "自定义",
+      };
+
       return {
-        content: [{ type: "text" as const, text: `提醒已设置：${input.title}，${input.reminderTimes.join(", ")}` }],
+        content: [{ type: "text" as const, text: `已设置提醒「${input.title}」，${freqText[input.frequency]} ${input.reminderTimes.join("、")} 提醒。` }],
         details: reminder,
       };
     },

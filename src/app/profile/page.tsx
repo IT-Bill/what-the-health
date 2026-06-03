@@ -69,7 +69,12 @@ export default function ProfilePage() {
   }
 
   return (
-    <AppShell>
+    <AppShell
+      topAppBarProps={{
+        leftIcon: "alarm_clock",
+        leftHref: "/reminders",
+      }}
+    >
       <div className="max-w-screen-md mx-auto">
         {/* Profile Header */}
         <section className="py-12">

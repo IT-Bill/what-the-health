@@ -576,11 +576,27 @@ export async function POST(request: Request) {
         "不要在回复中说'记下来了'却不调用工具——信息只有调用工具才能真正保存。",
       ].join("");
 
+  // Reminder prompt: instruct model to proactively set reminders
+  const reminderPrompt = [
+    "主动提醒设置：",
+    "当用户在对话中透露任何需要按时执行或定期关注的健康行为时，主动调用 set_medication_reminder 工具创建提醒。",
+    "不需要等用户说'帮我设个提醒'——只要用户提到相关内容就直接设。",
+    "",
+    "触发场景：",
+    "- 用药：'医生给我开了降压药'、'每天要吃维生素' → 设 daily 用药提醒",
+    "- 监测：'最近血压有点高，要每天测' → 设 daily 监测提醒",
+    "- 复诊：'下周三要去复查'、'一个月后复诊' → 设 weekly/custom 提醒，endDate 为复诊日期",
+    "- 恢复：'上周做了手术'、'感冒发烧了' → 设 daily/twice_daily 恢复关怀提醒",
+    "",
+    "设置后自然告诉用户，如'我帮你设好了每天测血压的提醒'，不要过度解释工具调用。",
+  ].join("\n");
+
   // Layered context blocks (ordered: role → goals → time → wearable → dietary → profile → memories)
   const contextParts = [
     rolePrompt,
     goalParameterPrompt || null,
     onboardingPrompt || null,
+    reminderPrompt,
     timeContext,
     wearableContext || null,
     dietaryContext,

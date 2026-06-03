@@ -135,7 +135,12 @@ export default function MemoryPage() {
   }
 
   return (
-    <AppShell>
+    <AppShell
+      topAppBarProps={{
+        leftIcon: "alarm_clock",
+        leftHref: "/reminders",
+      }}
+    >
       <div className="flex flex-col gap-8 max-w-3xl mx-auto w-full">
         {/* Tab Navigation */}
         <div className="flex gap-2 overflow-x-auto no-scrollbar">
