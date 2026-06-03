@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Copy, RotateCcw, BookOpen, Check } from "lucide-react";
+import { Volume2, VolumeX } from "lucide-react";
 import { MarkdownContent } from "./markdown-content";
 import { ThinkingProcess } from "./thinking-process";
 import type { Message } from "@/lib/chat/types";
@@ -15,6 +16,8 @@ interface AgentMessageProps {
 
 export function AgentMessage({ message, onRetry, onShowSources, onQuickReply }: AgentMessageProps) {
   const [copied, setCopied] = useState(false);
+  const [ttsState, setTtsState] = useState<"idle" | "loading" | "playing">("idle");
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const hasSources = (message.sources?.length ?? 0) > 0;
   const hasQuickReplies = !message.isStreaming && (message.quickReplies?.length ?? 0) > 0;
 
@@ -24,6 +27,42 @@ export function AgentMessage({ message, onRetry, onShowSources, onQuickReply }: 
       setTimeout(() => setCopied(false), 2000);
     });
   };
+
+  const handleTts = useCallback(async () => {
+    // Stop if already playing
+    if (ttsState === "playing") {
+      audioRef.current?.pause();
+      if (audioRef.current) audioRef.current.src = "";
+      audioRef.current = null;
+      setTtsState("idle");
+      return;
+    }
+    if (ttsState === "loading") return;
+
+    const text = message.content.slice(0, 1000).replace(/[#*`>~\[\]]/g, "").trim();
+    if (!text) return;
+
+    setTtsState("loading");
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) throw new Error(`TTS failed: ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => { setTtsState("idle"); URL.revokeObjectURL(url); };
+      audio.onerror = () => { setTtsState("idle"); URL.revokeObjectURL(url); };
+      await audio.play();
+      setTtsState("playing");
+    } catch (err) {
+      console.error("[TTS]", err);
+      setTtsState("idle");
+    }
+  }, [ttsState, message.content]);
 
   return (
     <div className="w-full py-3">
@@ -75,6 +114,19 @@ export function AgentMessage({ message, onRetry, onShowSources, onQuickReply }: 
               <RotateCcw className="w-4 h-4" />
             </button>
           )}
+          <button
+            onClick={() => void handleTts()}
+            title={ttsState === "playing" ? "停止朗读" : "朗读"}
+            className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors ${
+              ttsState === "playing"
+                ? "text-secondary hover:bg-surface-container-high"
+                : ttsState === "loading"
+                ? "text-on-surface-variant/30 cursor-wait"
+                : "text-on-surface-variant/50 hover:text-on-surface-variant hover:bg-surface-container-high"
+            }`}
+          >
+            {ttsState === "playing" ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+          </button>
           {hasSources && (
             <button
               onClick={() => onShowSources?.()}
