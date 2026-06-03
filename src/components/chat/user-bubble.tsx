@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import { Pencil, Check, X } from "lucide-react";
+import { Pencil, ArrowUp, X } from "lucide-react";
 import type { Message } from "@/lib/chat/types";
 
 interface UserBubbleProps {
@@ -90,15 +90,17 @@ export function UserBubble({ message, onEdit }: UserBubbleProps) {
             <div className="flex items-center gap-2 justify-end">
               <button
                 onClick={handleCancel}
+                title="取消"
                 className="flex items-center justify-center w-8 h-8 rounded-full text-on-surface-variant/60 hover:text-on-surface-variant hover:bg-surface-container-high transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
               <button
                 onClick={handleConfirm}
-                className="flex items-center justify-center w-8 h-8 rounded-full bg-secondary text-on-secondary hover:opacity-90 transition-colors"
+                title="发送"
+                className="flex items-center justify-center w-8 h-8 rounded-full bg-on-surface text-surface hover:opacity-90 transition-colors"
               >
-                <Check className="w-4 h-4" />
+                <ArrowUp className="w-4 h-4" />
               </button>
             </div>
           </div>
