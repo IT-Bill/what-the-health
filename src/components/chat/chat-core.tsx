@@ -12,6 +12,7 @@ import {
   useChatCache,
   useVoiceRecording,
 } from "@/lib/chat/hooks";
+import { useUser, refreshSessions } from "@/lib/swr";
 import { MessageList } from "./message-list";
 import { ChatInput } from "./chat-input";
 import { SessionSidebar } from "./session-sidebar";
@@ -103,16 +104,8 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
     }
   }, [sessionId]);
 
-  // Auth check
-  useEffect(() => {
-    fetch("/api/me")
-      .then((r) => {
-        if (r.status === 401) window.location.href = "/login";
-      })
-      .catch(() => {
-        window.location.href = "/login";
-      });
-  }, []);
+  // Auth check via SWR
+  useUser();
 
   // Cache write on unmount
   useEffect(() => {

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { Icon } from "@/components/icon";
+import { useUser } from "@/lib/swr";
 
 const CATEGORIES = [
   { id: "mindfulness", label: "正念", icon: "spa" },
@@ -15,7 +16,8 @@ const CATEGORIES = [
 
 export default function NewPostPage() {
   const router = useRouter();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const { data: userData } = useUser();
+  const isLoggedIn = !!userData?.user;
   const [submitting, setSubmitting] = useState(false);
   const [title, setTitle] = useState("");
   const [excerpt, setExcerpt] = useState("");
@@ -25,15 +27,6 @@ export default function NewPostPage() {
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    fetch("/api/me")
-      .then((r) => {
-        if (!r.ok) window.location.href = "/login";
-        else setIsLoggedIn(true);
-      })
-      .catch(() => { window.location.href = "/login"; });
-  }, []);
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];

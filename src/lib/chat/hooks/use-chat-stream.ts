@@ -2,6 +2,7 @@
 
 import { useCallback, useRef } from "react";
 import { useChatStore } from "@/lib/chat/store";
+import { refreshSessions } from "@/lib/swr";
 import type { Message, SearchSource, ToolCallInfo } from "@/lib/chat/types";
 
 // ---------------------------------------------------------------------------
@@ -245,12 +246,7 @@ export function useChatStream() {
         abortRef.current = null;
 
         // Refresh sessions list
-        fetch("/api/chat/sessions")
-          .then((r) => r.json())
-          .then((data) => {
-            if (data.sessions) useChatStore.getState().setSessions(data.sessions);
-          })
-          .catch(console.error);
+        refreshSessions().catch(console.error);
       }
     },
     [processSseEvent]
@@ -343,12 +339,7 @@ export function useChatStream() {
         abortRef.current = null;
 
         // Refresh sessions list
-        fetch("/api/chat/sessions")
-          .then((r) => r.json())
-          .then((data) => {
-            if (data.sessions) useChatStore.getState().setSessions(data.sessions);
-          })
-          .catch(console.error);
+        refreshSessions().catch(console.error);
       }
     },
     [processSseEvent]
