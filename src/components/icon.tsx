@@ -104,6 +104,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   add: Plus,
   plus: Plus,
   delete: Trash2,
+  trash: Trash2,
   edit: Pencil,
   edit_note: NotebookPen,
   content_copy: Copy,

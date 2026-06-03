@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/icon";
 import { NotificationBell } from "@/components/notification-bell";
@@ -114,11 +114,23 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
   const { data: userData } = useUser();
   const userId = userData?.user?.id;
 
+  // Reset store before first paint to prevent stale cross-user data from showing
+  useLayoutEffect(() => {
+    const store = useChatStore.getState();
+    store.clearMessages();
+    store.setSessionId(undefined);
+    store.setSessions([]);
+  }, []);
+
   // Clear cross-user stale cache when user changes
   useEffect(() => {
     if (!userId) return;
     if (!isCacheOwnedBy(userId)) {
       clearAllChatCache();
+      const store = useChatStore.getState();
+      store.clearMessages();
+      store.setSessionId(undefined);
+      store.setSessions([]);
     }
   }, [userId]);
 
