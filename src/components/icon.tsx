@@ -31,6 +31,7 @@ import {
   Hand,
   Heart,
   HeartPulse,
+  HelpCircle,
   Hourglass,
   ImagePlus,
   Key,
@@ -178,6 +179,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   check_circle: CheckCircle,
   error: CircleAlert,
   warning: TriangleAlert,
+  help_outline: HelpCircle,
   flag: Flag,
   hourglass_top: Hourglass,
 
