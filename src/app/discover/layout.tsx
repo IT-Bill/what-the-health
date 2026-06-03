@@ -5,14 +5,14 @@ import { usePathname } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 
 const NAV_TABS = [
-  { href: "/discover", label: "文章" },
+  { href: "/discover/post", label: "文章" },
   { href: "/discover/shop", label: "商城" },
   { href: "/discover/friends", label: "好友" },
   { href: "/discover/family", label: "家庭" },
 ];
 
 // Pages that should show the tab navigation
-const TAB_PAGES = ["/discover", "/discover/shop", "/discover/friends", "/discover/family"];
+const TAB_PAGES = ["/discover/post", "/discover/shop", "/discover/friends", "/discover/family"];
 
 export default function DiscoverLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -20,7 +20,7 @@ export default function DiscoverLayout({ children }: { children: React.ReactNode
   const showTabs = TAB_PAGES.includes(pathname);
 
   function isActive(href: string) {
-    if (href === "/discover") return pathname === "/discover";
+    if (href === "/discover/post") return pathname === "/discover/post";
     return pathname.startsWith(href);
   }
 
@@ -30,7 +30,13 @@ export default function DiscoverLayout({ children }: { children: React.ReactNode
   }
 
   return (
-    <AppShell>
+    <AppShell
+      topAppBarProps={{
+        title: "发现",
+        leftIcon: "alarm_clock",
+        leftHref: "/reminders",
+      }}
+    >
       <div className="flex flex-col gap-6 max-w-5xl mx-auto w-full">
         {/* Tab Navigation */}
         <div className="flex gap-1 bg-surface-container rounded-xl p-1 self-center">

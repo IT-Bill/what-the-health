@@ -12,7 +12,7 @@ import {
   hasPrimaryGoalGroup,
   requiresPrimaryGoalParameters,
 } from "@/lib/primary-goals";
-import { useUser } from "@/lib/swr";
+import { useUser, refreshUser } from "@/lib/swr";
 
 interface User {
   id: string;
@@ -116,11 +116,6 @@ export default function PersonalInfoPage() {
 
   function handleChange(key: keyof User, value: string | number) {
     setForm((prev) => ({ ...prev, [key]: value }));
-  }
-
-  async function handleLogout() {
-    await fetch("/api/logout", { method: "POST" });
-    router.push("/login");
   }
 
   const primaryGoalLabels = user
@@ -281,36 +276,47 @@ export default function PersonalInfoPage() {
         </div>
 
         <section className="mt-4 rounded-[2rem] bg-primary-container p-6 ambient-shadow">
-          <div className="flex items-start justify-between gap-4">
-            <div>
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <div className="flex items-center gap-2">
+              <Icon name="flag" size={18} className="text-secondary" />
               <h2 className="text-base font-medium text-on-surface">主要目标</h2>
-              <p className="mt-1 text-sm leading-6 text-on-surface-variant">
-                登录后的推荐内容、习惯建议和陪伴风格会参考这些目标。
-              </p>
             </div>
             <button
               type="button"
               onClick={() => setGoalDialogOpen(true)}
-              className="rounded-full bg-surface px-4 py-2 text-sm font-medium text-on-surface transition-colors hover:bg-surface-container"
+              className="flex items-center gap-1 rounded-full bg-secondary-container/50 px-3 py-1.5 text-xs font-medium text-on-secondary-container transition-colors hover:bg-secondary-container"
             >
+              <Icon name="edit" size={13} />
               编辑
             </button>
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-2">
-            {primaryGoalLabels.length > 0 ? (
-              primaryGoalLabels.map((goal) => (
+          {primaryGoalLabels.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {primaryGoalLabels.map((goal) => (
                 <span
                   key={goal}
-                  className="rounded-full bg-secondary-container px-3 py-1.5 text-sm font-medium text-on-secondary-container"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-secondary/10 border border-secondary/20 px-3 py-1.5 text-sm font-medium text-on-surface"
                 >
+                  <span className="w-1.5 h-1.5 rounded-full bg-secondary flex-shrink-0" />
                   {goal}
                 </span>
-              ))
-            ) : (
-              <span className="text-sm text-on-surface-variant">未设置</span>
-            )}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setGoalDialogOpen(true)}
+              className="w-full flex items-center justify-center gap-2 rounded-2xl border border-dashed border-outline-variant/40 py-4 text-sm text-on-surface-variant hover:bg-surface-variant/20 transition-colors"
+            >
+              <Icon name="add" size={16} />
+              点击设置目标
+            </button>
+          )}
+
+          <p className="mt-3 text-xs text-on-surface-variant/60 leading-relaxed">
+            推荐内容、习惯建议和陪伴风格会参考这些目标。
+          </p>
         </section>
 
         <button
@@ -319,13 +325,6 @@ export default function PersonalInfoPage() {
           className="w-full mt-6 flex justify-center py-4 px-8 rounded-full text-sm font-medium tracking-wide text-on-primary bg-inverse-surface hover:bg-on-background transition-all duration-300 disabled:opacity-50"
         >
           {saving ? "保存中..." : "保存"}
-        </button>
-
-        <button
-          onClick={handleLogout}
-          className="w-full mt-4 flex justify-center py-4 px-8 rounded-full text-sm font-medium tracking-wide text-error bg-transparent hover:bg-error/5 transition-all duration-300"
-        >
-          退出登录
         </button>
       </main>
 
@@ -339,6 +338,7 @@ export default function PersonalInfoPage() {
           description="可多选，保存后会立即同步到你的个人资料。"
           onClose={() => setGoalDialogOpen(false)}
           onSaved={(selection) => {
+            void refreshUser();
             setGoalParameterStepActive(
               requiresPrimaryGoalParameters(selection.primaryGoals, selection.primaryGoal),
             );

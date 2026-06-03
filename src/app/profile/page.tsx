@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
@@ -48,6 +48,11 @@ export default function ProfilePage() {
   const user = userData?.user ?? null;
   const [goalDialogOpen, setGoalDialogOpen] = useState(false);
 
+  const handleLogout = useCallback(async () => {
+    await fetch("/api/logout", { method: "POST" });
+    router.push("/login");
+  }, [router]);
+
   useEffect(() => {
     if (user && !hasStoredPrimaryGoals(user.primaryGoals, user.primaryGoal)) {
       setGoalDialogOpen(true);
@@ -77,7 +82,7 @@ export default function ProfilePage() {
     >
       <div className="max-w-screen-md mx-auto">
         {/* Profile Header */}
-        <section className="py-12">
+        <section className="py-4">
           {!user ? (
             <div className="bg-primary-container rounded-[2rem] p-8 ambient-shadow flex flex-col items-center text-center gap-6">
               <div className="w-20 h-20 rounded-full bg-surface-container-high flex items-center justify-center">
@@ -195,6 +200,16 @@ export default function ProfilePage() {
           }}
         />
       ) : null}
+      {user && (
+        <div className="px-4 pb-6 pt-2 flex justify-center">
+          <button
+            onClick={() => void handleLogout()}
+            className="text-sm text-on-surface-variant/50 hover:text-error transition-colors"
+          >
+            退出登录
+          </button>
+        </div>
+      )}
     </AppShell>
   );
 }

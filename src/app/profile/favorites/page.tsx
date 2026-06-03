@@ -88,7 +88,7 @@ function FavoriteCard({
 }) {
   return (
     <div className="group relative">
-      <Link href={`/discover/${item.post.id}`}>
+      <Link href={`/discover/post/${item.post.id}`}>
         <article className="bg-primary-container rounded-2xl overflow-hidden ambient-shadow transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_24px_48px_rgba(45,45,45,0.06)] flex flex-col h-full">
           {item.post.coverImage ? (
             <div className="relative h-32 overflow-hidden bg-surface-variant">
@@ -169,7 +169,7 @@ function EmptyState() {
         在 Discover 浏览文章时，点击收藏按钮，就可以在这里找到它们
       </p>
       <Link
-        href="/discover"
+        href="/discover/post"
         className="px-6 py-3 rounded-full bg-secondary text-on-secondary text-sm font-medium hover:opacity-90 transition-opacity"
       >
         去 Discover 看看

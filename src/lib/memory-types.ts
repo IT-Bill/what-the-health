@@ -62,10 +62,23 @@ export interface InsightRecord {
   metadata: Record<string, unknown> | null;
 }
 
+export interface AiUnderstandingBreakdown {
+  dimension: string;
+  weight: number;
+  score: number;
+  filled: string[];
+  missing: string[];
+}
+
 export interface MemoryApiResponse {
   report: ReportWithInsights | null;
   globalInsights: InsightRecord[];
   available: string[];
   versions: { version: number; createdAt: string }[];
-  aiUnderstanding: { level: number; percentage: number; conversationCount: number };
+  aiUnderstanding: {
+    level: number;
+    percentage: number;
+    conversationCount: number;
+    breakdown: AiUnderstandingBreakdown[];
+  };
 }

@@ -664,7 +664,7 @@ function SharedContentView({ friend, onClose }: { friend: Friend; onClose: () =>
                   {(data.posts as Array<{ id: string; title: string; excerpt: string | null; publishedAt: string }>).map((post) => (
                     <Link
                       key={post.id}
-                      href={`/discover/${post.id}`}
+                      href={`/discover/post/${post.id}`}
                       className="bg-surface-container-low rounded-xl p-3 hover:bg-surface-variant/30 transition-colors"
                     >
                       <p className="text-sm font-medium text-on-surface line-clamp-1">{post.title}</p>

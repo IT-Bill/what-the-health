@@ -82,6 +82,10 @@ export function useNotifications(opts?: { refreshInterval?: number }) {
 // Mutations (call after create/update/delete to revalidate)
 // ---------------------------------------------------------------------------
 
+export function refreshUser() {
+  return mutate("/api/me");
+}
+
 export function refreshSessions() {
   return mutate("/api/chat/sessions");
 }
