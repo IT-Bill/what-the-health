@@ -79,7 +79,7 @@ export function useChatSession() {
       {
         id: "init",
         role: "agent",
-        content: "欢迎回来。我是 Mindful，你的疗愈陪伴者。在这个当下，你感觉如何？",
+        content: "欢迎回来。我是 WiTH，你的疗愈陪伴者。在这个当下，你感觉如何？",
       },
     ]);
     store.setSessionId(undefined);

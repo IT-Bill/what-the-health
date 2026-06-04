@@ -229,7 +229,7 @@ export default function BenchmarkPage() {
 
   // Baseline state
   const [baselineMessages, setBaselineMessages] = useState<Message[]>([
-    { id: "init", role: "agent", content: "欢迎回来。我是 Mindful，你的疗愈陪伴者。" },
+    { id: "init", role: "agent", content: "欢迎回来。我是 WiTH，你的疗愈陪伴者。" },
   ]);
   const [baselineInput, setBaselineInput] = useState("");
   const [baselineStreaming, setBaselineStreaming] = useState(false);
@@ -237,7 +237,7 @@ export default function BenchmarkPage() {
 
   const resetBaseline = useCallback(() => {
     setBaselineMessages([
-      { id: "init", role: "agent", content: "欢迎回来。我是 Mindful，你的疗愈陪伴者。" },
+      { id: "init", role: "agent", content: "欢迎回来。我是 WiTH，你的疗愈陪伴者。" },
     ]);
     setBaselineInput("");
     setBaselineStreaming(false);
@@ -247,7 +247,7 @@ export default function BenchmarkPage() {
   const resetStore = useCallback(() => {
     const store = useChatStore.getState();
     store.setMessages([
-      { id: "init", role: "agent", content: "欢迎回来。我是 Mindful，你的疗愈陪伴者。" },
+      { id: "init", role: "agent", content: "欢迎回来。我是 WiTH，你的疗愈陪伴者。" },
     ]);
     store.setInput("");
     store.setIsStreaming(false);

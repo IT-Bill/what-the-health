@@ -17,7 +17,7 @@ interface TopAppBarProps {
 }
 
 export function TopAppBar({
-  title = "Mindful",
+  title = "WiTH",
   leftIcon = "self_care",
   rightIcon = "notifications",
   leftHref,

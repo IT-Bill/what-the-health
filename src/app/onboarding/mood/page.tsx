@@ -36,7 +36,7 @@ export default function OnboardingMoodPage() {
       {/* Minimalist Header */}
       <header className="fixed top-0 left-0 w-full z-40 px-6 md:px-16 h-24 flex items-center justify-center">
         <h1 className="font-[var(--font-display)] text-2xl font-medium text-primary tracking-tight">
-          Mindful
+          WiTH
         </h1>
       </header>
 

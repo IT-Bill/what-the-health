@@ -86,7 +86,7 @@ export default function OnboardingGoalPage() {
           <Icon name="close" />
         </button>
         <h1 className="font-[var(--font-display)] text-2xl font-medium text-primary absolute left-1/2 -translate-x-1/2">
-          Mindful
+          WiTH
         </h1>
         <div className="w-10" />
       </header>

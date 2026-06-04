@@ -1013,7 +1013,7 @@ function ShareableCard({ report }: { report: ReportWithInsights }) {
           </div>
         )}
 
-        <p className="text-xs text-outline mt-4">─── 由 Mindful 生成 ───</p>
+        <p className="text-xs text-outline mt-4">─── 由 WiTH 生成 ───</p>
       </div>
     </section>
   );
@@ -1192,7 +1192,7 @@ function EmptyState({ onGenerate, generating }: { onGenerate: () => void; genera
     <div className="flex flex-col items-center justify-center py-20 text-center">
       <Icon name="auto_stories" className="text-5xl text-outline-variant mb-4" />
       <p className="text-lg text-on-surface-variant">还没有这个时期的报告</p>
-      <p className="text-sm text-outline mt-2 mb-6">点击下方按钮立即生成，或继续使用Mindful等待自动生成</p>
+      <p className="text-sm text-outline mt-2 mb-6">点击下方按钮立即生成，或继续使用WiTH等待自动生成</p>
       <button
         onClick={onGenerate}
         className="px-6 py-3 rounded-full bg-secondary text-on-secondary font-medium text-sm hover:opacity-90 transition-opacity flex items-center gap-2"

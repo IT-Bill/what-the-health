@@ -59,7 +59,7 @@ export default function NotificationsPage() {
     <AppShell topAppBarProps={{ rightAction: "back", rightAriaLabel: "返回上一页" }}>
       <div className="flex flex-col gap-6 max-w-2xl mx-auto w-full">
         <header className="space-y-1">
-          <p className="text-xs uppercase tracking-[0.3em] text-on-surface-variant/70">Mindful</p>
+          <p className="text-xs uppercase tracking-[0.3em] text-on-surface-variant/70">WiTH</p>
           <h1 className="text-3xl font-[var(--font-display)] text-on-surface">通知中心</h1>
         </header>
 
