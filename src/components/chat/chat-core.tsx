@@ -561,7 +561,7 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
           <Icon name={showSidebar ? "close" : "menu"} />
         </button>
         <div className="font-[var(--font-display)] text-2xl font-medium text-primary">
-          Mindful
+          WiTH
         </div>
         <NotificationBell className="w-9 h-9" />
       </header>
@@ -571,7 +571,7 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
         <div className="flex items-center gap-4">
           <Icon name="spa" />
           <div className="font-[var(--font-display)] text-2xl font-medium text-primary">
-            Mindful
+            WiTH
           </div>
         </div>
         <nav className="flex gap-8 items-center h-full">

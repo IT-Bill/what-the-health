@@ -3,8 +3,8 @@ import { NotificationToast } from "@/components/notification-toast";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Mindful - Quiet Luxury Wellness",
-  description: "A digital sanctuary for mindful health and wellness",
+  title: "WiTH - Quiet Luxury Wellness",
+  description: "A digital sanctuary for WiTH health and wellness",
 };
 
 export default function RootLayout({

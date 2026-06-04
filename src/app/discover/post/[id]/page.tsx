@@ -547,7 +547,7 @@ function HeaderBar({ onBack }: { onBack: () => void }) {
       <button onClick={onBack} className="w-10 h-10 flex items-center justify-center text-on-surface hover:opacity-70 transition-opacity rounded-full">
         <Icon name="arrow_back" />
       </button>
-      <h1 className="font-[var(--font-display)] text-lg font-medium text-primary">Mindful</h1>
+      <h1 className="font-[var(--font-display)] text-lg font-medium text-primary">WiTH</h1>
       <Link
         href="/notifications"
         aria-label="通知中心"

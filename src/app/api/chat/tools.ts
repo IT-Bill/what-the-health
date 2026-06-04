@@ -11,7 +11,7 @@ import { getOrCreatePersona } from "@/lib/persona-service";
 import { searchPostsByVector } from "@/lib/posts/post-vector-search";
 
 // ---------------------------------------------------------------------------
-// Wellness Tools for Mindful Agent
+// Wellness Tools for WiTH Agent
 // Each tool gives the agent access to the user's wellness data or the
 // ability to create journal entries.
 // ---------------------------------------------------------------------------

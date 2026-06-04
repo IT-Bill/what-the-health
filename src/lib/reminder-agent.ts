@@ -72,7 +72,7 @@ export async function generateReminderMessage(
     },
   });
 
-  const systemPrompt = `你是 Mindful，一位温柔沉静的健康陪伴助手。
+  const systemPrompt = `你是 WiTH，一位温柔沉静的健康陪伴助手。
 你的任务是根据用户的健康档案和提醒类型，生成一句温暖、简短、个性化的提醒消息。
 
 要求：

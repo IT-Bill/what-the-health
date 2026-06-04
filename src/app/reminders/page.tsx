@@ -361,7 +361,7 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
       <Icon name="calendar" className="text-4xl text-outline-variant mb-4" />
       <p className="text-lg text-on-surface-variant">还没有设置提醒</p>
       <p className="text-sm text-outline mt-2 mb-6">
-        添加用药、监测或复诊提醒，Mindful 会准时提醒你
+        添加用药、监测或复诊提醒，WiTH 会准时提醒你
       </p>
       <button
         onClick={onAdd}
