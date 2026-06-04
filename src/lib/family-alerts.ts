@@ -207,7 +207,7 @@ export async function checkHealthAnomalies(userId: string) {
 
         // Notify all caregivers and owners in the family
         const caregivers = membership.family.members.filter(
-          (m) => m.userId !== userId && (m.role === "owner" || m.role === "caregiver")
+          (m) => m.userId !== userId && (m.role === "owner" || m.isCaregiver)
         );
 
         const sourceUser = await prisma.user.findUnique({

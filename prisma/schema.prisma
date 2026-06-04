@@ -1003,6 +1003,12 @@ model FamilyMember {
   familyId   String
   userId     String
   role       FamilyRole @default(member)
+  /// Whether this member receives alerts for others (can combine with isCaredFor).
+  /// Only relevant when role is not owner/observer.
+  isCaregiver Boolean @default(false) @map("is_caregiver")
+  /// Whether this member's health triggers alerts to caregivers (can combine with isCaregiver).
+  /// Only relevant when role is not owner/observer.
+  isCaredFor  Boolean @default(false) @map("is_cared_for")
   nickname   String?    // 家庭中的称呼（如"爷爷"、"小明"）
   alertLevel AlertLevel @default(medium)
 

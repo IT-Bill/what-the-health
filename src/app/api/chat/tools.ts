@@ -612,7 +612,7 @@ export function createTools(userId: string): AgentTool[] {
 
         // Notify caregivers and owners (not the user themselves)
         const caregivers = membership.family.members.filter(
-          (m) => m.userId !== userId && (m.role === "owner" || m.role === "caregiver")
+          (m) => m.userId !== userId && (m.role === "owner" || m.isCaregiver)
         );
 
         for (const caregiver of caregivers) {
