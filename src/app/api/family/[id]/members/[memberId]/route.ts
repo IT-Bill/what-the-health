@@ -7,9 +7,10 @@ export const dynamic = "force-dynamic";
 
 /**
  * PATCH /api/family/[id]/members/[memberId] — 更新成员信息
- * Body: { role?, nickname?, alertLevel?, shareHealthData?, shareAlerts?, shareMoodHistory? }
+ * Body: { isCaregiver?, isCaredFor?, nickname?, alertLevel?, shareHealthData?, shareAlerts?, shareMoodHistory? }
  *
- * - Owner 可修改任何成员
+ * Roles (isCaregiver / isCaredFor) can be combined; observer is set via role field.
+ * - Owner 可修改任何成员（包括自己的身份）
  * - 成员自己可修改自己的共享设置和昵称
  */
 export async function PATCH(
@@ -45,10 +46,16 @@ export async function PATCH(
   const body = await request.json();
   const data: Record<string, unknown> = {};
 
-  // Only owner can change roles
-  if (body.role && isOwner && targetMember.userId !== payload.userId) {
-    if (["owner", "caregiver", "member"].includes(body.role)) {
-      data.role = body.role;
+  // Owner can change isCaregiver/isCaredFor for any member, including themselves.
+  // observer is set via role field and is mutually exclusive with caregiver/caredFor.
+  if (isOwner) {
+    if (body.isCaregiver !== undefined) data.isCaregiver = Boolean(body.isCaregiver);
+    if (body.isCaredFor !== undefined) data.isCaredFor = Boolean(body.isCaredFor);
+    // Switching to observer clears the dual-role flags
+    if (body.role === "observer") {
+      data.role = "observer";
+      data.isCaregiver = false;
+      data.isCaredFor = false;
     }
   }
 

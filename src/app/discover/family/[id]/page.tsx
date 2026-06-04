@@ -9,6 +9,8 @@ import { ALERT_RULE_INFO, SEVERITY_META } from "@/lib/alert-rules-info";
 interface FamilyMember {
   id: string;
   role: string;
+  isCaregiver: boolean;
+  isCaredFor: boolean;
   nickname: string | null;
   alertLevel: string;
   shareHealthData: boolean;
@@ -49,11 +51,15 @@ interface HealthViewData {
 }
 
 const ROLE_LABELS: Record<string, string> = { owner: "管理员", caregiver: "关怀者", member: "被关怀者", observer: "普通成员" };
-const ROLE_OPTIONS = [
-  { value: "caregiver", label: "关怀者", desc: "收到被关怀者的健康预警" },
-  { value: "member", label: "被关怀者", desc: "出问题时通知关怀者" },
-  { value: "observer", label: "普通成员", desc: "可查看数据，不参与预警" },
-];
+
+function getRoleLabel(member: FamilyMember): string {
+  if (member.role === "owner") return "管理员";
+  if (member.role === "observer") return "普通成员";
+  if (member.isCaregiver && member.isCaredFor) return "关怀者 · 被关怀者";
+  if (member.isCaregiver) return "关怀者";
+  if (member.isCaredFor) return "被关怀者";
+  return ROLE_LABELS[member.role] ?? member.role;
+}
 const SEVERITY_COLORS: Record<string, string> = { critical: "text-error", warning: "text-tertiary", info: "text-on-surface-variant" };
 const SEVERITY_ICONS: Record<string, string> = { critical: "error", warning: "warning", info: "health_metrics" };
 const METRIC_LABELS: Record<string, string> = {
@@ -320,18 +326,16 @@ export default function FamilyDetailPage() {
                     {member.nickname || member.user.name}
                     {member.nickname && <span className="text-on-surface-variant font-normal"> ({member.user.name})</span>}
                   </p>
-                  {/* Role selector (owner can change others' roles) */}
-                  {family.myRole === "owner" && member.role !== "owner" ? (
+                  {/* Role selector: owner sees it for everyone including themselves */}
+                  {family.myRole === "owner" ? (
                     <RoleSelector
-                      currentRole={member.role}
-                      memberId={member.id}
+                      member={member}
                       familyId={familyId}
                       onUpdate={fetchFamily}
-                      shareHealthData={member.shareHealthData}
                     />
                   ) : (
                     <p className="text-xs text-on-surface-variant">
-                      {ROLE_LABELS[member.role]}
+                      {getRoleLabel(member)}
                       {member.shareHealthData && " · 健康数据共享中"}
                     </p>
                   )}
@@ -459,58 +463,107 @@ function formatTime(iso: string) {
 }
 
 function RoleSelector({
-  currentRole,
-  memberId,
+  member,
   familyId,
   onUpdate,
-  shareHealthData,
 }: {
-  currentRole: string;
-  memberId: string;
+  member: FamilyMember;
   familyId: string;
   onUpdate: () => void;
-  shareHealthData: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  async function handleSelect(role: string) {
-    setOpen(false);
-    if (role === currentRole) return;
-    const res = await fetch(`/api/family/${familyId}/members/${memberId}`, {
+  const isOwner = member.role === "owner";
+  const isObserver = member.role === "observer";
+
+  async function patch(body: Record<string, unknown>) {
+    setSaving(true);
+    const res = await fetch(`/api/family/${familyId}/members/${member.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role }),
+      body: JSON.stringify(body),
     });
+    setSaving(false);
     if (res.ok) onUpdate();
+  }
+
+  async function handleToggle(field: "isCaregiver" | "isCaredFor", current: boolean) {
+    await patch({ [field]: !current });
+  }
+
+  async function handleObserver() {
+    setOpen(false);
+    await patch({ role: "observer" });
+  }
+
+  async function handleCancelObserver() {
+    // Switch back to default non-observer (restore caregiver/caredFor defaults)
+    setOpen(false);
+    await patch({ role: "member", isCaregiver: false, isCaredFor: true });
   }
 
   return (
     <div className="relative mt-0.5 flex items-center gap-2">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 text-[11px] bg-surface-container-low text-on-surface-variant rounded-full px-2.5 py-1 hover:bg-surface-variant/30 transition-colors"
+        disabled={saving}
+        className="flex items-center gap-1 text-[11px] bg-surface-container-low text-on-surface-variant rounded-full px-2.5 py-1 hover:bg-surface-variant/30 transition-colors disabled:opacity-50"
       >
-        {ROLE_LABELS[currentRole]}
-        <Icon name="expand_more" size={12} />
+        {saving ? "保存中…" : getRoleLabel(member)}
+        {!isOwner && <Icon name="expand_more" size={12} />}
       </button>
-      {shareHealthData && <span className="text-[10px] text-outline whitespace-nowrap">· 数据共享中</span>}
+      {member.shareHealthData && <span className="text-[10px] text-outline whitespace-nowrap">· 数据共享中</span>}
 
-      {open && (
+      {open && !isOwner && (
         <>
           <div className="fixed inset-0 z-[70]" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full mt-1 z-[80] bg-surface rounded-lg shadow-lg border border-outline-variant/20 py-1 w-48 animate-[fadeIn_0.15s_ease]">
-            {ROLE_OPTIONS.map((opt) => (
+          <div className="absolute left-0 top-full mt-1 z-[80] bg-surface rounded-xl shadow-lg border border-outline-variant/20 p-3 w-52 animate-[fadeIn_0.15s_ease]">
+            {isObserver ? (
               <button
-                key={opt.value}
-                onClick={() => handleSelect(opt.value)}
-                className={`w-full text-left px-3 py-2 hover:bg-surface-variant/20 transition-colors ${
-                  currentRole === opt.value ? "bg-secondary-container/30" : ""
-                }`}
+                onClick={handleCancelObserver}
+                className="w-full text-left px-2 py-2 rounded-lg hover:bg-surface-variant/20 transition-colors"
               >
-                <p className="text-xs font-medium text-on-surface">{opt.label}</p>
-                <p className="text-[10px] text-on-surface-variant">{opt.desc}</p>
+                <p className="text-xs font-medium text-on-surface">取消普通成员</p>
+                <p className="text-[10px] text-on-surface-variant">重新参与关怀预警</p>
               </button>
-            ))}
+            ) : (
+              <>
+                <p className="text-[10px] text-on-surface-variant mb-2 px-1">可同时勾选多个身份</p>
+                <label className="flex items-start gap-2.5 px-2 py-2 rounded-lg hover:bg-surface-variant/20 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={member.isCaregiver}
+                    onChange={() => handleToggle("isCaregiver", member.isCaregiver)}
+                    className="mt-0.5 accent-secondary"
+                  />
+                  <span>
+                    <p className="text-xs font-medium text-on-surface">关怀者</p>
+                    <p className="text-[10px] text-on-surface-variant">收到被关怀者的健康预警</p>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2.5 px-2 py-2 rounded-lg hover:bg-surface-variant/20 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={member.isCaredFor}
+                    onChange={() => handleToggle("isCaredFor", member.isCaredFor)}
+                    className="mt-0.5 accent-secondary"
+                  />
+                  <span>
+                    <p className="text-xs font-medium text-on-surface">被关怀者</p>
+                    <p className="text-[10px] text-on-surface-variant">出问题时通知关怀者</p>
+                  </span>
+                </label>
+                <hr className="my-1.5 border-outline-variant/20" />
+                <button
+                  onClick={handleObserver}
+                  className="w-full text-left px-2 py-2 rounded-lg hover:bg-surface-variant/20 transition-colors"
+                >
+                  <p className="text-xs font-medium text-on-surface">设为普通成员</p>
+                  <p className="text-[10px] text-on-surface-variant">仅查看，不参与预警（与上面互斥）</p>
+                </button>
+              </>
+            )}
           </div>
         </>
       )}
