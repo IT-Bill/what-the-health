@@ -3,12 +3,14 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
+import { AgentMessage } from "@/components/chat/agent-message";
 import type {
   ReportData,
   ReportWithInsights,
   InsightRecord,
   MemoryApiResponse,
 } from "@/lib/memory-types";
+import type { Message, ToolCallInfo } from "@/lib/chat/types";
 import { Icon } from "@/components/icon";
 
 const TABS = ["周报", "月报", "洞察"] as const;
@@ -40,6 +42,15 @@ interface DemoEntry {
 interface DemoApiResponse {
   demos: DemoEntry[];
   demo: true;
+}
+
+interface GenerationSseEvent {
+  type: string;
+  delta?: string;
+  tool?: ToolCallInfo;
+  message?: { role: string; text?: string };
+  report?: { periodStart?: string };
+  turnCount?: number;
 }
 
 // --- Main Component ---
@@ -114,33 +125,184 @@ export default function MemoryPage() {
   const hasNext = data ? currentPeriodIdx > 0 : false;
 
   const [generating, setGenerating] = useState(false);
+  const [generationOpen, setGenerationOpen] = useState(false);
+  const [generationMessages, setGenerationMessages] = useState<Message[]>([]);
+  const generationControllerRef = useRef<AbortController | null>(null);
+  const generationAssistantIdRef = useRef<string | null>(null);
+  const generationTextRef = useRef("");
+  const generationReportPeriodRef = useRef<string | undefined>(undefined);
+
+  function updateGenerationAssistant(updates: Partial<Message>) {
+    const assistantId = generationAssistantIdRef.current;
+    if (!assistantId) return;
+    setGenerationMessages((messages) =>
+      messages.map((message) =>
+        message.id === assistantId ? { ...message, ...updates } : message
+      )
+    );
+  }
+
+  function processGenerationEvent(event: GenerationSseEvent) {
+    const assistantId = generationAssistantIdRef.current;
+    if (!assistantId) return;
+
+    switch (event.type) {
+      case "agent_start": {
+        updateGenerationAssistant({ isStreaming: true });
+        break;
+      }
+      case "text_delta": {
+        generationTextRef.current += event.delta ?? "";
+        updateGenerationAssistant({ content: generationTextRef.current });
+        break;
+      }
+      case "tool_start": {
+        if (!event.tool) break;
+        setGenerationMessages((messages) =>
+          messages.map((message) => {
+            if (message.id !== assistantId) return message;
+            const existing = message.toolCalls ?? [];
+            if (existing.some((tool) => tool.id === event.tool!.id)) return message;
+            const preToolText = [
+              message.preToolText,
+              generationTextRef.current.trim(),
+            ].filter(Boolean).join("\n\n");
+            generationTextRef.current = "";
+            return {
+              ...message,
+              preToolText,
+              content: "",
+              toolCalls: [...existing, event.tool!],
+            };
+          })
+        );
+        break;
+      }
+      case "tool_end": {
+        if (!event.tool) break;
+        setGenerationMessages((messages) =>
+          messages.map((message) => {
+            if (message.id !== assistantId) return message;
+            return {
+              ...message,
+              toolCalls: (message.toolCalls ?? []).map((tool) =>
+                tool.id === event.tool!.id ? event.tool! : tool
+              ),
+            };
+          })
+        );
+        break;
+      }
+      case "report_generated": {
+        generationReportPeriodRef.current = event.report?.periodStart
+          ? String(event.report.periodStart).slice(0, 10)
+          : undefined;
+        break;
+      }
+      case "error": {
+        const message = (event as { message?: string }).message ?? "生成报告失败";
+        generationTextRef.current = `生成失败：${message}`;
+        updateGenerationAssistant({
+          content: generationTextRef.current,
+          isStreaming: false,
+        });
+        break;
+      }
+      case "agent_end": {
+        updateGenerationAssistant({
+          content: generationTextRef.current,
+          isStreaming: false,
+        });
+        break;
+      }
+    }
+  }
 
   async function handleGenerate() {
+    if (generating) {
+      setGenerationOpen(true);
+      return;
+    }
+
     setGenerating(true);
+    setGenerationOpen(true);
     const currentPeriodStart = data?.report?.periodStart
       ? data.report.periodStart.slice(0, 10)
       : undefined;
+    const userMessage: Message = {
+      id: `report-user-${Date.now()}`,
+      role: "user",
+      content: `${periodType === "monthly" ? "生成月报" : "生成周报"}${currentPeriodStart ? `（${currentPeriodStart}）` : ""}`,
+    };
+    const assistantId = `report-agent-${Date.now()}`;
+    generationAssistantIdRef.current = assistantId;
+    generationTextRef.current = "";
+    generationReportPeriodRef.current = undefined;
+    setGenerationMessages([
+      userMessage,
+      {
+        id: assistantId,
+        role: "agent",
+        content: "",
+        isStreaming: true,
+        toolCalls: [],
+      },
+    ]);
+
+    const controller = new AbortController();
+    generationControllerRef.current = controller;
+
     try {
-      const res = await fetch("/api/memory/generate", {
+      const res = await fetch("/api/memory/generate/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: periodType,
           periodStart: currentPeriodStart,
         }),
+        signal: controller.signal,
       });
-      if (res.ok) {
-        const json = await res.json() as { report?: { periodStart?: string } };
-        // Refresh to the newly generated report's period
-        const newPeriodStart = json.report?.periodStart
-          ? String(json.report.periodStart).slice(0, 10)
-          : currentPeriodStart;
-        await fetchReport(newPeriodStart);
+      if (!res.ok || !res.body) {
+        const json = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(json.error ?? `请求失败 (${res.status})`);
       }
-    } catch {
-      // ignore
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const chunks = buffer.split("\n\n");
+        buffer = chunks.pop() ?? "";
+
+        for (const chunk of chunks) {
+          const trimmed = chunk.trim();
+          if (!trimmed.startsWith("data:")) continue;
+          const json = trimmed.slice(5).trim();
+          if (!json) continue;
+          try {
+            processGenerationEvent(JSON.parse(json) as GenerationSseEvent);
+          } catch {
+            // Ignore malformed SSE chunks.
+          }
+        }
+      }
+
+      await fetchReport(generationReportPeriodRef.current ?? currentPeriodStart);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "生成报告失败";
+      generationTextRef.current = `生成失败：${message}`;
+      updateGenerationAssistant({
+        content: generationTextRef.current,
+        isStreaming: false,
+      });
     } finally {
       setGenerating(false);
+      generationControllerRef.current = null;
     }
   }
 
@@ -202,7 +364,86 @@ export default function MemoryPage() {
           <ReportView report={data!.report!} periodType={periodType} />
         )}
       </div>
+      <ReportGenerationDialog
+        open={generationOpen}
+        generating={generating}
+        messages={generationMessages}
+        onClose={() => setGenerationOpen(false)}
+      />
     </AppShell>
+  );
+}
+
+function ReportGenerationDialog({
+  open,
+  generating,
+  messages,
+  onClose,
+}: {
+  open: boolean;
+  generating: boolean;
+  messages: Message[];
+  onClose: () => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [messages, open]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-surface flex flex-col">
+      <div className="h-14 flex items-center justify-between px-4 border-b border-outline-variant/20 bg-surface/95 backdrop-blur">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center">
+            {generating ? (
+              <div className="w-4 h-4 border-2 border-on-secondary-container border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Icon name="auto_stories" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-on-surface truncate">
+              {generating ? "正在生成报告" : "报告生成"}
+            </p>
+            <p className="text-xs text-on-surface-variant truncate">
+              {generating ? "窗口关闭后会继续生成" : "生成流程已结束"}
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-colors"
+          title="关闭"
+        >
+          <Icon name="close" />
+        </button>
+      </div>
+
+      <div ref={scrollRef} className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl mx-auto w-full px-4 py-5 md:py-8">
+          <div className="flex flex-col gap-4">
+            {messages.map((message) =>
+              message.role === "agent" ? (
+                <AgentMessage key={message.id} message={message} />
+              ) : (
+                <div key={message.id} className="flex justify-end py-2">
+                  <div className="max-w-[80%] rounded-3xl bg-secondary text-on-secondary px-4 py-2.5 text-sm leading-relaxed">
+                    {message.content}
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -264,8 +505,7 @@ function PeriodNav({
         </button>
         <button
           onClick={onRegenerate}
-          disabled={generating}
-          className="ml-2 px-3 py-1.5 rounded-full border border-outline-variant/40 text-xs font-medium text-on-surface-variant hover:bg-surface-variant/20 transition-colors disabled:opacity-50 flex items-center gap-1 whitespace-nowrap"
+          className="ml-2 px-3 py-1.5 rounded-full border border-outline-variant/40 text-xs font-medium text-on-surface-variant hover:bg-surface-variant/20 transition-colors flex items-center gap-1 whitespace-nowrap"
         >
           {generating ? (
             <>
@@ -955,8 +1195,7 @@ function EmptyState({ onGenerate, generating }: { onGenerate: () => void; genera
       <p className="text-sm text-outline mt-2 mb-6">点击下方按钮立即生成，或继续使用WiTH等待自动生成</p>
       <button
         onClick={onGenerate}
-        disabled={generating}
-        className="px-6 py-3 rounded-full bg-secondary text-on-secondary font-medium text-sm hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center gap-2"
+        className="px-6 py-3 rounded-full bg-secondary text-on-secondary font-medium text-sm hover:opacity-90 transition-opacity flex items-center gap-2"
       >
         {generating ? (
           <>

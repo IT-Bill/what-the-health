@@ -18,6 +18,8 @@
     "simulate:wearable:bp": "tsx scripts/simulate-wearable.ts --scenario bp-critical",
     "simulate:wearable:hr": "tsx scripts/simulate-wearable.ts --scenario hr-critical",
     "simulate:wearable:spo2": "tsx scripts/simulate-wearable.ts --scenario spo2-critical",
+    "simulate:report": "tsx -r dotenv/config scripts/simulate-report-data.ts",
+    "simulate:report:list": "tsx -r dotenv/config scripts/simulate-report-data.ts --list",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",

@@ -1,24 +1,12 @@
 /**
  * LLM-powered report narrative and insight generation.
- * Uses pi-ai (completeSimple) with Kimi-K2.6.
+ * Uses AI Ping's OpenAI-compatible chat completions endpoint with Kimi-K2.6.
  */
-import type { Model } from "@earendil-works/pi-ai";
-import { completeSimple } from "@earendil-works/pi-ai";
 import type { AggregatedPeriodData } from "./aggregator";
 import { calculateOverallScore } from "./aggregator";
 
-const REPORT_MODEL: Model<"openai-completions"> = {
-  id: "Kimi-K2.6",
-  name: "Kimi K2.6 (AI Ping)",
-  api: "openai-completions",
-  provider: "aiping",
-  baseUrl: "https://aiping.cn/api/v1",
-  reasoning: true,
-  input: ["text"],
-  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-  contextWindow: 256000,
-  maxTokens: 32000,
-};
+const REPORT_MODEL_ID = "Kimi-K2.6";
+const REPORT_API_URL = "https://aiping.cn/api/v1/chat/completions";
 
 const EXTRA_BODY = {
   enable_thinking: true,
@@ -34,6 +22,37 @@ const EXTRA_BODY = {
     latency_range: [],
   },
 };
+
+const DEFAULT_REPORT_LLM_TIMEOUT_MS = 180_000;
+
+function getReportLlmTimeoutMs(): number {
+  const configured = Number(process.env.REPORT_LLM_TIMEOUT_MS);
+  return Number.isFinite(configured) && configured > 0
+    ? configured
+    : DEFAULT_REPORT_LLM_TIMEOUT_MS;
+}
+
+function createTimeoutSignal(parent?: AbortSignal): { signal: AbortSignal; cleanup: () => void } {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => {
+    controller.abort(new Error("Report LLM generation timed out"));
+  }, getReportLlmTimeoutMs());
+
+  const onAbort = () => controller.abort(parent?.reason);
+  if (parent?.aborted) {
+    onAbort();
+  } else {
+    parent?.addEventListener("abort", onAbort, { once: true });
+  }
+
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      clearTimeout(timeout);
+      parent?.removeEventListener("abort", onAbort);
+    },
+  };
+}
 
 interface ReportStats {
   icon: string;
@@ -160,38 +179,51 @@ function buildReportData(agg: AggregatedPeriodData) {
 }
 
 /**
- * Call LLM via pi-ai completeSimple.
+ * Call LLM directly via AI Ping's OpenAI-compatible API.
  */
-async function callLLM(systemPrompt: string, userPrompt: string, apiKey: string): Promise<string> {
-  const response = await completeSimple(
-    REPORT_MODEL,
-    {
-      systemPrompt,
-      messages: [
-        {
-          role: "user",
-          content: userPrompt,
-          timestamp: Date.now(),
-        },
-      ],
+async function callLLM(
+  systemPrompt: string,
+  userPrompt: string,
+  apiKey: string,
+  signal?: AbortSignal
+): Promise<string> {
+  const response = await fetch(REPORT_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
     },
-    {
-      maxTokens: 16000,
-      apiKey,
-      onPayload: (payload) => ({
-        ...(payload as Record<string, unknown>),
-        ...EXTRA_BODY,
-      }),
-    }
-  );
+    body: JSON.stringify({
+      model: REPORT_MODEL_ID,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      max_tokens: 16000,
+      stream: false,
+      ...EXTRA_BODY,
+    }),
+    signal,
+  });
 
-  return (
-    response.content
-      .filter((c) => c.type === "text")
-      .map((c) => (c as { text: string }).text)
-      .join("")
-      .trim() || ""
-  );
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`AI Ping report generation failed (${response.status}): ${text.slice(0, 500)}`);
+  }
+
+  const json = JSON.parse(text) as {
+    choices?: Array<{
+      message?: {
+        content?: string;
+      };
+    }>;
+  };
+  const content = json.choices?.[0]?.message?.content?.trim();
+  if (!content) {
+    throw new Error("AI Ping report generation returned empty content");
+  }
+
+  return content;
 }
 
 /**
@@ -199,11 +231,13 @@ async function callLLM(systemPrompt: string, userPrompt: string, apiKey: string)
  */
 async function generateWithLLM(
   agg: AggregatedPeriodData,
-  personaContext: string | null
+  personaContext: string | null,
+  signal?: AbortSignal,
+  extraContext?: string | null
 ): Promise<{ summary: string; highlights: ReportHighlight[]; achievements: ReportAchievement[]; insights: GeneratedInsight[] }> {
   const apiKey = process.env.AIPING_API_KEY;
   if (!apiKey) {
-    return { summary: "", highlights: [], achievements: [], insights: [] };
+    throw new Error("AIPING_API_KEY 未配置，无法生成 AI 健康报告。");
   }
 
   const periodLabel = agg.period.type === "weekly"
@@ -239,7 +273,8 @@ async function generateWithLLM(
 - insights 是AI洞察（模式发现、趋势预警、因素关联、里程碑），生成2-4条
 - summary 是2-3句话的整体总结叙事
 
-${personaContext ? `用户画像：\n${personaContext}\n` : ""}`;
+${personaContext ? `用户画像：\n${personaContext}\n` : ""}
+${extraContext ? `已注入的用户上下文：\n${extraContext}\n` : ""}`;
 
   const userPrompt = `请根据以下健康数据生成报告内容：
 
@@ -259,13 +294,12 @@ ${dataContext}
   ]
 }`;
 
+  const timeoutSignal = createTimeoutSignal(signal);
   try {
-    const content = await callLLM(systemPrompt, userPrompt, apiKey);
+    const content = await callLLM(systemPrompt, userPrompt, apiKey, timeoutSignal.signal);
     const text = content.trim().replace(/^```json?\n?|\n?```$/g, "");
 
-    if (!text) {
-      return { summary: "", highlights: [], achievements: [], insights: [] };
-    }
+    if (!text) throw new Error("Report AI returned empty JSON");
 
     const parsed = JSON.parse(text);
 
@@ -276,8 +310,13 @@ ${dataContext}
       insights: Array.isArray(parsed.insights) ? parsed.insights : [],
     };
   } catch (err) {
+    if (timeoutSignal.signal.aborted) {
+      throw new Error("AI 报告生成超时，请稍后重试。");
+    }
     console.error("[report-ai] LLM generation failed:", err);
-    return { summary: "", highlights: [], achievements: [], insights: [] };
+    throw err;
+  } finally {
+    timeoutSignal.cleanup();
   }
 }
 
@@ -286,12 +325,14 @@ ${dataContext}
  */
 export async function generateReport(
   agg: AggregatedPeriodData,
-  personaContext: string | null
+  personaContext: string | null,
+  signal?: AbortSignal,
+  extraContext?: string | null
 ): Promise<GeneratedReport> {
   const data = buildReportData(agg);
 
-  // Generate LLM content (non-blocking failure — report still works without it)
-  const llm = await generateWithLLM(agg, personaContext);
+  // The report is considered generated only when the narrative AI step succeeds.
+  const llm = await generateWithLLM(agg, personaContext, signal, extraContext);
 
   data.highlights = llm.highlights;
   data.achievements = llm.achievements;
