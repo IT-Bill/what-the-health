@@ -369,7 +369,7 @@ function ReportView({
             <div className="flex justify-between items-center">
               {d.moodEmojis.map((mood, i) => (
                 <div key={i} className="flex flex-col items-center gap-2">
-                  <span className="text-2xl">{mood}</span>
+                  <span className="text-2xl">{mood || "·"}</span>
                   <span className="text-xs text-on-surface-variant">
                     {WEEK_DAYS[i] ?? ""}
                   </span>

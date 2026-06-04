@@ -16,6 +16,99 @@ const POLL_INTERVAL_MS = 30 * 1000;
 const AUTO_CLOSE_MS = 8000;
 const SWIPE_DISMISS_THRESHOLD = 90;
 
+// ---------------------------------------------------------------------------
+// Reminder-driven toast (no polling — exact-time trigger)
+// ---------------------------------------------------------------------------
+
+interface Reminder {
+  id: string;
+  title: string;
+  description: string | null;
+  reminderTimes: string[];
+  startDate: string;
+  endDate: string | null;
+  isActive: boolean;
+  lastRemindedAt: string | null;
+}
+
+function getTodayDateStr(d = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function parseTime(timeStr: string): { hour: number; minute: number } {
+  const [h, m] = timeStr.split(":").map(Number);
+  return { hour: h ?? 0, minute: m ?? 0 };
+}
+
+/** Compute the next trigger timestamp for a reminder (today only). */
+function getNextTriggerMs(reminder: Reminder): number | null {
+  const now = new Date();
+  const todayStr = getTodayDateStr(now);
+
+  // Skip if outside active date range
+  const start = new Date(reminder.startDate);
+  start.setHours(0, 0, 0, 0);
+  if (start > now) return null;
+
+  if (reminder.endDate) {
+    const end = new Date(reminder.endDate);
+    end.setHours(23, 59, 59, 999);
+    if (end < now) return null;
+  }
+
+  // Skip if already reminded today
+  if (reminder.lastRemindedAt) {
+    const last = new Date(reminder.lastRemindedAt);
+    if (getTodayDateStr(last) === todayStr) return null;
+  }
+
+  // Find the earliest reminder time that hasn't passed yet
+  let nextMs: number | null = null;
+  for (const t of reminder.reminderTimes) {
+    const { hour, minute } = parseTime(t);
+    const candidate = new Date(`${todayStr}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`);
+    if (candidate > now) {
+      const ms = candidate.getTime() - now.getTime();
+      if (nextMs === null || ms < nextMs) {
+        nextMs = ms;
+      }
+    }
+  }
+
+  return nextMs;
+}
+
+/** Check if any time has already passed today (for immediate trigger on load). */
+function isReminderDueNow(reminder: Reminder): boolean {
+  const now = new Date();
+  const todayStr = getTodayDateStr(now);
+
+  if (!reminder.isActive) return false;
+
+  const start = new Date(reminder.startDate);
+  start.setHours(0, 0, 0, 0);
+  if (start > now) return false;
+
+  if (reminder.endDate) {
+    const end = new Date(reminder.endDate);
+    end.setHours(23, 59, 59, 999);
+    if (end < now) return false;
+  }
+
+  if (reminder.lastRemindedAt) {
+    const last = new Date(reminder.lastRemindedAt);
+    if (getTodayDateStr(last) === todayStr) return false;
+  }
+
+  for (const t of reminder.reminderTimes) {
+    const { hour, minute } = parseTime(t);
+    const candidate = new Date(`${todayStr}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`);
+    if (now >= candidate) return true;
+  }
+
+  return false;
+}
+
 export function NotificationToast() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
@@ -24,6 +117,11 @@ export function NotificationToast() {
   const [notification, setNotification] = useState<NotificationItem | null>(null);
   const dragStartYRef = useRef(0);
   const isPullingRef = useRef(false);
+
+  // Reminder scheduling state
+  const remindersRef = useRef<Reminder[]>([]);
+  const timerRefs = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const triggeredTodayRef = useRef<Set<string>>(new Set());
 
   const pullNextNotification = useCallback(async () => {
     if (typeof window === "undefined" || isPullingRef.current || isOpen) {
@@ -87,6 +185,128 @@ export function NotificationToast() {
     },
     [markCurrentNotificationRead]
   );
+
+  // -------------------------------------------------------------------------
+  // Reminder scheduling: fetch reminders and set exact-time timeouts
+  // -------------------------------------------------------------------------
+
+  const showReminderToast = useCallback(
+    async (reminder: Reminder) => {
+      if (triggeredTodayRef.current.has(reminder.id)) return;
+      triggeredTodayRef.current.add(reminder.id);
+
+      // Build a synthetic NotificationItem for the toast
+      const syntheticNotification: NotificationItem = {
+        id: `reminder-${reminder.id}-${Date.now()}`,
+        title: reminder.title,
+        body: reminder.description || "到了该执行的时间啦",
+        unread: true,
+        priority: "urgent",
+        source: "reminder",
+        actionUrl: "/reminders",
+        metadata: { reminderId: reminder.id },
+        deliveredAt: new Date().toISOString(),
+        readAt: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      setNotification(syntheticNotification);
+      setIsOpen(true);
+
+      // Fire-and-forget: tell backend we triggered this reminder
+      try {
+        await fetch(`/api/reminders/${reminder.id}/trigger`, {
+          method: "POST",
+          keepalive: true,
+        });
+      } catch {
+        // Silent fail — backend cron will still handle missed reminders
+      }
+    },
+    []
+  );
+
+  const scheduleReminders = useCallback(() => {
+    // Clear existing timers
+    timerRefs.current.forEach(clearTimeout);
+    timerRefs.current = [];
+
+    const reminders = remindersRef.current;
+
+    for (const reminder of reminders) {
+      if (!reminder.isActive) continue;
+
+      // If already triggered today, skip
+      if (triggeredTodayRef.current.has(reminder.id)) continue;
+
+      // Check if due right now (e.g. page loaded after reminder time)
+      if (isReminderDueNow(reminder)) {
+        void showReminderToast(reminder);
+        continue;
+      }
+
+      // Schedule future triggers
+      const nextMs = getNextTriggerMs(reminder);
+      if (nextMs !== null) {
+        const timer = setTimeout(() => {
+          void showReminderToast(reminder);
+        }, nextMs);
+        timerRefs.current.push(timer);
+      }
+    }
+  }, [showReminderToast]);
+
+  const fetchAndScheduleReminders = useCallback(async () => {
+    if (typeof window === "undefined") return;
+
+    try {
+      const response = await fetch("/api/reminders", {
+        method: "GET",
+        cache: "no-store",
+      });
+      if (response.status === 401) return;
+      if (!response.ok) return;
+
+      const data = (await response.json()) as { reminders: Reminder[] };
+      remindersRef.current = data.reminders ?? [];
+      scheduleReminders();
+    } catch {
+      // Silent fail — fallback to polling
+    }
+  }, [scheduleReminders]);
+
+  // Initial fetch + schedule
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    void fetchAndScheduleReminders();
+
+    // Re-schedule every minute to catch new reminders / day rollover
+    const interval = window.setInterval(() => {
+      // Reset triggered set on day rollover
+      const now = new Date();
+      if (now.getHours() === 0 && now.getMinutes() === 0) {
+        triggeredTodayRef.current.clear();
+      }
+      void fetchAndScheduleReminders();
+    }, 60 * 1000);
+
+    return () => {
+      window.clearInterval(interval);
+      timerRefs.current.forEach(clearTimeout);
+      timerRefs.current = [];
+    };
+  }, [fetchAndScheduleReminders]);
+
+  // Re-schedule when route changes (user may have created a new reminder)
+  useEffect(() => {
+    void fetchAndScheduleReminders();
+  }, [pathname, fetchAndScheduleReminders]);
+
+  // -------------------------------------------------------------------------
+  // Legacy notification polling (fallback for non-reminder notifications)
+  // -------------------------------------------------------------------------
 
   useEffect(() => {
     if (typeof window === "undefined") {

@@ -94,6 +94,9 @@ const MOOD_EMOJI: Record<string, string> = {
 /**
  * Compute the period range (current + previous for comparison).
  * Default: current ongoing period (this week / this month).
+ *
+ * All dates are normalized to UTC midnight to avoid timezone skew
+ * between JS local time and Prisma's UTC storage.
  */
 export function computePeriod(type: PeriodType, periodStart?: Date): PeriodRange {
   const now = new Date();
@@ -102,24 +105,30 @@ export function computePeriod(type: PeriodType, periodStart?: Date): PeriodRange
 
   if (type === "weekly") {
     if (periodStart) {
-      start = new Date(periodStart);
+      // Normalize to UTC midnight of the given date
+      const ps = new Date(periodStart);
+      start = new Date(Date.UTC(ps.getUTCFullYear(), ps.getUTCMonth(), ps.getUTCDate(), 0, 0, 0, 0));
     } else {
-      // Current week (Monday of this week)
-      const dayOfWeek = now.getDay() || 7; // Sunday=7
-      start = new Date(now);
-      start.setDate(now.getDate() - dayOfWeek + 1);
-      start.setHours(0, 0, 0, 0);
+      // Current week (Monday of this week) in UTC
+      const dayOfWeek = now.getUTCDay() || 7; // Sunday=7
+      start = new Date(Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate() - dayOfWeek + 1,
+        0, 0, 0, 0
+      ));
     }
     end = new Date(start);
-    end.setDate(start.getDate() + 7);
+    end.setUTCDate(start.getUTCDate() + 7);
   } else {
     if (periodStart) {
-      start = new Date(periodStart);
+      const ps = new Date(periodStart);
+      start = new Date(Date.UTC(ps.getUTCFullYear(), ps.getUTCMonth(), 1, 0, 0, 0, 0));
     } else {
-      // Current month
-      start = new Date(now.getFullYear(), now.getMonth(), 1);
+      // Current month in UTC
+      start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
     }
-    end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+    end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1, 0, 0, 0, 0));
   }
 
   // Previous period (same duration, immediately before)
@@ -167,13 +176,13 @@ function periodDays(period: PeriodRange): number {
   return Math.round((period.end.getTime() - period.start.getTime()) / (86400 * 1000));
 }
 
-/** Generate array of dates in the period. */
+/** Generate array of dates in the period (UTC-aligned). */
 function periodDateArray(period: PeriodRange): Date[] {
   const days: Date[] = [];
   const d = new Date(period.start);
   while (d < period.end) {
     days.push(new Date(d));
-    d.setDate(d.getDate() + 1);
+    d.setUTCDate(d.getUTCDate() + 1);
   }
   return days;
 }
@@ -329,7 +338,8 @@ async function aggregateMood(userId: string, period: PeriodRange): Promise<MoodD
   for (const c of checkins) {
     dayMap.set(c.createdAt.toISOString().slice(0, 10), MOOD_EMOJI[c.mood] || "😐");
   }
-  const emojis = days.map((d) => dayMap.get(d.toISOString().slice(0, 10)) || "").filter(Boolean);
+  // Keep empty slots so array index aligns with day position (Mon→Sun)
+  const emojis = days.map((d) => dayMap.get(d.toISOString().slice(0, 10)) || "");
 
   const distribution = { calm: 0, anxious: 0, fatigued: 0 };
   for (const c of checkins) distribution[c.mood as keyof typeof distribution]++;
