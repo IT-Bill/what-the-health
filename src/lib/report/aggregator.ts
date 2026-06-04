@@ -65,6 +65,12 @@ export interface EngagementData {
   prevActiveDays: number;
 }
 
+export interface ChatData {
+  messageCount: number;
+  sessionCount: number;
+  memoryNotes: string[]; // snippets from Memory records created in period
+}
+
 export interface AggregatedPeriodData {
   period: PeriodRange;
   sleep: SleepData;
@@ -75,6 +81,7 @@ export interface AggregatedPeriodData {
   mood: MoodData;
   habits: HabitData;
   engagement: EngagementData;
+  chat: ChatData;
   hasAnyData: boolean;
 }
 
@@ -130,7 +137,7 @@ export async function aggregatePeriodData(
   userId: string,
   period: PeriodRange
 ): Promise<AggregatedPeriodData> {
-  const [sleep, steps, heartRate, workout, weight, mood, habits, engagement] = await Promise.all([
+  const [sleep, steps, heartRate, workout, weight, mood, habits, engagement, chat] = await Promise.all([
     aggregateSleep(userId, period),
     aggregateSteps(userId, period),
     aggregateHeartRate(userId, period),
@@ -139,6 +146,7 @@ export async function aggregatePeriodData(
     aggregateMood(userId, period),
     aggregateHabits(userId, period),
     aggregateEngagement(userId, period),
+    aggregateChat(userId, period),
   ]);
 
   const hasAnyData =
@@ -148,9 +156,10 @@ export async function aggregatePeriodData(
     workout.count > 0 ||
     mood.emojis.length > 0 ||
     habits.totalGoals > 0 ||
-    engagement.activeDays > 0;
+    engagement.activeDays > 0 ||
+    chat.sessionCount > 0;
 
-  return { period, sleep, steps, heartRate, workout, weight, mood, habits, engagement, hasAnyData };
+  return { period, sleep, steps, heartRate, workout, weight, mood, habits, engagement, chat, hasAnyData };
 }
 
 /** Get number of days in the period. */
@@ -444,7 +453,35 @@ async function aggregateEngagement(userId: string, period: PeriodRange): Promise
   return { activeDays, chatSessions, creditsEarned, prevActiveDays };
 }
 
-// ─── Score ──────────────────────────────────────────────────────────
+// ─── Chat & Memories ────────────────────────────────────────────────
+
+async function aggregateChat(userId: string, period: PeriodRange): Promise<ChatData> {
+  const [sessionCount, messageCount, memories] = await Promise.all([
+    prisma.chatSession.count({
+      where: { userId, createdAt: { gte: period.start, lt: period.end } },
+    }),
+    prisma.chatMessage.count({
+      where: {
+        session: { userId },
+        createdAt: { gte: period.start, lt: period.end },
+      },
+    }),
+    prisma.memory.findMany({
+      where: { userId, createdAt: { gte: period.start, lt: period.end } },
+      select: { note: true },
+      orderBy: { createdAt: "asc" },
+      take: 20,
+    }),
+  ]);
+
+  const memoryNotes = memories
+    .map((m) => m.note?.trim())
+    .filter((n): n is string => !!n && n.length > 0);
+
+  return { sessionCount, messageCount, memoryNotes };
+}
+
+
 
 /**
  * Calculate overall wellness score (0-100).

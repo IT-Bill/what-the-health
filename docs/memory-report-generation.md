@@ -88,7 +88,21 @@ Emoji 映射：
 | 积分获取 | 所有earn方向的amount总和 |
 | 与上一周期对比 | 活跃天数变化 |
 
-### 5. 用户画像 (UserPersona)
+### 5. 对话与记忆 (ChatSession + ChatMessage + Memory)
+
+来源：用户与 AI 的对话会话、消息数量，以及 AI 从对话中自动提取的 Memory 记录。
+
+| 聚合方式 | 输出 |
+|---------|------|
+| 本周期创建的对话会话数 | `sessionCount` |
+| 本周期内所有消息数量 | `messageCount` |
+| 本周期生成的 Memory 笔记 | `memoryNotes[]`（最多20条，传给LLM最多8条） |
+
+**为什么需要这个维度**：用户可能只聊天而不记录步数/情绪，没有这个维度的话报告对纯聊天用户始终显示"暂无数据"，也无法随着每天对话逐渐丰富报告内容。
+
+这个维度也参与 `hasAnyData` 判断（`sessionCount > 0` 即视为有数据）。
+
+
 
 来源：Chat Agent 对话后自动提取的用户特征。
 
