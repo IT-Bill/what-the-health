@@ -50,7 +50,7 @@ async function handleAuthenticatedRequest(
   } else {
     report = await prisma.report.findFirst({
       where: { userId, periodType },
-      orderBy: { periodStart: "desc" },
+      orderBy: [{ periodStart: "desc" }, { version: "desc" }],
       include: { insights: { where: { dismissed: false }, orderBy: { createdAt: "desc" } } },
     });
   }
