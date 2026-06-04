@@ -220,6 +220,11 @@ async function generateWithLLM(
     mood: agg.mood.emojis.length > 0 ? agg.mood.distribution : null,
     habits: agg.habits.totalGoals > 0 ? { completionRate: agg.habits.completionRate, streaks: agg.habits.streaks, allCompleteDays: agg.habits.allCompleteDays } : null,
     engagement: agg.engagement,
+    chat: agg.chat.sessionCount > 0 ? {
+      sessionCount: agg.chat.sessionCount,
+      messageCount: agg.chat.messageCount,
+      memoryHighlights: agg.chat.memoryNotes.slice(0, 8),
+    } : null,
     overallScore: calculateOverallScore(agg),
   }, null, 2);
 
