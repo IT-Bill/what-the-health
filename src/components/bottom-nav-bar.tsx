@@ -22,11 +22,11 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { href: "/chat", icon: "chat_bubble", label: "Chat" },
-  { href: "/discover", icon: "explore", label: "Discover" },
+  { href: "/chat", icon: "chat_bubble", label: "聊天" },
+  { href: "/discover", icon: "explore", label: "发现" },
   // Center voice button is rendered separately
-  { href: "/memory", icon: "auto_stories", label: "Memory" },
-  { href: "/profile", icon: "person", label: "Profile" },
+  { href: "/memory", icon: "auto_stories", label: "记忆" },
+  { href: "/profile", icon: "person", label: "我的" },
 ];
 
 export function BottomNavBar() {
@@ -54,7 +54,7 @@ export function BottomNavBar() {
   const transcriptRef = useRef("");
 
   const markChatRestoreIntent = useCallback(() => {
-    if (pathname === "/chat" && sessionStorage.getItem(CHAT_HAS_ACTIVITY_KEY) === "1") {
+    if ((pathname === "/chat" || pathname?.startsWith("/chat/")) && sessionStorage.getItem(CHAT_HAS_ACTIVITY_KEY) === "1") {
       sessionStorage.setItem(CHAT_RESTORE_LATEST_KEY, "1");
     }
   }, [pathname]);
