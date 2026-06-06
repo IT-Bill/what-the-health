@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { AiDisclaimer } from "@/components/ai-disclaimer";
 import { Icon } from "@/components/icon";
 import { AGENT_ROLES, type AgentRole, DEFAULT_AGENT_ROLE } from "@/lib/agent-role";
 import { useUser } from "@/lib/swr";
@@ -16,7 +17,7 @@ interface PrefItem {
 
 const prefItems: PrefItem[] = [
   { id: "notifications", icon: "notifications", label: "通知", type: "toggle" },
-  { id: "privacy", icon: "lock", label: "隐私与安全", type: "link", href: "#" },
+  { id: "privacy", icon: "lock", label: "隐私与安全", type: "link", href: "/privacy" },
   { id: "language", icon: "language", label: "语言", type: "link", href: "#" },
 ];
 
@@ -132,6 +133,8 @@ export default function PreferencesPage() {
               <span className="text-xs text-error">保存失败</span>
             )}
           </div>
+
+          <AiDisclaimer variant="compact" />
 
           <div className="flex flex-col gap-3">
             {AGENT_ROLES.map((role) => {
