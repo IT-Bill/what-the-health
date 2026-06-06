@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { Icon } from "@/components/icon";
 import { NotificationBell } from "@/components/notification-bell";
 import { BottomNavBar } from "@/components/bottom-nav-bar";
@@ -21,6 +20,7 @@ import type { Message, SearchSource } from "@/lib/chat/types";
 import {
   CHAT_HAS_ACTIVITY_KEY,
   CHAT_RESTORE_LATEST_KEY,
+  CHAT_SCROLL_POSITION_PREFIX,
   PENDING_VOICE_TEXT_KEY,
   VOICE_SUBMIT_EVENT,
   type PendingVoiceText,
@@ -60,6 +60,27 @@ function readPendingVoiceText(): PendingVoiceText | null {
   }
 }
 
+function getChatScrollPositionKey(sessionId: string): string {
+  return `${CHAT_SCROLL_POSITION_PREFIX}${sessionId}`;
+}
+
+function readChatScrollPosition(sessionId: string): { top: number; distanceFromBottom: number } | null {
+  try {
+    const raw = sessionStorage.getItem(getChatScrollPositionKey(sessionId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<{ top: number; distanceFromBottom: number }>;
+    if (typeof parsed.top !== "number" || typeof parsed.distanceFromBottom !== "number") {
+      return null;
+    }
+    return {
+      top: Math.max(0, parsed.top),
+      distanceFromBottom: Math.max(0, parsed.distanceFromBottom),
+    };
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
@@ -92,7 +113,11 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
 
   const isStreamingRef = useRef(false);
   const hadPendingVoiceOnMountRef = useRef(false);
+  const hasBootstrappedStoreRef = useRef(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const scrollAnimationRef = useRef<number | null>(null);
+  const isProgrammaticScrollRef = useRef(false);
+  const restoredScrollBeforePaintRef = useRef(false);
   const importFileRef = useRef<HTMLInputElement>(null);
   const userScrolledUpRef = useRef(false);
 
@@ -116,13 +141,90 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
   const { data: userData } = useUser();
   const userId = userData?.user?.id;
 
+  const saveCurrentScrollPosition = useCallback(() => {
+    const el = chatContainerRef.current;
+    const sid = useChatStore.getState().sessionId;
+    if (!el || !sid) return;
+
+    try {
+      sessionStorage.setItem(
+        getChatScrollPositionKey(sid),
+        JSON.stringify({
+          top: el.scrollTop,
+          distanceFromBottom: Math.max(0, el.scrollHeight - el.scrollTop - el.clientHeight),
+        })
+      );
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    return () => saveCurrentScrollPosition();
+  }, [saveCurrentScrollPosition]);
+
   // Reset store before first paint to prevent stale cross-user data from showing
   useLayoutEffect(() => {
+    if (hasBootstrappedStoreRef.current) {
+      return;
+    }
+    hasBootstrappedStoreRef.current = true;
+
     const store = useChatStore.getState();
+
+    if (userId && !isCacheOwnedBy(userId)) {
+      clearAllChatCache();
+      store.clearMessages();
+      store.setSessionId(undefined);
+      store.setSessions([]);
+      return;
+    }
+
+    if (initialSessionId) {
+      const hasCurrentSessionMessages =
+        store.sessionId === initialSessionId &&
+        store.messages.some((message) => message.id !== "init");
+      if (hasCurrentSessionMessages) {
+        return;
+      }
+
+      const cached = getCachedSessionMessages(initialSessionId);
+      if (
+        userId &&
+        isCacheOwnedBy(userId) &&
+        cached &&
+        cached.messages.length > 0 &&
+        !isCacheExpired(cached.savedAt)
+      ) {
+        store.setMessages(cached.messages);
+        store.setSessionId(initialSessionId);
+        return;
+      }
+    }
+
     store.clearMessages();
     store.setSessionId(undefined);
     store.setSessions([]);
-  }, []);
+  }, [initialSessionId, userId]);
+
+  // Restore scroll before paint when returning from another route to an in-memory session.
+  useLayoutEffect(() => {
+    const el = chatContainerRef.current;
+    const sid = initialSessionId ?? sessionId;
+    if (!el || !sid || restoredScrollBeforePaintRef.current) return;
+
+    const saved = readChatScrollPosition(sid);
+    if (!saved) return;
+
+    restoredScrollBeforePaintRef.current = true;
+    isProgrammaticScrollRef.current = true;
+    const maxTop = Math.max(0, el.scrollHeight - el.clientHeight);
+    el.scrollTop = Math.min(maxTop, Math.max(0, el.scrollHeight - el.clientHeight - saved.distanceFromBottom, saved.top));
+    requestAnimationFrame(() => {
+      isProgrammaticScrollRef.current = false;
+      userScrolledUpRef.current = el.scrollHeight - el.scrollTop - el.clientHeight > 100;
+    });
+  }, [initialSessionId, messages, sessionId]);
 
   // Clear cross-user stale cache and store when user changes
   useEffect(() => {
@@ -138,7 +240,9 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
 
   // Cache write on unmount
   useEffect(() => {
-    return () => writeCache(userId);
+    return () => {
+      writeCache(userId);
+    };
   }, [writeCache, userId]);
 
   // Track whether user has manually scrolled up
@@ -146,26 +250,99 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
     const el = chatContainerRef.current;
     if (!el) return;
     const onScroll = () => {
+      if (isProgrammaticScrollRef.current) return;
       userScrolledUpRef.current = el.scrollHeight - el.scrollTop - el.clientHeight > 100;
     };
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Scroll to bottom on content changes; always scroll on new message, respect user scroll for updates
-  const prevMessagesLengthRef = useRef(0);
-  useEffect(() => {
+  const cancelScrollAnimation = useCallback(() => {
+    if (scrollAnimationRef.current !== null) {
+      cancelAnimationFrame(scrollAnimationRef.current);
+      scrollAnimationRef.current = null;
+    }
+    isProgrammaticScrollRef.current = false;
+  }, []);
+
+  const jumpToChatBottom = useCallback(() => {
     const el = chatContainerRef.current;
     if (!el) return;
-    const isNewMessage = messages.length !== prevMessagesLengthRef.current;
-    prevMessagesLengthRef.current = messages.length;
-    if (isNewMessage) {
+    el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
+  }, []);
+
+  const animateToChatBottom = useCallback(
+    (durationMs = 700) => {
+      const el = chatContainerRef.current;
+      if (!el) return;
+
+      cancelScrollAnimation();
+
+      const startTop = el.scrollTop;
+      const targetTop = Math.max(0, el.scrollHeight - el.clientHeight);
+      const distance = targetTop - startTop;
+
+      if (Math.abs(distance) < 2) {
+        el.scrollTop = targetTop;
+        return;
+      }
+
+      const startedAt = performance.now();
+      isProgrammaticScrollRef.current = true;
       userScrolledUpRef.current = false;
-      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-    } else if (!userScrolledUpRef.current) {
-      el.scrollTo({ top: el.scrollHeight, behavior: "instant" as ScrollBehavior });
+
+      const step = (now: number) => {
+        const progress = Math.min((now - startedAt) / durationMs, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        el.scrollTop = startTop + distance * eased;
+
+        if (progress < 1) {
+          scrollAnimationRef.current = requestAnimationFrame(step);
+          return;
+        }
+
+        el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
+        scrollAnimationRef.current = null;
+        requestAnimationFrame(() => {
+          isProgrammaticScrollRef.current = false;
+          userScrolledUpRef.current = false;
+        });
+      };
+
+      scrollAnimationRef.current = requestAnimationFrame(step);
+    },
+    [cancelScrollAnimation]
+  );
+
+  useEffect(() => cancelScrollAnimation, [cancelScrollAnimation]);
+
+  // Scroll to bottom on content changes; animate when entering/restoring a session.
+  const prevMessagesLengthRef = useRef(0);
+  const prevMessageIdsSignatureRef = useRef("");
+  const prevSessionIdRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!chatContainerRef.current) return;
+    const nextSignature = messages.map((message) => message.id).join("|");
+    const sessionChanged = sessionId !== prevSessionIdRef.current;
+    const messageSetChanged = nextSignature !== prevMessageIdsSignatureRef.current;
+    const isNewMessage = messages.length !== prevMessagesLengthRef.current;
+
+    prevSessionIdRef.current = sessionId;
+    prevMessagesLengthRef.current = messages.length;
+    prevMessageIdsSignatureRef.current = nextSignature;
+
+    if (sessionChanged || messageSetChanged || isNewMessage) {
+      if (restoredScrollBeforePaintRef.current && !isNewMessage) {
+        return;
+      }
+      userScrolledUpRef.current = false;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => animateToChatBottom());
+      });
+    } else if (!userScrolledUpRef.current && scrollAnimationRef.current === null) {
+      jumpToChatBottom();
     }
-  }, [messages]);
+  }, [animateToChatBottom, jumpToChatBottom, messages, sessionId]);
 
   // ---------------------------------------------------------------------------
   // Actions
@@ -352,13 +529,6 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
     },
     [refreshSessions, loadSession]
   );
-
-  const prepareRestoreLatestOnReturn = useCallback(() => {
-    writeCache();
-    if (sessionStorage.getItem(CHAT_HAS_ACTIVITY_KEY) === "1") {
-      sessionStorage.setItem(CHAT_RESTORE_LATEST_KEY, "1");
-    }
-  }, [writeCache]);
 
   const markChatActivity = useCallback(() => {
     sessionStorage.setItem(CHAT_HAS_ACTIVITY_KEY, "1");
@@ -574,35 +744,6 @@ export default function ChatCore({ initialSessionId }: ChatCoreProps) {
             WiTH
           </div>
         </div>
-        <nav className="flex gap-8 items-center h-full">
-          <Link
-            href={sessionId ? `/chat/${sessionId}` : "/chat"}
-            className="text-primary font-bold h-full flex items-center border-b-2 border-primary"
-          >
-            Chat
-          </Link>
-          <Link
-            href="/discover/post"
-            onClick={prepareRestoreLatestOnReturn}
-            className="text-on-surface-variant hover:opacity-80 transition-opacity h-full flex items-center border-b-2 border-transparent"
-          >
-            Discover
-          </Link>
-          <Link
-            href="/memory"
-            onClick={prepareRestoreLatestOnReturn}
-            className="text-on-surface-variant hover:opacity-80 transition-opacity h-full flex items-center border-b-2 border-transparent"
-          >
-            Memory
-          </Link>
-          <Link
-            href="/profile"
-            onClick={prepareRestoreLatestOnReturn}
-            className="text-on-surface-variant hover:opacity-80 transition-opacity h-full flex items-center border-b-2 border-transparent"
-          >
-            Profile
-          </Link>
-        </nav>
         <NotificationBell />
       </header>
 
