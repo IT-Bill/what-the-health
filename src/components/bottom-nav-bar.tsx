@@ -25,7 +25,7 @@ const navItems: NavItem[] = [
   { href: "/chat", icon: "chat_bubble", label: "聊天" },
   { href: "/discover", icon: "explore", label: "发现" },
   // Center voice button is rendered separately
-  { href: "/memory", icon: "auto_stories", label: "记忆" },
+  { href: "/memory", icon: "auto_stories", label: "洞察" },
   { href: "/profile", icon: "person", label: "我的" },
 ];
 
