@@ -3,7 +3,7 @@
  *
  * Usage:
  *   pnpm simulate:wearable --list
- *   pnpm simulate:wearable --scenario <name> [--normal] [--user <u>] [--url <base>]
+ *   pnpm simulate:wearable --scenario <name> [--normal] [--user <u>] [--url <base>] [--secret <s>]
  *
  * Each scenario has two variants:
  *   (default)  anomalous value that triggers the alert rule
@@ -33,11 +33,11 @@ const opt = (name: string, def: string) => {
 };
 
 const USER     = opt("--user", "bill");
-const BASE_URL = opt("--url", "http://localhost:3000");
+const BASE_URL = opt("--url", "http://localhost:3000").replace(/\/+$/, "");
 const SCENARIO = opt("--scenario", "");
 const NORMAL   = flag("--normal");
 const LIST     = flag("--list");
-const SECRET   = process.env.DEVICE_API_SECRET ?? "dev-device-secret-local";
+const SECRET   = opt("--secret", process.env.DEVICE_API_SECRET ?? "dev-device-secret-local");
 
 // ---------------------------------------------------------------------------
 // Scenario definitions
