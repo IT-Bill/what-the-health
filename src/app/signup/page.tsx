@@ -161,13 +161,13 @@ export default function SignUpPage() {
                 className="ml-3 block text-sm text-on-surface-variant cursor-pointer"
               >
                 我同意
-                <a href="#" className="text-primary hover:text-secondary transition-colors">
+                <Link href="/terms" className="text-primary underline underline-offset-2 transition-colors hover:text-secondary">
                   服务条款
-                </a>
+                </Link>
                 和
-                <a href="#" className="text-primary hover:text-secondary transition-colors">
+                <Link href="/privacy" className="text-primary underline underline-offset-2 transition-colors hover:text-secondary">
                   隐私政策
-                </a>
+                </Link>
               </label>
             </div>
 

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { AiDisclaimer } from "@/components/ai-disclaimer";
 import { AppShell } from "@/components/app-shell";
 import { Icon } from "@/components/icon";
 import { PrimaryGoalSelectorDialog } from "@/components/primary-goal-selector-dialog";
@@ -161,7 +162,8 @@ export default function ProfilePage() {
         </section>
 
         {user && (
-          <section className="mb-32">
+          <section className="mb-32 flex flex-col gap-4">
+            <AiDisclaimer />
             <div className="bg-primary-container rounded-[2rem] p-2 ambient-shadow flex flex-col">
               {menuItems.map((item, index) => (
                 <Link
