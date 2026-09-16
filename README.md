@@ -195,3 +195,7 @@ docs/                        # 功能与开发文档
 - [积分系统](docs/credits-system.md)
 
 已有迁移文件只增不删，数据模型变更应追加新迁移。Prisma 7 的连接与迁移配置位于 `prisma.config.ts`。开发说明和历史文档中的模型、命令等信息如有差异，以当前代码与 `package.json` 为准。
+
+## 开源协议
+
+WiTH 采用 [GNU General Public License v3.0 或后续版本（GPL-3.0-or-later）](LICENSE) 开源协议。你可以选择遵循自由软件基金会发布的 GPL 第 3 版或任何后续版本。完整条款见 [LICENSE](LICENSE)。

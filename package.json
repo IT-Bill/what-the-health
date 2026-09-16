@@ -2,6 +2,7 @@
   "name": "what-the-health",
   "version": "0.1.0",
   "private": true,
+  "license": "GPL-3.0-or-later",
   "scripts": {
     "predev": "prisma generate",
     "dev": "concurrently \"tsx src/server/asr-proxy.ts\" \"tsx src/server/reminder-cron.ts\" \"next dev --hostname 0.0.0.0\"",
