@@ -198,4 +198,4 @@ docs/                        # 功能与开发文档
 
 ## 开源协议
 
-WiTH 采用 [GNU General Public License v3.0（GPL-3.0-only）](LICENSE) 开源协议。完整条款见 [LICENSE](LICENSE)。
+WiTH 采用 [GNU General Public License v3.0 或后续版本（GPL-3.0-or-later）](LICENSE) 开源协议。你可以选择遵循自由软件基金会发布的 GPL 第 3 版或任何后续版本。完整条款见 [LICENSE](LICENSE)。
